@@ -1,4 +1,4 @@
-package main
+package video
 
 import (
 	"bytes"
@@ -77,9 +77,11 @@ func (igs *ImageGeneratorService) GenerateImage(buffer *bytes.Buffer) (*image.Im
 	if err != nil {
 		return nil, err
 	}
+
 	igs.appendCursor(img)
 	resizedImage := igs.resizeImage(img)
 
+	buffer.Truncate(0)
 	err = igs.compressImage(resizedImage, buffer)
 	if err != nil {
 		return nil, err
@@ -87,49 +89,3 @@ func (igs *ImageGeneratorService) GenerateImage(buffer *bytes.Buffer) (*image.Im
 
 	return resizedImage, nil
 }
-
-//func main() {
-//	var buffer bytes.Buffer
-//	igs, err := NewImageGeneratorService()
-//	if err != nil {
-//		fmt.Println("Eroare la creare serviciu")
-//		return
-//	}
-//
-//	times := 1000
-//	timeValues := make([]time.Duration, times)
-//
-//	for i := 0; i < times; i++ {
-//		s := time.Now()
-//		_, err := igs.GenerateImage(&buffer)
-//		if err != nil {
-//			fmt.Println("Eroare la cpt screen")
-//			return
-//		}
-//		timeValues = append(timeValues, time.Since(s))
-//		buffer.Truncate(0)
-//	}
-//
-//	var sum time.Duration = 0
-//	for _, value := range timeValues {
-//		sum += value
-//	}
-//	fmt.Print(sum)
-//}
-
-//func main() {
-//	var buffer bytes.Buffer
-//	igs, err := NewImageGeneratorService()
-//	if err != nil {
-//		fmt.Println("Eroare la creare serviciu")
-//		return
-//	}
-//
-//	img, err := igs.GenerateImage(&buffer)
-//	if err != nil {
-//		return
-//	}
-//
-//	f, _ := os.Create("img.png")
-//	png.Encode(f, *img)
-//}

@@ -1,4 +1,4 @@
-package main
+package input
 
 import (
 	"fmt"
@@ -31,9 +31,4 @@ func (ils *InputListenerService) Listen() {
 			fmt.Printf("mouse move " + e.String() + "\n")
 		}
 	}
-}
-
-func main() {
-	il := NewInputListenerService()
-	il.Listen()
 }

@@ -42,16 +42,13 @@ func main() {
 	pixBuff := gtk.NewImageFromPixbuf(image)
 
 	window := initWindow()
-
-	label1 := gtk.NewLabel("sal1")
-	label2 := gtk.NewLabel("sal2")
-	label3 := gtk.NewLabel("sal3")
 	button := gtk.NewButtonWithLabel("Click")
 
 	button.Clicked(func() {
 		go func() {
 			for {
 				msg, _ := kp.Consume()
+				imageFile.Truncate(0)
 				imageFile.Seek(0, 0)
 				imageFile.Write(msg.Value)
 				pixBuff.SetFromFile("image.png")
@@ -63,10 +60,7 @@ func main() {
 	verticalLayout := gtk.NewVBox(false, 0)
 	horizontalLayout := gtk.NewHBox(false, 0)
 
-	horizontalLayout.Add(label1)
-	horizontalLayout.Add(label2)
 	verticalLayout.Add(horizontalLayout)
-	verticalLayout.Add(label3)
 	verticalLayout.Add(button)
 	verticalLayout.Add(pixBuff)
 

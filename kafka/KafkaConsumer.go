@@ -6,6 +6,18 @@ import (
 )
 
 //const kafkaAddress = "localhost:9092"
+type Offset int64
+
+const (
+	Beginning Offset = -2
+	End       Offset = -1
+)
+
+type Message struct {
+	Images   [][]byte
+	Audio    []byte
+	Commands [][]byte
+}
 
 type KafkaConsumer struct {
 	*kafka.Reader
@@ -19,6 +31,21 @@ func NewKafkaConsumer(topic string) *KafkaConsumer {
 				Topic:    topic,
 				MinBytes: 1,
 				MaxBytes: 10e6,
+			},
+		),
+	}
+}
+
+func NewKafkaConsumerOnMultipleTopics(topics []string, groupId string, offset Offset) *KafkaConsumer {
+	return &KafkaConsumer{
+		Reader: kafka.NewReader(
+			kafka.ReaderConfig{
+				Brokers:     []string{kafkaAddress},
+				MinBytes:    1,
+				MaxBytes:    10e6,
+				GroupID:     groupId,
+				GroupTopics: topics,
+				StartOffset: int64(offset),
 			},
 		),
 	}

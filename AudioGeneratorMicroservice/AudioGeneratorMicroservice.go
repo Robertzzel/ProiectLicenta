@@ -1,11 +1,15 @@
-package Audio
+package main
 
 import (
+	"Licenta/kafka"
 	"errors"
+	"fmt"
 	"github.com/gordonklaus/portaudio"
 	"strings"
 	"time"
 )
+
+const kafkaTopic = "audio"
 
 type AudioGeneratorService struct {
 	sampleRate         float64
@@ -14,19 +18,19 @@ type AudioGeneratorService struct {
 	latency            time.Duration
 	deviceNameToRecord string
 	stream             *portaudio.Stream
-	buffer             []byte
+	AudioBuffer        []byte
 }
 
 func NewAudioGeneratorService() (*AudioGeneratorService, error) {
 	ags := &AudioGeneratorService{
 		sampleRate:         44100,
 		numberOfChannels:   1,
-		secondsToRecord:    0.5,
+		secondsToRecord:    1,
 		latency:            0,
 		deviceNameToRecord: "pulse",
 	}
 
-	ags.buffer = make([]byte, int(ags.secondsToRecord*ags.sampleRate))
+	ags.AudioBuffer = make([]byte, int(ags.secondsToRecord*ags.sampleRate))
 
 	err := ags.Initialize()
 	if err != nil {
@@ -38,17 +42,13 @@ func NewAudioGeneratorService() (*AudioGeneratorService, error) {
 		return nil, err
 	}
 
-	stream, err := ags.getAudioStream(info, ags.buffer)
+	stream, err := ags.getAudioStream(info, ags.AudioBuffer)
 	if err != nil {
 		return nil, err
 	}
 
 	ags.stream = stream
 	return ags, nil
-}
-
-func (ags *AudioGeneratorService) GetAudioBuffer() []byte {
-	return ags.buffer
 }
 
 func (ags *AudioGeneratorService) Initialize() error {
@@ -118,4 +118,30 @@ func (ags *AudioGeneratorService) recordStream() error {
 	}
 
 	return nil
+}
+
+func main() {
+	kafkaProducer := kafka.NewKafkaProducer(kafkaTopic)
+	service, err := NewAudioGeneratorService()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer service.Terminate()
+
+	for {
+		err = service.recordStream()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		go func() {
+			err = kafkaProducer.Publish(service.AudioBuffer)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		}()
+	}
 }

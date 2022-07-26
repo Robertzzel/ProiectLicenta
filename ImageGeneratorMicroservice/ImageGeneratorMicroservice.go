@@ -1,7 +1,6 @@
 package main
 
 import (
-	"Licenta/kafka"
 	"bytes"
 	"fmt"
 	"github.com/go-vgo/robotgo"
@@ -79,6 +78,7 @@ func (igs *ImageGeneratorService) compressImage(image *image.Image, outputBuffer
 }
 
 func (igs *ImageGeneratorService) GenerateImage(buffer *bytes.Buffer) error {
+	s := time.Now()
 	img, err := igs.captureScreen()
 	if err != nil {
 		return err
@@ -86,6 +86,7 @@ func (igs *ImageGeneratorService) GenerateImage(buffer *bytes.Buffer) error {
 
 	igs.appendCursor(img)
 	resizedImage := igs.resizeImage(img)
+	fmt.Println(time.Since(s))
 
 	buffer.Truncate(0)
 	err = igs.compressImage(resizedImage, buffer)
@@ -96,32 +97,32 @@ func (igs *ImageGeneratorService) GenerateImage(buffer *bytes.Buffer) error {
 	return nil
 }
 
-func main() {
-	var imageBytes bytes.Buffer
-	kafkaProducer := kafka.NewKafkaProducer(kafkaTopic)
-	service, err := NewImageGeneratorService()
-	if err != nil {
-		fmt.Print(err)
-		return
-	}
-
-	for {
-		startTime := time.Now()
-
-		err = service.GenerateImage(&imageBytes)
-		if err != nil {
-			fmt.Println("Error on generating message", err)
-			return
-		}
-
-		go func() {
-			err = kafkaProducer.Publish(imageBytes.Bytes())
-			if err != nil {
-				fmt.Println("Error on kafka publish: ", err)
-				return
-			}
-		}()
-
-		time.Sleep(time.Second/imagesPerSecond - time.Since(startTime))
-	}
-}
+//func main() {
+//	var imageBytes bytes.Buffer
+//	kafkaProducer := kafka.NewKafkaProducer(kafkaTopic)
+//	service, err := NewImageGeneratorService()
+//	if err != nil {
+//		fmt.Print(err)
+//		return
+//	}
+//
+//	for {
+//		startTime := time.Now()
+//
+//		err = service.GenerateImage(&imageBytes)
+//		if err != nil {
+//			fmt.Println("Error on generating message", err)
+//			return
+//		}
+//
+//		go func() {
+//			err = kafkaProducer.Publish(imageBytes.Bytes())
+//			if err != nil {
+//				fmt.Println("Error on kafka publish: ", err)
+//				return
+//			}
+//		}()
+//
+//		time.Sleep(time.Second/imagesPerSecond - time.Since(startTime))
+//	}
+//}

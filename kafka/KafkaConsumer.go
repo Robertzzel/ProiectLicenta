@@ -2,10 +2,12 @@ package kafka
 
 import (
 	"context"
+	"fmt"
 	kafka "github.com/segmentio/kafka-go"
+	"net"
+	"strconv"
 )
 
-//const kafkaAddress = "localhost:9092"
 type Offset int64
 
 const (
@@ -58,4 +60,69 @@ func (kc *KafkaConsumer) Consume() (kafka.Message, error) {
 	}
 
 	return message, nil
+}
+
+func (kc *KafkaConsumer) SetOffsetNow() error {
+	conn, err := kafka.Dial("tcp", kafkaAddress)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	offset, err := conn.ReadLastOffset()
+	if err != nil {
+		return err
+	}
+	fmt.Println(offset)
+
+	return nil
+}
+
+func CreateTopic(topic string, numberOfPartitions int) error {
+	conn, err := kafka.Dial("tcp", kafkaAddress)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	controller, err := conn.Controller()
+	if err != nil {
+		return err
+	}
+
+	controllerConn, err := kafka.Dial("tcp", net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port)))
+	if err != nil {
+		return err
+	}
+	defer controllerConn.Close()
+
+	topicConfigs := []kafka.TopicConfig{
+		{
+			Topic:             topic,
+			NumPartitions:     numberOfPartitions,
+			ReplicationFactor: 1,
+		},
+	}
+
+	err = controllerConn.CreateTopics(topicConfigs...)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return nil
+}
+
+func DeleteTopics(topics []string) error {
+	conn, err := kafka.Dial("tcp", kafkaAddress)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	err = conn.DeleteTopics(topics...)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

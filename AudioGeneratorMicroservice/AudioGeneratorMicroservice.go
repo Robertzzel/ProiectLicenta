@@ -25,7 +25,7 @@ func NewAudioGeneratorService() (*AudioGeneratorService, error) {
 	ags := &AudioGeneratorService{
 		sampleRate:         44100,
 		numberOfChannels:   1,
-		secondsToRecord:    1,
+		secondsToRecord:    0.25,
 		latency:            0,
 		deviceNameToRecord: "pulse",
 	}
@@ -121,7 +121,17 @@ func (ags *AudioGeneratorService) recordStream() error {
 }
 
 func main() {
+	//err := kafka.DeleteTopics([]string{kafkaTopic})
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return
+	//}
+	err := kafka.CreateTopic(kafkaTopic, 2)
+	if err != nil {
+		fmt.Println(err)
+	}
 	kafkaProducer := kafka.NewKafkaProducer(kafkaTopic)
+
 	service, err := NewAudioGeneratorService()
 	if err != nil {
 		fmt.Println(err)

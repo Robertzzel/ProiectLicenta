@@ -55,7 +55,16 @@ func (ils *InputListenerService) Listen(callback function) {
 }
 
 func main() {
+	err := kafka.DeleteTopics([]string{kafkaTopic})
+	if err != nil {
+		fmt.Println(err)
+	}
+	err = kafka.CreateTopic(kafkaTopic, 1)
+	if err != nil {
+		fmt.Println(err)
+	}
 	kafkaProducer := kafka.NewKafkaProducer(kafkaTopic)
+
 	service := NewInputListenerService()
 	service.Listen(func(command []byte) {
 		err := kafkaProducer.Publish(command)

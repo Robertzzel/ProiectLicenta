@@ -2,7 +2,6 @@ package kafka
 
 import (
 	"context"
-	"fmt"
 	kafka "github.com/segmentio/kafka-go"
 	"net"
 	"strconv"
@@ -16,13 +15,12 @@ const (
 )
 
 type Message struct {
-	Images   [][]byte
-	Audio    []byte
-	Commands [][]byte
+	kafka.Message
 }
 
 type KafkaConsumer struct {
 	*kafka.Reader
+	Topic string
 }
 
 func NewKafkaConsumer(topic string) *KafkaConsumer {
@@ -35,10 +33,11 @@ func NewKafkaConsumer(topic string) *KafkaConsumer {
 				MaxBytes: 10e6,
 			},
 		),
+		Topic: topic,
 	}
 }
 
-func NewKafkaConsumerOnMultipleTopics(topics []string, groupId string, offset Offset) *KafkaConsumer {
+func NewKafkaConsumerOnMultipleTopics(topic string, groupId string, offset Offset) *KafkaConsumer {
 	return &KafkaConsumer{
 		Reader: kafka.NewReader(
 			kafka.ReaderConfig{
@@ -46,36 +45,21 @@ func NewKafkaConsumerOnMultipleTopics(topics []string, groupId string, offset Of
 				MinBytes:    1,
 				MaxBytes:    10e6,
 				GroupID:     groupId,
-				GroupTopics: topics,
+				GroupTopics: []string{topic},
 				StartOffset: int64(offset),
 			},
 		),
+		Topic: topic,
 	}
 }
 
-func (kc *KafkaConsumer) Consume() (kafka.Message, error) {
+func (kc *KafkaConsumer) Consume() (Message, error) {
 	message, err := kc.ReadMessage(context.Background())
 	if err != nil {
-		return kafka.Message{}, err
+		return Message{}, err
 	}
 
-	return message, nil
-}
-
-func (kc *KafkaConsumer) SetOffsetNow() error {
-	conn, err := kafka.Dial("tcp", kafkaAddress)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	offset, err := conn.ReadLastOffset()
-	if err != nil {
-		return err
-	}
-	fmt.Println(offset)
-
-	return nil
+	return Message{message}, nil
 }
 
 func CreateTopic(topic string, numberOfPartitions int) error {

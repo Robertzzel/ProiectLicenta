@@ -2,6 +2,7 @@ package main
 
 import (
 	"Licenta/kafka"
+	"context"
 	"fmt"
 	"time"
 )
@@ -18,7 +19,7 @@ func createKafkaTopics() error {
 	if err != nil {
 		return err
 	}
-	err = kafka.CreateTopic(kafkaAudioTopic, 2)
+	err = kafka.CreateTopic(kafkaAudioTopic, 1)
 	if err != nil {
 		return err
 	}
@@ -34,70 +35,97 @@ func createKafkaTopics() error {
 	return nil
 }
 
-func syncMessages(consumer *kafka.KafkaConsumer) error {
-	startTime := time.Now()
-	fmt.Println("Syncing on", startTime)
-	for {
-		message, err := consumer.Consume()
-		if err != nil {
-			return err
-		}
-
-		if message.Topic == "audio" && message.Time.After(startTime) {
-			break
-		}
-	}
-	fmt.Println("Sync done")
-	return nil
-}
-
 func main() {
+	videoBuffer := make([]kafka.Message, 0)
+	audioBuffer := make([]byte, 0)
+	inputBuffer := make([]kafka.Message, 0)
+	var audioBufferStartTime time.Time
+
 	err := createKafkaTopics()
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	kafkaConsumer := kafka.NewKafkaConsumerOnMultipleTopics(
-		[]string{kafkaImagesTopic, kafkaInputTopic, kafkaAudioTopic},
-		"composer",
-		kafka.End,
-	)
-	kafkaProducer := kafka.NewKafkaProducer(kafkaMessagesTopic)
+	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
+	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
+	inputConsumer := kafka.NewKafkaConsumer(kafkaInputTopic)
 
-	err = syncMessages(kafkaConsumer)
+	err = audioConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	err = videoConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	err = inputConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	for {
-		sendingMessage := kafka.Message{}
-
-	messageBuilderLoop:
+	go func() {
 		for {
-			message, err := kafkaConsumer.Consume()
+			message, err := videoConsumer.Consume()
 			if err != nil {
-				fmt.Println(err)
+				fmt.Println("Error while consuming video: ", err)
 				return
 			}
-
-			switch message.Topic {
-			case kafkaImagesTopic:
-				sendingMessage.Images = append(sendingMessage.Images, message.Value)
-			case kafkaAudioTopic:
-				sendingMessage.Audio = message.Value
-				break messageBuilderLoop
-			case kafkaInputTopic:
-				sendingMessage.Commands = append(sendingMessage.Commands, message.Value)
-			}
+			videoBuffer = append(videoBuffer, message)
 		}
+	}()
 
-		fmt.Println(len(sendingMessage.Images), len(sendingMessage.Audio))
-
-		err = kafkaProducer.PublishMessage(sendingMessage)
+	go func() {
+		message, err := audioConsumer.Consume()
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("Error while consuming audio: ", err)
 			return
 		}
+		audioBuffer = append(audioBuffer, message.Value...)
+		audioBufferStartTime = message.Time.Add(-time.Second)
+
+		for {
+			message, err = audioConsumer.Consume()
+			if err != nil {
+				fmt.Println("Error while consuming audio: ", err)
+				return
+			}
+			audioBuffer = append(audioBuffer, message.Value...)
+		}
+	}()
+
+	go func() {
+		for {
+			message, err := inputConsumer.Consume()
+			if err != nil {
+				fmt.Println("Error while consuming input: ", err)
+				return
+			}
+			inputBuffer = append(inputBuffer, message)
+		}
+	}()
+
+	for {
+		time.Sleep(2 * time.Second)
+		oneSecondOfAudio := audioBuffer[:44100]
+		oneSecondOfVideo := make([][]byte, 0)
+
+		var imagesConsumed int
+		var imageMessage kafka.Message
+		for imagesConsumed, imageMessage = range videoBuffer {
+			if imageMessage.Time.After(audioBufferStartTime.Add(time.Second)) {
+				break
+			}
+
+			oneSecondOfVideo = append(oneSecondOfVideo, imageMessage.Value)
+		}
+
+		fmt.Println(len(oneSecondOfVideo), len(oneSecondOfAudio))
+
+		audioBuffer = audioBuffer[44100:]
+		audioBufferStartTime = audioBufferStartTime.Add(time.Second)
+		videoBuffer = videoBuffer[imagesConsumed:]
 	}
 }

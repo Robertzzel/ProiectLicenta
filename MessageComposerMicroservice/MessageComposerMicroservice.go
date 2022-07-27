@@ -80,7 +80,6 @@ func main() {
 				fmt.Println(err)
 				return
 			}
-			fmt.Println(message.Topic)
 
 			switch message.Topic {
 			case kafkaImagesTopic:

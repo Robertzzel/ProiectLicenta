@@ -25,7 +25,7 @@ func NewAudioGeneratorService() (*AudioGeneratorService, error) {
 	ags := &AudioGeneratorService{
 		sampleRate:         44100,
 		numberOfChannels:   1,
-		secondsToRecord:    0.25,
+		secondsToRecord:    1,
 		latency:            0,
 		deviceNameToRecord: "pulse",
 	}

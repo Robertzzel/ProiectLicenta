@@ -1,36 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	"math"
 	"runtime"
 	"sync"
-	"time"
 )
-
-type ByteImage struct {
-	Data      []byte
-	Width     uint
-	Height    uint
-	PixelSize uint
-}
-
-func (bi *ByteImage) getStride() uint {
-	return bi.Width * bi.PixelSize
-}
-
-func (bi *ByteImage) getPixelsAfter(offset uint) []byte {
-	return bi.Data[offset:]
-}
-
-func (bi *ByteImage) getImageRGBA() *image.RGBA {
-	for i := 0; i < len(bi.Data); i += 4 {
-		bi.Data[i], bi.Data[i+2], bi.Data[i+3] = bi.Data[i+2], bi.Data[i], 255
-	}
-
-	return &image.RGBA{bi.Data, int(bi.getStride()), image.Rect(0, 0, int(bi.Width), int(bi.Height))}
-}
 
 // values <1 will sharpen the image
 var blur = 1.0
@@ -47,7 +22,7 @@ func Thumbnail(maxWidth, maxHeight uint, img *ByteImage) image.Image {
 
 	// Preserve aspect ratio
 	if origWidth > maxWidth {
-		newHeight = uint(origHeight * maxWidth / origWidth)
+		newHeight = origHeight * maxWidth / origWidth
 		if newHeight < 1 {
 			newHeight = 1
 		}
@@ -55,7 +30,7 @@ func Thumbnail(maxWidth, maxHeight uint, img *ByteImage) image.Image {
 	}
 
 	if newHeight > maxHeight {
-		newWidth = uint(newWidth * maxHeight / newHeight)
+		newWidth = newWidth * maxHeight / newHeight
 		if newWidth < 1 {
 			newWidth = 1
 		}
@@ -97,13 +72,14 @@ func resizeNearest(width, height uint, scaleX, scaleY float64, img *ByteImage) i
 	result := image.NewRGBA(image.Rect(0, 0, int(width), int(height)))
 
 	// horizontal filter, results in transposed temporary image
+
 	coeffs, offset, filterLength := createWeightsNearest(temp.Bounds().Dy(), taps, blur, scaleX)
 	wg.Add(cpus)
 	for i := 0; i < cpus; i++ {
 		slice := makeSlice(temp, i, cpus).(*image.RGBA)
 		go func() {
 			defer wg.Done()
-			nearestRGBA(img, slice, scaleX, coeffs, offset, filterLength)
+			nearestRGBA(img, slice, coeffs, offset, filterLength)
 		}()
 	}
 	wg.Wait()
@@ -115,22 +91,19 @@ func resizeNearest(width, height uint, scaleX, scaleY float64, img *ByteImage) i
 		slice := makeSlice(result, i, cpus).(*image.RGBA)
 		go func() {
 			defer wg.Done()
-			nearestRGBAOnImage(temp, slice, scaleY, coeffs, offset, filterLength)
+			nearestRGBAOnImage(temp, slice, coeffs, offset, filterLength)
 		}()
 	}
 	wg.Wait()
 	return result
 }
 
-func nearestRGBA(in *ByteImage, out *image.RGBA, scale float64, coeffs []bool, offset []int, filterLength int) {
+func nearestRGBA(in *ByteImage, out *image.RGBA, coeffs []bool, offset []int, filterLength int) {
 	newBounds := out.Bounds()
 	maxX := int(in.Width - 1)
 
 	for x := newBounds.Min.X; x < newBounds.Max.X; x++ {
-
-		//row := in.Pix[x*in.Stride:]
 		row := in.getPixelsAfter(uint(x) * in.getStride())
-
 		for y := newBounds.Min.Y; y < newBounds.Max.Y; y++ {
 			var rgba [4]float32
 			var sum float32
@@ -163,7 +136,7 @@ func nearestRGBA(in *ByteImage, out *image.RGBA, scale float64, coeffs []bool, o
 	}
 }
 
-func nearestRGBAOnImage(in *image.RGBA, out *image.RGBA, scale float64, coeffs []bool, offset []int, filterLength int) {
+func nearestRGBAOnImage(in *image.RGBA, out *image.RGBA, coeffs []bool, offset []int, filterLength int) {
 	newBounds := out.Bounds()
 	maxX := in.Bounds().Dx() - 1
 
@@ -261,21 +234,21 @@ func floatToUint8(x float32) uint8 {
 	return uint8(x)
 }
 
-func main() {
-	ssg, err := NewScreenshotGenerator()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	s := time.Now()
-	for i := 1; i < 3000; i++ {
-		img, err := ssg.CaptureRect()
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		Thumbnail(img.Width/2, img.Height/2, img)
-	}
-	fmt.Println(time.Since(s) / 1000)
-}
+//func main() {
+//	ssg, err := NewScreenshotGenerator()
+//	if err != nil {
+//		fmt.Println(err)
+//		return
+//	}
+//
+//	img, err := ssg.CaptureRect()
+//	if err != nil {
+//		fmt.Println(err)
+//		return
+//	}
+//
+//	resImg := Thumbnail(img.Width/2, img.Height/2, img)
+//	f, _ := os.Create("img.png")
+//	png.Encode(f, resImg)
+//
+//}

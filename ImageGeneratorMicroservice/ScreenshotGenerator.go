@@ -59,6 +59,7 @@ func (ig *ScreenShotGenerator) CaptureRect() (*ByteImage, error) {
 		Width:     uint(ig.width),
 		Height:    uint(ig.height),
 		PixelSize: 4,
+		Stride:    uint(ig.width * 4),
 	}, nil
 }
 

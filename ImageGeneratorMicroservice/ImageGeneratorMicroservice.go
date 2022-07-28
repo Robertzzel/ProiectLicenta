@@ -112,7 +112,7 @@ func main() {
 		}
 
 		go func() {
-			err = kafkaProducer.Publish(imageBytes.Bytes())
+			err = kafkaProducer.PublishWithTimestamp(imageBytes.Bytes())
 			if err != nil {
 				fmt.Println("Error on kafka publish: ", err)
 				return

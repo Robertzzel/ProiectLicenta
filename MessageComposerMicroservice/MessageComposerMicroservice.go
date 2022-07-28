@@ -115,10 +115,13 @@ func main() {
 		var imagesConsumed int
 		var imageMessage kafka.Message
 		for imagesConsumed, imageMessage = range videoBuffer {
-			if imageMessage.Time.After(audioBufferStartTime.Add(time.Second)) {
+			timestamp, err := time.Parse(kafka.TimeFormat, string(imageMessage.Headers[0].Value))
+			if err != nil {
+				fmt.Println("Eroare la timpstamp la imagine", err)
+			}
+			if timestamp.After(audioBufferStartTime.Add(time.Second)) {
 				break
 			}
-
 			oneSecondOfVideo = append(oneSecondOfVideo, imageMessage.Value)
 		}
 

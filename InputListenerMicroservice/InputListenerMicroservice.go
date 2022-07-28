@@ -19,8 +19,6 @@ const (
 	MiddleClick MouseClick = 2
 	RightClick  MouseClick = 3
 
-	timeFormat = "2006-01-02T15:04:05.999999999Z07:00" // RFC3339Nano
-
 	kafkaTopic = "input"
 )
 
@@ -41,15 +39,15 @@ func (ils *InputListenerService) Listen(callback function) {
 	for event = range eventHook {
 		switch event.Kind {
 		case gohook.KeyDown:
-			callback([]byte(fmt.Sprintf("%d,%d,%s\n", KeyDown, event.Rawcode, event.When.Format(timeFormat))))
+			callback([]byte(fmt.Sprintf("%d,%d,%s\n", KeyDown, event.Rawcode, event.When.Format(kafka.TimeFormat))))
 		case gohook.KeyUp:
-			callback([]byte(fmt.Sprintf("%d,%d,%s\n", KeyUp, event.Rawcode, event.When.Format(timeFormat))))
+			callback([]byte(fmt.Sprintf("%d,%d,%s\n", KeyUp, event.Rawcode, event.When.Format(kafka.TimeFormat))))
 		case gohook.MouseDown:
-			callback([]byte(fmt.Sprintf("%d,%d,%d,%d,%s\n", MouseDown, event.Button, event.X, event.Y, event.When.Format(timeFormat))))
+			callback([]byte(fmt.Sprintf("%d,%d,%d,%d,%s\n", MouseDown, event.Button, event.X, event.Y, event.When.Format(kafka.TimeFormat))))
 		case gohook.MouseUp:
-			callback([]byte(fmt.Sprintf("%d,%d,%d,%d,%s\n", MouseUp, event.Button, event.X, event.Y, event.When.Format(timeFormat))))
+			callback([]byte(fmt.Sprintf("%d,%d,%d,%d,%s\n", MouseUp, event.Button, event.X, event.Y, event.When.Format(kafka.TimeFormat))))
 		case gohook.MouseMove:
-			callback([]byte(fmt.Sprintf("%d,%d,%d,%s\n", MouseMove, event.X, event.Y, event.When.Format(timeFormat))))
+			callback([]byte(fmt.Sprintf("%d,%d,%d,%s\n", MouseMove, event.X, event.Y, event.When.Format(kafka.TimeFormat))))
 		}
 	}
 }

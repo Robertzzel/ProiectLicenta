@@ -10,8 +10,13 @@ import (
 	"time"
 )
 
-const kafkaTopic = "images"
-const imagesPerSecond = 30
+const (
+	kafkaTopic         = "video"
+	imagesPerSecond    = 30
+	timePerImage       = time.Second / imagesPerSecond
+	resizedImageWidth  = 800
+	resizedImageHeight = 600
+)
 
 type ImageGeneratorService struct {
 	resizeFactor        uint
@@ -27,8 +32,7 @@ func NewImageGeneratorService() (*ImageGeneratorService, error) {
 	}
 
 	return &ImageGeneratorService{
-		resizeFactor:        2,
-		compressQuality:     80,
+		compressQuality:     75,
 		cursorRadius:        5,
 		screenshotGenerator: ssg,
 	}, nil
@@ -57,7 +61,7 @@ func (igs *ImageGeneratorService) getCursorCoordinates() (int, int) {
 }
 
 func (igs *ImageGeneratorService) resizeImage(screenImage *ByteImage) *image.Image {
-	img := Thumbnail(screenImage.Width/igs.resizeFactor, screenImage.Height/igs.resizeFactor, screenImage)
+	img := Thumbnail(resizedImageWidth, resizedImageHeight, screenImage)
 	return &img
 }
 
@@ -88,14 +92,14 @@ func (igs *ImageGeneratorService) GenerateImage(buffer *bytes.Buffer) error {
 }
 
 func main() {
-	err := kafka.CreateTopic(kafkaTopic, 1)
+	err := kafka.CreateTopic(kafkaTopic)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	var imageBytes bytes.Buffer
-	kafkaProducer := kafka.NewKafkaProducer(kafkaTopic)
+	kafkaProducer := kafka.NewImageKafkaProducer(kafkaTopic)
 	service, err := NewImageGeneratorService()
 	if err != nil {
 		fmt.Print(err)
@@ -111,14 +115,7 @@ func main() {
 			return
 		}
 
-		go func() {
-			err = kafkaProducer.PublishWithTimestamp(imageBytes.Bytes())
-			if err != nil {
-				fmt.Println("Error on kafka publish: ", err)
-				return
-			}
-		}()
-
-		time.Sleep(time.Second/imagesPerSecond - time.Since(startTime))
+		kafkaProducer.PublishWithTimestamp(imageBytes.Bytes())
+		time.Sleep(timePerImage - time.Since(startTime))
 	}
 }

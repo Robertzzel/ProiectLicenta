@@ -57,7 +57,7 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	err = kafka.CreateTopic(kafkaTopic, 1)
+	err = kafka.CreateTopic(kafkaTopic)
 	if err != nil {
 		fmt.Println(err)
 	}

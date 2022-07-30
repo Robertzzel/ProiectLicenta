@@ -1,6 +1,9 @@
 package main
 
-import "image"
+import (
+	"errors"
+	"image"
+)
 
 type ByteImage struct {
 	Data      []byte
@@ -8,16 +11,6 @@ type ByteImage struct {
 	Height    uint
 	PixelSize uint
 	Stride    uint
-}
-
-func NewByteImage(width uint, height uint, pixelSize uint) *ByteImage {
-	return &ByteImage{
-		Data:      make([]byte, width*height),
-		Width:     width,
-		Height:    height,
-		PixelSize: pixelSize,
-		Stride:    width * pixelSize,
-	}
 }
 
 func (bi *ByteImage) getStride() uint {
@@ -36,9 +29,15 @@ func (bi *ByteImage) getImageRGBA() *image.RGBA {
 	return &image.RGBA{bi.Data, int(bi.getStride()), image.Rect(0, 0, int(bi.Width), int(bi.Height))}
 }
 
-func (bi *ByteImage) SetPixel(x int, y int, r uint8, g uint8, b uint8) {
+func (bi *ByteImage) SetPixel(x int, y int, r uint8, g uint8, b uint8) error {
 	offset := y*int(bi.Stride) + x*int(bi.PixelSize)
+	if offset >= len(bi.Data) || offset < 0 {
+		return errors.New("pixel off the screen")
+	}
+
 	bi.Data[offset] = r
 	bi.Data[offset+1] = g
 	bi.Data[offset+2] = b
+
+	return nil
 }

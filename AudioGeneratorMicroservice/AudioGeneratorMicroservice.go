@@ -9,7 +9,10 @@ import (
 	"time"
 )
 
-const kafkaTopic = "audio"
+const (
+	kafkaAudioTopic = "audio"
+	kafkaSyncTopic  = "sync"
+)
 
 type AudioGeneratorService struct {
 	sampleRate         float64
@@ -121,16 +124,17 @@ func (ags *AudioGeneratorService) recordStream() error {
 }
 
 func main() {
-	//err := kafka.DeleteTopics([]string{kafkaTopic})
-	//if err != nil {
-	//	fmt.Println(err)
-	//	return
-	//}
-	err := kafka.CreateTopic(kafkaTopic, 2)
+	err := kafka.CreateTopic(kafkaAudioTopic)
 	if err != nil {
 		fmt.Println(err)
 	}
-	kafkaProducer := kafka.NewKafkaProducer(kafkaTopic)
+	err = kafka.CreateTopic(kafkaSyncTopic)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	kafkaAudioProducer := kafka.NewKafkaProducer(kafkaAudioTopic)
+	kafkaSyncProducer := kafka.NewKafkaProducer(kafkaSyncTopic)
 
 	service, err := NewAudioGeneratorService()
 	if err != nil {
@@ -140,6 +144,14 @@ func main() {
 	defer service.Terminate()
 
 	for {
+		go func() {
+			err = kafkaSyncProducer.Publish([]byte("s"))
+			if err != nil {
+				fmt.Println("Sync error: ", err)
+				return
+			}
+		}()
+
 		err = service.recordStream()
 		if err != nil {
 			fmt.Println(err)
@@ -147,7 +159,7 @@ func main() {
 		}
 
 		go func() {
-			err = kafkaProducer.Publish(service.AudioBuffer)
+			err = kafkaAudioProducer.Publish(service.AudioBuffer)
 			if err != nil {
 				fmt.Println(err)
 				return

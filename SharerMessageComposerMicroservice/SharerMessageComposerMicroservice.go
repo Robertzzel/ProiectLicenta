@@ -1,0 +1,131 @@
+package main
+
+import (
+	"Licenta/kafka"
+	"context"
+	"fmt"
+	"sync"
+	"time"
+)
+
+const (
+	kafkaImagesTopic    = "video"
+	kafkaAudioTopic     = "audio"
+	kafkaInputTopic     = "input"
+	kafkaMessagesTopic  = "messages"
+	kafkaSyncTopic      = "sync"
+	audioRecordInterval = time.Second
+)
+
+func createKafkaTopics() error {
+	err := kafka.CreateTopic(kafkaImagesTopic)
+	if err != nil {
+		return err
+	}
+	err = kafka.CreateTopic(kafkaAudioTopic)
+	if err != nil {
+		return err
+	}
+	err = kafka.CreateTopic(kafkaInputTopic)
+	if err != nil {
+		return err
+	}
+	err = kafka.CreateTopic(kafkaMessagesTopic)
+	if err != nil {
+		return err
+	}
+	err = kafka.CreateTopic(kafkaSyncTopic)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func main() {
+	err := createKafkaTopics()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
+	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
+	inputConsumer := kafka.NewKafkaConsumer(kafkaInputTopic)
+	syncConsumer := kafka.NewKafkaConsumer(kafkaSyncTopic)
+	interAppMessagesProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
+
+	err = audioConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	err = videoConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	err = inputConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	err = syncConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	for {
+		messageToBeSent := kafka.InterAppMessage{}
+		var waitGroup sync.WaitGroup
+
+		syncMessage, err := syncConsumer.Consume()
+		if err != nil {
+			fmt.Println("Sytnc error: ", err)
+			return
+		}
+
+		waitGroup.Add(2)
+		go func(wg *sync.WaitGroup) {
+			audioMessage, err := audioConsumer.Consume()
+			if err != nil {
+				fmt.Println("Error while consuming audio: ", err)
+				return
+			}
+			messageToBeSent.Audio = audioMessage.Value
+			waitGroup.Done()
+			fmt.Println(audioMessage.Time)
+		}(&waitGroup)
+
+		go func(wg *sync.WaitGroup) {
+			for {
+				imageMessage, err := videoConsumer.Consume()
+				if err != nil {
+					fmt.Println("Eroare la primirea imaginii ", err)
+					return
+				}
+				timestamp, err := time.Parse(kafka.TimeFormat, string(imageMessage.Headers[0].Value))
+				if err != nil {
+					fmt.Println("Eroare la timpstamp la imagine", err)
+				}
+
+				if timestamp.Before(syncMessage.Time) {
+					continue
+				}
+
+				messageToBeSent.Images = append(messageToBeSent.Images, imageMessage.Value)
+				if timestamp.After(syncMessage.Time.Add(audioRecordInterval)) {
+					break
+				}
+			}
+			wg.Done()
+		}(&waitGroup)
+		waitGroup.Wait()
+
+		err = interAppMessagesProducer.Publish(messageToBeSent)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+}

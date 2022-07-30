@@ -2,6 +2,7 @@ package main
 
 import (
 	kafka "Licenta/kafka"
+	"context"
 	"fmt"
 	"github.com/mattn/go-gtk/gdkpixbuf"
 	"github.com/mattn/go-gtk/glib"
@@ -30,7 +31,8 @@ func startApp(window *gtk.Window) {
 }
 
 func main() {
-	kp := kafka.NewKafkaConsumer("test1")
+	kp := kafka.NewKafkaConsumer("video")
+	kp.Reader.SetOffsetAt(context.Background(), time.Now())
 	imageFile, err := os.Create("image.png")
 	msg, err := kp.Consume()
 	if err != nil {
@@ -47,12 +49,15 @@ func main() {
 	button.Clicked(func() {
 		go func() {
 			for {
-				msg, _ := kp.Consume()
+				msg, err := kp.Consume()
+				if err != nil {
+					fmt.Println(err)
+				}
 				imageFile.Truncate(0)
 				imageFile.Seek(0, 0)
 				imageFile.Write(msg.Value)
 				pixBuff.SetFromFile("image.png")
-				time.Sleep(time.Second / 120)
+				time.Sleep(time.Second / 60)
 			}
 		}()
 	})

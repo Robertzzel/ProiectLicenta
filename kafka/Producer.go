@@ -72,10 +72,12 @@ func NewInterAppProducer(topic string) *InterAppProducer {
 
 	return &InterAppProducer{
 		Writer: &kafka.Writer{
-			Addr:       kafka.TCP(kafkaAddress),
-			Topic:      topic,
-			Balancer:   &kafka.LeastBytes{},
-			BatchBytes: 2097152,
+			Addr:         kafka.TCP(kafkaAddress),
+			Topic:        topic,
+			Balancer:     &kafka.LeastBytes{},
+			BatchBytes:   2097152,
+			RequiredAcks: 0,
+			Async:        true,
 		},
 		Encoder: json.NewEncoder(&buffer),
 		Buffer:  &buffer,

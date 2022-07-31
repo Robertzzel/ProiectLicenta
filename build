@@ -1,0 +1,12 @@
+#!/bin/sh
+
+cd ImageGeneratorMicroservice
+go build ImageGeneratorMicroservice.go ImageResizer.go ScreenshotGenerator.go ByteImage.go
+cd ..
+
+cd AudioGeneratorMicroservice
+go build AudioGeneratorMicroservice.go
+cd ..
+
+cd SharerMessageComposerMicroservice
+go build SharerMessageComposerMicroservice.go

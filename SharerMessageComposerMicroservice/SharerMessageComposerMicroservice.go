@@ -14,7 +14,7 @@ const (
 	kafkaInputTopic     = "input"
 	kafkaMessagesTopic  = "messages"
 	kafkaSyncTopic      = "sync"
-	audioRecordInterval = time.Second
+	audioRecordInterval = time.Second / 6
 )
 
 func createKafkaTopics() error {
@@ -52,7 +52,7 @@ func main() {
 	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
 	inputConsumer := kafka.NewKafkaConsumer(kafkaInputTopic)
 	syncConsumer := kafka.NewKafkaConsumer(kafkaSyncTopic)
-	interAppMessagesProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
+	//interAppMessagesProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
 
 	err = audioConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
 	if err != nil {
@@ -75,17 +75,19 @@ func main() {
 		return
 	}
 
+	syncMessage, err := audioConsumer.Consume()
+	if err != nil {
+		fmt.Println("Sytnc error: ", err)
+		return
+	}
+	lastAudioReceivedTime, _ := time.Parse(kafka.TimeFormat, string(syncMessage.Headers[0].Value))
+
+	var waitGroup sync.WaitGroup
 	for {
+		s := time.Now()
 		messageToBeSent := kafka.InterAppMessage{}
-		var waitGroup sync.WaitGroup
-
-		syncMessage, err := syncConsumer.Consume()
-		if err != nil {
-			fmt.Println("Sytnc error: ", err)
-			return
-		}
-
 		waitGroup.Add(2)
+
 		go func(wg *sync.WaitGroup) {
 			audioMessage, err := audioConsumer.Consume()
 			if err != nil {
@@ -93,39 +95,44 @@ func main() {
 				return
 			}
 			messageToBeSent.Audio = audioMessage.Value
+
+			lastAudioReceivedTime, _ = time.Parse(kafka.TimeFormat, string(audioMessage.Headers[0].Value))
+			fmt.Println(lastAudioReceivedTime)
 			waitGroup.Done()
-			fmt.Println(audioMessage.Time)
 		}(&waitGroup)
 
-		go func(wg *sync.WaitGroup) {
+		go func(wg *sync.WaitGroup, timeLimit time.Time) {
 			for {
 				imageMessage, err := videoConsumer.Consume()
 				if err != nil {
 					fmt.Println("Eroare la primirea imaginii ", err)
 					return
 				}
+
 				timestamp, err := time.Parse(kafka.TimeFormat, string(imageMessage.Headers[0].Value))
 				if err != nil {
 					fmt.Println("Eroare la timpstamp la imagine", err)
 				}
 
-				if timestamp.Before(syncMessage.Time) {
+				if timestamp.Before(timeLimit) {
 					continue
 				}
 
 				messageToBeSent.Images = append(messageToBeSent.Images, imageMessage.Value)
-				if timestamp.After(syncMessage.Time.Add(audioRecordInterval)) {
+				if timestamp.After(timeLimit.Add(audioRecordInterval)) {
 					break
 				}
 			}
 			wg.Done()
-		}(&waitGroup)
+		}(&waitGroup, lastAudioReceivedTime)
+
 		waitGroup.Wait()
 
-		err = interAppMessagesProducer.Publish(messageToBeSent)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+		fmt.Println(len(messageToBeSent.Images), len(messageToBeSent.Audio), time.Since(s))
+		//err := interAppMessagesProducer.Publish(messageToBeSent)
+		//if err != nil {
+		//	fmt.Println("Encoding error", err)
+		//	return
+		//}
 	}
 }

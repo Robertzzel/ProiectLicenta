@@ -12,12 +12,12 @@ import (
 const (
 	kafkaAudioTopic = "audio"
 	kafkaSyncTopic  = "sync"
+	secondsToRecord = 1.0 / 6
 )
 
 type AudioGeneratorService struct {
 	sampleRate         float64
 	numberOfChannels   int
-	secondsToRecord    float64
 	latency            time.Duration
 	deviceNameToRecord string
 	stream             *portaudio.Stream
@@ -28,12 +28,11 @@ func NewAudioGeneratorService() (*AudioGeneratorService, error) {
 	ags := &AudioGeneratorService{
 		sampleRate:         44100,
 		numberOfChannels:   1,
-		secondsToRecord:    1,
 		latency:            0,
 		deviceNameToRecord: "pulse",
 	}
 
-	ags.AudioBuffer = make([]byte, int(ags.secondsToRecord*ags.sampleRate))
+	ags.AudioBuffer = make([]byte, int(secondsToRecord*ags.sampleRate))
 
 	err := ags.Initialize()
 	if err != nil {
@@ -134,7 +133,6 @@ func main() {
 	}
 
 	kafkaAudioProducer := kafka.NewKafkaProducer(kafkaAudioTopic)
-	kafkaSyncProducer := kafka.NewKafkaProducer(kafkaSyncTopic)
 
 	service, err := NewAudioGeneratorService()
 	if err != nil {
@@ -144,14 +142,6 @@ func main() {
 	defer service.Terminate()
 
 	for {
-		go func() {
-			err = kafkaSyncProducer.Publish([]byte("s"))
-			if err != nil {
-				fmt.Println("Sync error: ", err)
-				return
-			}
-		}()
-
 		err = service.recordStream()
 		if err != nil {
 			fmt.Println(err)
@@ -159,7 +149,7 @@ func main() {
 		}
 
 		go func() {
-			err = kafkaAudioProducer.Publish(service.AudioBuffer)
+			err = kafkaAudioProducer.PublishWithTimestamp(service.AudioBuffer)
 			if err != nil {
 				fmt.Println(err)
 				return

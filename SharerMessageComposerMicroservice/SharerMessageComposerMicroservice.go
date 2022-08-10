@@ -97,11 +97,11 @@ func main() {
 			messageToBeSent.Audio = audioMessage.Value
 
 			lastAudioReceivedTime, _ = time.Parse(kafka.TimeFormat, string(audioMessage.Headers[0].Value))
-			fmt.Println(lastAudioReceivedTime)
 			waitGroup.Done()
 		}(&waitGroup)
 
-		go func(wg *sync.WaitGroup, timeLimit time.Time) {
+		go func(wg *sync.WaitGroup, lowerTimeLimit time.Time) {
+			upperTimeLimit := lowerTimeLimit.Add(audioRecordInterval)
 			for {
 				imageMessage, err := videoConsumer.Consume()
 				if err != nil {
@@ -114,12 +114,12 @@ func main() {
 					fmt.Println("Eroare la timpstamp la imagine", err)
 				}
 
-				if timestamp.Before(timeLimit) {
+				if timestamp.Before(lowerTimeLimit) {
 					continue
 				}
 
 				messageToBeSent.Images = append(messageToBeSent.Images, imageMessage.Value)
-				if timestamp.After(timeLimit.Add(audioRecordInterval)) {
+				if timestamp.After(upperTimeLimit) {
 					break
 				}
 			}

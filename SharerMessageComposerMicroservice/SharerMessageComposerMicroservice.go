@@ -14,7 +14,7 @@ const (
 	kafkaInputTopic     = "input"
 	kafkaMessagesTopic  = "messages"
 	kafkaSyncTopic      = "sync"
-	audioRecordInterval = time.Second / 6
+	audioRecordInterval = time.Second / 3
 )
 
 func createKafkaTopics() error {
@@ -51,8 +51,7 @@ func main() {
 	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
 	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
 	inputConsumer := kafka.NewKafkaConsumer(kafkaInputTopic)
-	syncConsumer := kafka.NewKafkaConsumer(kafkaSyncTopic)
-	//interAppMessagesProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
+	interAppMessagesProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
 
 	err = audioConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
 	if err != nil {
@@ -69,11 +68,6 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	err = syncConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
 
 	syncMessage, err := audioConsumer.Consume()
 	if err != nil {
@@ -84,7 +78,6 @@ func main() {
 
 	var waitGroup sync.WaitGroup
 	for {
-		s := time.Now()
 		messageToBeSent := kafka.InterAppMessage{}
 		waitGroup.Add(2)
 
@@ -127,12 +120,16 @@ func main() {
 		}(&waitGroup, lastAudioReceivedTime)
 
 		waitGroup.Wait()
+		messageToBeSent.Timestamp = lastAudioReceivedTime
 
-		fmt.Println(len(messageToBeSent.Images), len(messageToBeSent.Audio), time.Since(s))
-		//err := interAppMessagesProducer.Publish(messageToBeSent)
-		//if err != nil {
-		//	fmt.Println("Encoding error", err)
-		//	return
-		//}
+		//go func(message kafka.InterAppMessage) {
+		err := interAppMessagesProducer.Publish(messageToBeSent)
+		if err != nil {
+			fmt.Println("Encoding error", err)
+			return
+		}
+		fmt.Println("sent")
+		//fmt.Println(message.Timestamp)
+		//}(messageToBeSent)
 	}
 }

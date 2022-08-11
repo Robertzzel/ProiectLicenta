@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	kafkaAudioTopic  = "audio"
+	kafkaAudioTopic  = "rAudio"
 	sampleRate       = 44100
 	numberOfChannels = 1
 )
@@ -15,7 +15,6 @@ const (
 func main() {
 	var err error
 	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
-	//err := audioConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
 	if err != nil {
 		return
 	}

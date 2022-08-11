@@ -7,7 +7,6 @@ import (
 	"github.com/go-vgo/robotgo"
 	"github.com/pixiv/go-libjpeg/jpeg"
 	"image"
-	"os"
 	"time"
 )
 
@@ -107,7 +106,6 @@ func main() {
 		return
 	}
 
-	f, _ := os.Create("img.png")
 	for {
 		startTime := time.Now()
 
@@ -116,10 +114,6 @@ func main() {
 			fmt.Println("Error on generating message", err)
 			return
 		}
-
-		f.Truncate(0)
-		f.Seek(0, 0)
-		f.Write(imageBytes.Bytes())
 
 		kafkaProducer.PublishWithTimestamp(imageBytes.Bytes())
 		time.Sleep(timePerImage - time.Since(startTime))

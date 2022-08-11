@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"encoding/json"
 	kafka "github.com/segmentio/kafka-go"
 )
 
@@ -31,4 +32,29 @@ func (kc *Consumer) Consume() (Message, error) {
 	}
 
 	return Message{message}, nil
+}
+
+type InterAppConsumer struct {
+	*Consumer
+}
+
+func NewInterAppConsumer(topic string) *InterAppConsumer {
+	return &InterAppConsumer{
+		Consumer: NewKafkaConsumer(topic),
+	}
+}
+
+func (c *InterAppConsumer) Consume() (InterAppMessage, error) {
+	encodedMessage, err := c.Consumer.Consume()
+	if err != nil {
+		return InterAppMessage{}, err
+	}
+
+	decodedMessage := &InterAppMessage{}
+	err = json.Unmarshal(encodedMessage.Value, decodedMessage)
+	if err != nil {
+		return InterAppMessage{}, err
+	}
+
+	return *decodedMessage, nil
 }

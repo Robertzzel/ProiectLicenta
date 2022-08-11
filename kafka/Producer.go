@@ -76,7 +76,7 @@ func NewInterAppProducer(topic string) *InterAppProducer {
 			Topic:        topic,
 			Balancer:     &kafka.LeastBytes{},
 			BatchBytes:   2097152,
-			RequiredAcks: 0,
+			RequiredAcks: 1,
 			Async:        true,
 		},
 		Encoder: json.NewEncoder(&buffer),

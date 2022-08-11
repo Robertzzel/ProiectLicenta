@@ -7,13 +7,15 @@ import (
 	"fmt"
 	"github.com/gordonklaus/portaudio"
 	"strings"
+	"time"
 )
 
 const (
-	kafkaAudioTopic  = "audio"
-	secondsToRecord  = 1.0 / 6
-	sampleRate       = 44100
-	numberOfChannels = 1
+	kafkaAudioTopic        = "audio"
+	secondsToRecord        = 1.0 / 3
+	timeIntervalForSending = time.Second / 3
+	sampleRate             = 44100
+	numberOfChannels       = 1
 )
 
 type AudioGeneratorService struct {
@@ -40,7 +42,17 @@ func NewAudioGeneratorService(stream *portaudio.Stream) (*AudioGeneratorService,
 }
 
 func (ags *AudioGeneratorService) RecordStream() error {
-	return ags.Stream.Read()
+	err := ags.Stream.Start()
+	if err != nil {
+		return err
+	}
+
+	err = ags.Stream.Read()
+	if err != nil {
+		return err
+	}
+
+	return ags.Stream.Stop()
 }
 
 func GetDeviceInfoByName(name string) (*portaudio.DeviceInfo, error) {
@@ -91,10 +103,12 @@ func GetAudioStream(deviceInfo *portaudio.DeviceInfo) (*portaudio.Stream, *bytes
 	return stream, buffer, nil
 }
 
-func main() {
-	portaudio.Initialize()
+func record(buffer *bytes.Buffer) {
+	err := portaudio.Initialize()
+	if err != nil {
+		return
+	}
 
-	kafkaPublisher := kafka.NewImageKafkaProducer(kafkaAudioTopic)
 	service, err := NewAudioGeneratorService(nil)
 	if err != nil {
 		return
@@ -102,26 +116,38 @@ func main() {
 
 	err = service.Stream.Start()
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
+	defer service.Stream.Stop()
 
 	for {
 		err = service.Stream.Read()
 		if err != nil {
-			fmt.Println(err)
 			break
 		}
 
-		kafkaPublisher.PublishWithTimestamp(service.AudioBuffer.Bytes())
-	}
-
-	err = service.Stream.Stop()
-	if err != nil {
-		return
+		size := service.AudioBuffer.Len()
+		buffer.Grow(size)
+		(*buffer).Write(service.AudioBuffer.Bytes())
 	}
 
 	err = portaudio.Terminate()
 	if err != nil {
 		return
 	}
+}
+
+func main() {
+	audioBuffer := bytes.NewBuffer(make([]byte, 0))
+	go record(audioBuffer)
+	time.Sleep(timeIntervalForSending)
+	kafkaPublisher := kafka.NewImageKafkaProducer(kafkaAudioTopic)
+
+	for {
+		s := time.Now()
+		kafkaPublisher.PublishWithTimestamp(audioBuffer.Next(int(sampleRate * secondsToRecord)))
+		time.Sleep(timeIntervalForSending - time.Since(s))
+	}
+
 }

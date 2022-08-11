@@ -2,52 +2,65 @@ package main
 
 import (
 	"Licenta/kafka"
-	"context"
+	"encoding/json"
 	"fmt"
-	"os"
-	"time"
+	"io"
+	"net"
+	"strconv"
 )
 
 const (
-	interAppMessagesTopic = "messages"
-	receivedImagesTopic   = "rImages"
-	receivedAudioTopic    = "rAudio"
-	FPS                   = 1.0 / 3
-	interImageDuration    = time.Duration(float32(time.Second) * FPS / (30 * FPS))
-	fileName              = "image.png"
+	receivedImagesTopic = "rImages"
+	receivedAudioTopic  = "rAudio"
 )
 
 func main() {
-	interAppConsumer := kafka.NewInterAppConsumer(interAppMessagesTopic)
-	//receivedImagesProducer := kafka.NewImageKafkaProducer(receivedImagesTopic)
-	//receivedAudioProducer := kafka.NewImageKafkaProducer(receivedAudioTopic)
+	receivedImagesProducer := kafka.NewImageKafkaProducer(receivedImagesTopic)
+	receivedAudioProducer := kafka.NewImageKafkaProducer(receivedAudioTopic)
 
-	err := interAppConsumer.Reader.SetOffsetAt(context.Background(), time.Now().Add(time.Second))
+	conn, err := net.Dial("tcp", "localhost:8081")
 	if err != nil {
 		return
 	}
-	file, _ := os.Create(fileName)
+	defer conn.Close()
 
+	fmt.Println("Conexiune stbil")
+	sizeBuffer := make([]byte, 9)
 	for {
-		message, err := interAppConsumer.Consume()
+
+		fmt.Println("ASteopt mesaj")
+
+		_, err := conn.Read(sizeBuffer)
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
 
-		fmt.Println(len(message.Audio), len(message.Images), message.Timestamp)
+		size, err := strconv.Atoi(string(sizeBuffer))
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
 
-		//receivedAudioProducer.Publish(message.Audio)
-		go func(images [][]byte) {
-			for _, image := range images {
-				//receivedImagesProducer.Publish(image)
-				file.Truncate(0)
-				file.Seek(0, 0)
-				file.Write(image)
-				fmt.Print("_ ")
-				time.Sleep(interImageDuration)
-			}
-			fmt.Println("")
-		}(message.Images)
+		encodedMessage, err := io.ReadAll(io.LimitReader(conn, int64(size)))
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		message := &kafka.InterAppMessage{}
+		err = json.Unmarshal(encodedMessage, message)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		//fmt.Println(time.Now().Sub(message.Timestamp)-time.Since(s), time.Since(s))
+		fmt.Println(len(message.Images), len(message.Audio))
+
+		receivedAudioProducer.Publish(message.Audio)
+		for _, image := range message.Images {
+			receivedImagesProducer.Publish(image)
+		}
 	}
 }

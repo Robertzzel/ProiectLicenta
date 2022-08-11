@@ -12,8 +12,8 @@ import (
 
 const (
 	kafkaAudioTopic        = "audio"
-	secondsToRecord        = 1.0 / 3
-	timeIntervalForSending = time.Second / 3
+	secondsToRecord        = 1.0
+	timeIntervalForSending = time.Second
 	sampleRate             = 44100
 	numberOfChannels       = 1
 )

@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	imagesTopic = "rImages"
-	fileName    = "image.png"
+	imagesTopic        = "rImages"
+	fileName           = "image.png"
+	interImageDuration = time.Second / 30
 )
 
 func main() {
@@ -26,11 +27,10 @@ func main() {
 			break
 		}
 
-		fmt.Println("___", image.Time)
 		file.Truncate(0)
 		file.Seek(0, 0)
 		file.Write(image.Value)
-		fmt.Println(time.Since(s))
-
+		time.Sleep(interImageDuration - time.Since(s))
+		fmt.Print("_ ")
 	}
 }

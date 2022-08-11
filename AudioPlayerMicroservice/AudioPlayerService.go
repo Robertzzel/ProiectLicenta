@@ -2,8 +2,10 @@ package main
 
 import (
 	"Licenta/kafka"
+	"context"
 	"fmt"
 	"github.com/gordonklaus/portaudio"
+	"time"
 )
 
 const (
@@ -15,6 +17,11 @@ const (
 func main() {
 	var err error
 	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
+	if err != nil {
+		return
+	}
+
+	err = audioConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
 	if err != nil {
 		return
 	}
@@ -50,5 +57,6 @@ func main() {
 		if err != nil {
 			return
 		}
+
 	}
 }

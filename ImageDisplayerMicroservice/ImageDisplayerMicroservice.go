@@ -16,7 +16,11 @@ const (
 
 func main() {
 	imagesConsumer := kafka.NewKafkaConsumer(imagesTopic)
-	imagesConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
+	err := imagesConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	file, _ := os.Create(fileName)
 
 	for {

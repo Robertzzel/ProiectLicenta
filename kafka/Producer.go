@@ -75,8 +75,7 @@ func NewInterAppProducer(topic string) *InterAppProducer {
 			Addr:         kafka.TCP(kafkaAddress),
 			Topic:        topic,
 			Balancer:     &kafka.LeastBytes{},
-			BatchBytes:   2097152,
-			RequiredAcks: 1,
+			RequiredAcks: 0,
 			Async:        true,
 		},
 		Encoder: json.NewEncoder(&buffer),
@@ -91,10 +90,11 @@ func (kp *InterAppProducer) Publish(message InterAppMessage) error {
 		return err
 	}
 
+	encodedMessage := string(kp.Buffer.Bytes())
 	return kp.WriteMessages(
 		context.Background(),
 		kafka.Message{
-			Value: kp.Buffer.Bytes(),
+			Value: []byte(encodedMessage),
 		},
 	)
 }

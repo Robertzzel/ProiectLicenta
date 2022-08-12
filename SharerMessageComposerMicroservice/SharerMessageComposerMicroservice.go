@@ -2,11 +2,8 @@ package main
 
 import (
 	"Licenta/kafka"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 )
@@ -17,7 +14,7 @@ const (
 	kafkaInputTopic     = "input"
 	kafkaMessagesTopic  = "messages"
 	kafkaSyncTopic      = "sync"
-	audioRecordInterval = time.Second
+	audioRecordInterval = time.Second / 2
 )
 
 func createKafkaTopics() error {
@@ -54,25 +51,7 @@ func main() {
 	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
 	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
 	inputConsumer := kafka.NewKafkaConsumer(kafkaInputTopic)
-
-	//
-	var buffer *bytes.Buffer = bytes.NewBuffer(make([]byte, 0))
-	encoder := json.NewEncoder(buffer)
-
-	listener, err := net.Listen("tcp", "localhost: 8081")
-	if err != nil {
-		return
-	}
-
-	fmt.Println("AStept conexiune")
-	conn, err := listener.Accept()
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-	fmt.Println("Conexiune stabilita")
-
-	//
+	interAppProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
 
 	err = audioConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
 	if err != nil {
@@ -140,29 +119,15 @@ func main() {
 			wg.Done()
 		}(&waitGroup, lastAudioReceivedTime)
 
+		messageToBeSent.Timestamp = lastAudioReceivedTime
 		waitGroup.Wait()
-		messageToBeSent.Timestamp = time.Now()
 
-		buffer.Truncate(0)
-		err := encoder.Encode(messageToBeSent)
+		//go func() {
+		err := interAppProducer.Publish(messageToBeSent)
 		if err != nil {
-			return
+			fmt.Println(err)
 		}
-
-		if buffer.Len() < 10 {
-			continue
-		}
-
-		sizeString := fmt.Sprintf("%09d", buffer.Len())
-
-		_, err = conn.Write([]byte(sizeString))
-		if err != nil {
-			return
-		}
-
-		_, err = conn.Write(buffer.Bytes())
-		if err != nil {
-			return
-		}
+		fmt.Print("sent ")
+		//}()
 	}
 }

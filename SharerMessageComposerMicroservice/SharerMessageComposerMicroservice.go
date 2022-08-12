@@ -122,12 +122,9 @@ func main() {
 		messageToBeSent.Timestamp = lastAudioReceivedTime
 		waitGroup.Wait()
 
-		//go func() {
 		err := interAppProducer.Publish(messageToBeSent)
 		if err != nil {
 			fmt.Println(err)
 		}
-		fmt.Print("sent ")
-		//}()
 	}
 }

@@ -30,7 +30,7 @@ func main() {
 			continue
 		}
 
-		fmt.Println(len(message.Images), len(message.Audio), message.Timestamp)
+		fmt.Println(len(message.Images), len(message.Audio), message.Timestamp, time.Now())
 		receivedAudioProducer.Publish(message.Audio)
 		for _, image := range message.Images {
 			receivedImagesProducer.Publish(image)

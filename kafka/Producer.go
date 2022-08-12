@@ -90,11 +90,13 @@ func (kp *InterAppProducer) Publish(message InterAppMessage) error {
 		return err
 	}
 
-	encodedMessage := string(kp.Buffer.Bytes())
+	bufferCopy := make([]byte, kp.Buffer.Len())
+	copy(bufferCopy, kp.Buffer.Bytes())
+
 	return kp.WriteMessages(
 		context.Background(),
 		kafka.Message{
-			Value: []byte(encodedMessage),
+			Value: bufferCopy,
 		},
 	)
 }

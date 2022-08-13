@@ -4,14 +4,12 @@ import (
 	"github.com/segmentio/kafka-go"
 	"net"
 	"strconv"
-	"time"
 )
 
 type InterAppMessage struct {
-	Images    [][]byte
-	Audio     []byte
-	Inputs    [][]byte
-	Timestamp time.Time
+	Video  []byte
+	Audio  []byte
+	Inputs [][]byte
 }
 
 type Message struct {

@@ -4,17 +4,20 @@ import (
 	"Licenta/kafka"
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"sync"
 	"time"
 )
 
 const (
-	kafkaImagesTopic    = "video"
-	kafkaAudioTopic     = "audio"
-	kafkaInputTopic     = "input"
-	kafkaMessagesTopic  = "messages"
-	kafkaSyncTopic      = "sync"
-	audioRecordInterval = time.Second / 2
+	kafkaImagesTopic   = "video"
+	kafkaAudioTopic    = "audio"
+	kafkaMessagesTopic = "messages"
+	kafkaSyncTopic     = "sync"
+	outputFileName     = "output.mp4"
+	outputVideoFile    = "video.avi"
+	outputAudioFile    = "audio.wav"
 )
 
 func createKafkaTopics() error {
@@ -26,23 +29,11 @@ func createKafkaTopics() error {
 	if err != nil {
 		return err
 	}
-	err = kafka.CreateTopic(kafkaInputTopic)
-	if err != nil {
-		return err
-	}
-	err = kafka.CreateTopic(kafkaMessagesTopic)
-	if err != nil {
-		return err
-	}
-	err = kafka.CreateTopic(kafkaSyncTopic)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return kafka.CreateTopic(kafkaMessagesTopic)
 }
 
 func main() {
+
 	err := createKafkaTopics()
 	if err != nil {
 		fmt.Println(err)
@@ -50,9 +41,12 @@ func main() {
 
 	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
 	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
-	inputConsumer := kafka.NewKafkaConsumer(kafkaInputTopic)
-	interAppProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
-
+	syncConsumer := kafka.NewKafkaConsumer(kafkaSyncTopic)
+	err = syncConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	err = audioConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
 	if err != nil {
 		fmt.Println(err)
@@ -63,68 +57,59 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	err = inputConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	//interAppProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
 
-	syncMessage, err := audioConsumer.Consume()
-	if err != nil {
-		fmt.Println("Sytnc error: ", err)
-		return
-	}
-	lastAudioReceivedTime, _ := time.Parse(kafka.TimeFormat, string(syncMessage.Headers[0].Value))
-
-	var waitGroup sync.WaitGroup
+	var wg sync.WaitGroup
 	for {
-		messageToBeSent := kafka.InterAppMessage{}
-		waitGroup.Add(2)
+		wg.Add(3)
+		var timestamp = new(time.Time)
 
-		go func(wg *sync.WaitGroup) {
-			audioMessage, err := audioConsumer.Consume()
+		go func(waitG *sync.WaitGroup, ts *time.Time) {
+			msg, err := syncConsumer.Consume()
 			if err != nil {
-				fmt.Println("Error while consuming audio: ", err)
+				fmt.Println("Sytnc error: ", err)
 				return
 			}
-			messageToBeSent.Audio = audioMessage.Value
+			*ts, err = time.Parse(kafka.TimeFormat, string(msg.Headers[0].Value))
+			wg.Done()
 
-			lastAudioReceivedTime, _ = time.Parse(kafka.TimeFormat, string(audioMessage.Headers[0].Value))
-			waitGroup.Done()
-		}(&waitGroup)
+		}(&wg, timestamp)
 
-		go func(wg *sync.WaitGroup, lowerTimeLimit time.Time) {
-			upperTimeLimit := lowerTimeLimit.Add(audioRecordInterval)
-			for {
-				imageMessage, err := videoConsumer.Consume()
-				if err != nil {
-					fmt.Println("Eroare la primirea imaginii ", err)
-					return
-				}
-
-				timestamp, err := time.Parse(kafka.TimeFormat, string(imageMessage.Headers[0].Value))
-				if err != nil {
-					fmt.Println("Eroare la timpstamp la imagine", err)
-				}
-
-				if timestamp.Before(lowerTimeLimit) {
-					continue
-				}
-
-				messageToBeSent.Images = append(messageToBeSent.Images, imageMessage.Value)
-				if timestamp.After(upperTimeLimit) {
-					break
-				}
+		go func(waitG *sync.WaitGroup) {
+			_, err = audioConsumer.Consume()
+			if err != nil {
+				return
 			}
 			wg.Done()
-		}(&waitGroup, lastAudioReceivedTime)
+		}(&wg)
 
-		messageToBeSent.Timestamp = lastAudioReceivedTime
-		waitGroup.Wait()
+		go func(waitG *sync.WaitGroup) {
+			_, err = videoConsumer.Consume()
+			if err != nil {
+				return
+			}
+			wg.Done()
+		}(&wg)
+		wg.Wait()
 
-		err := interAppProducer.Publish(messageToBeSent)
+		err = exec.Command("./CombineAudioAndVideo", outputVideoFile, outputAudioFile, outputFileName).Run()
 		if err != nil {
 			fmt.Println(err)
+			continue
 		}
+
+		file, err := os.ReadFile(outputFileName)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		//err = interAppProducer.Publish(file)
+		//if err != nil {
+		//	fmt.Println(err)
+		//	continue
+		//}
+		fmt.Println("componenta", len(file))
+
 	}
 }

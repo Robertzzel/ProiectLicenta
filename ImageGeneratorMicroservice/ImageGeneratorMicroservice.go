@@ -3,19 +3,26 @@ package main
 import (
 	"Licenta/kafka"
 	"bytes"
+	"context"
 	"fmt"
 	"github.com/go-vgo/robotgo"
+	"github.com/icza/mjpeg"
 	"github.com/pixiv/go-libjpeg/jpeg"
 	"image"
+	"os/exec"
 	"time"
 )
 
 const (
-	kafkaTopic         = "video"
-	imagesPerSecond    = 30
-	timePerImage       = time.Second / imagesPerSecond
-	resizedImageWidth  = 800
-	resizedImageHeight = 600
+	kafkaTopic          = "video"
+	syncTopic           = "sync"
+	FPS                 = 30
+	resizedImageWidth   = 1280
+	resizedImageHeight  = 720
+	videoFileName       = "auxVideo.avi"
+	outputVideoFileName = "video.avi"
+	videoSize           = time.Second
+	compressQuality     = 50
 )
 
 type ImageGeneratorService struct {
@@ -23,6 +30,7 @@ type ImageGeneratorService struct {
 	compressQuality     int
 	cursorRadius        int
 	screenshotGenerator *ScreenShotGenerator
+	GeneratedImage      *bytes.Buffer
 }
 
 func NewImageGeneratorService() (*ImageGeneratorService, error) {
@@ -32,9 +40,10 @@ func NewImageGeneratorService() (*ImageGeneratorService, error) {
 	}
 
 	return &ImageGeneratorService{
-		compressQuality:     75,
+		compressQuality:     compressQuality,
 		cursorRadius:        5,
 		screenshotGenerator: ssg,
+		GeneratedImage:      new(bytes.Buffer),
 	}, nil
 }
 
@@ -73,7 +82,7 @@ func (igs *ImageGeneratorService) compressImage(image *image.Image, outputBuffer
 	return nil
 }
 
-func (igs *ImageGeneratorService) GenerateImage(buffer *bytes.Buffer) error {
+func (igs *ImageGeneratorService) GenerateImage() error {
 	img, err := igs.captureScreen()
 	if err != nil {
 		return err
@@ -82,13 +91,38 @@ func (igs *ImageGeneratorService) GenerateImage(buffer *bytes.Buffer) error {
 	igs.appendCursor(img)
 	resizedImage := igs.resizeImage(img)
 
-	buffer.Truncate(0)
-	err = igs.compressImage(resizedImage, buffer)
+	igs.GeneratedImage.Truncate(0)
+	err = igs.compressImage(resizedImage, igs.GeneratedImage)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (igs *ImageGeneratorService) GenerateVideo(duration time.Duration) error {
+	video, err := mjpeg.New(videoFileName, resizedImageWidth, resizedImageHeight, FPS)
+	if err != nil {
+		return err
+	}
+
+	endTime := time.Now().Add(duration)
+	for time.Now().Before(endTime) {
+		s := time.Now()
+		err := igs.GenerateImage()
+		if err != nil {
+			return err
+		}
+
+		err = video.AddFrame(igs.GeneratedImage.Bytes())
+		if err != nil {
+			return err
+		}
+
+		time.Sleep(time.Second/FPS - time.Since(s))
+	}
+
+	return video.Close()
 }
 
 func main() {
@@ -97,9 +131,13 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	kafkaProducer := kafka.NewVideoKafkaProducer(kafkaTopic)
+	syncConsumer := kafka.NewKafkaConsumer(syncTopic)
+	if err = syncConsumer.Reader.SetOffsetAt(context.Background(), time.Now()); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	var imageBytes bytes.Buffer
-	kafkaProducer := kafka.NewImageKafkaProducer(kafkaTopic)
 	service, err := NewImageGeneratorService()
 	if err != nil {
 		fmt.Print(err)
@@ -107,15 +145,29 @@ func main() {
 	}
 
 	for {
-		startTime := time.Now()
-
-		err = service.GenerateImage(&imageBytes)
+		syncMsg, err := syncConsumer.Consume()
 		if err != nil {
-			fmt.Println("Error on generating message", err)
+			fmt.Println(err)
 			return
 		}
 
-		kafkaProducer.PublishWithTimestamp(imageBytes.Bytes())
-		time.Sleep(timePerImage - time.Since(startTime))
+		fmt.Println(string(syncMsg.Value), time.Now())
+		err = service.GenerateVideo(videoSize)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = exec.Command("mv", videoFileName, outputVideoFileName).Run()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = kafkaProducer.Publish([]byte("."))
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 }

@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/xgb v0.0.0-20210121224620-deaf085860bc
 	github.com/go-vgo/robotgo v1.0.0-beta5.3
 	github.com/gordonklaus/portaudio v0.0.0-20220320131553-cc649ad523c1
+	github.com/icza/mjpeg v0.0.0-20220812133530-f79265a232f2
 	github.com/mattn/go-gtk v0.0.0-20191030024613-af2e013261f5
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
 	github.com/robotn/gohook v0.40.0
@@ -36,5 +37,4 @@ require (
 	golang.org/x/net v0.0.0-20220520000938-2e3eb7b945c2 // indirect
 	golang.org/x/sys v0.0.0-20220128215802-99c3d69c2c27 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	gopkg.in/zeromq/goczmq.v4 v4.1.0 // indirect
 )

@@ -1,9 +1,7 @@
 package kafka
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	kafka "github.com/segmentio/kafka-go"
 	"time"
 )
@@ -27,13 +25,25 @@ func NewKafkaProducer(topic string) *Producer {
 	}
 }
 
-func NewImageKafkaProducer(topic string) *Producer {
+func NewVideoKafkaProducer(topic string) *Producer {
 	return &Producer{
 		Writer: &kafka.Writer{
 			Addr:         kafka.TCP(kafkaAddress),
 			Topic:        topic,
 			Balancer:     &kafka.LeastBytes{},
-			RequiredAcks: 0,
+			RequiredAcks: 1,
+			Async:        true,
+		},
+	}
+}
+
+func NewSyncKafkaProducer(topic string) *Producer {
+	return &Producer{
+		Writer: &kafka.Writer{
+			Addr:         kafka.TCP(kafkaAddress),
+			Topic:        topic,
+			Balancer:     &kafka.LeastBytes{},
+			RequiredAcks: 1,
 			Async:        true,
 		},
 	}
@@ -61,42 +71,14 @@ func (kp *Producer) PublishWithTimestamp(message []byte) error {
 	)
 }
 
-type InterAppProducer struct {
-	*kafka.Writer
-	*json.Encoder
-	*bytes.Buffer
-}
-
-func NewInterAppProducer(topic string) *InterAppProducer {
-	var buffer bytes.Buffer
-
-	return &InterAppProducer{
+func NewInterAppProducer(topic string) *Producer {
+	return &Producer{
 		Writer: &kafka.Writer{
 			Addr:         kafka.TCP(kafkaAddress),
 			Topic:        topic,
 			Balancer:     &kafka.LeastBytes{},
-			RequiredAcks: 0,
+			RequiredAcks: 1,
 			Async:        true,
 		},
-		Encoder: json.NewEncoder(&buffer),
-		Buffer:  &buffer,
 	}
-}
-
-func (kp *InterAppProducer) Publish(message InterAppMessage) error {
-	kp.Buffer.Truncate(0)
-	err := kp.Encoder.Encode(message)
-	if err != nil {
-		return err
-	}
-
-	bufferCopy := make([]byte, kp.Buffer.Len())
-	copy(bufferCopy, kp.Buffer.Bytes())
-
-	return kp.WriteMessages(
-		context.Background(),
-		kafka.Message{
-			Value: bufferCopy,
-		},
-	)
 }

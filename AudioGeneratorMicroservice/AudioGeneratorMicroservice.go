@@ -1,7 +1,6 @@
 package main
 
 import (
-	"Licenta/kafka"
 	"bytes"
 	"errors"
 	"fmt"
@@ -109,7 +108,16 @@ func record(buffer *bytes.Buffer) {
 		return
 	}
 
-	service, err := NewAudioGeneratorService(nil)
+	name, err := GetDeviceInfoByName("pulse")
+	if err != nil {
+		return
+	}
+	stream, b, err := GetAudioStream(name)
+	if err != nil {
+		return
+	}
+
+	service, err := NewAudioGeneratorService(stream)
 	if err != nil {
 		return
 	}
@@ -127,9 +135,9 @@ func record(buffer *bytes.Buffer) {
 			break
 		}
 
-		size := service.AudioBuffer.Len()
+		size := b.Len()
 		buffer.Grow(size)
-		(*buffer).Write(service.AudioBuffer.Bytes())
+		(*buffer).Write(b.Bytes())
 	}
 
 	err = portaudio.Terminate()
@@ -138,16 +146,16 @@ func record(buffer *bytes.Buffer) {
 	}
 }
 
-func main() {
-	audioBuffer := bytes.NewBuffer(make([]byte, 0))
-	go record(audioBuffer)
-	time.Sleep(timeIntervalForSending)
-	kafkaPublisher := kafka.NewImageKafkaProducer(kafkaAudioTopic)
-
-	for {
-		s := time.Now()
-		kafkaPublisher.PublishWithTimestamp(audioBuffer.Next(int(sampleRate * secondsToRecord)))
-		time.Sleep(timeIntervalForSending - time.Since(s))
-	}
-
-}
+//func main() {
+//	audioBuffer := bytes.NewBuffer(make([]byte, 0))
+//	go record(audioBuffer)
+//	kafkaPublisher := kafka.NewImageKafkaProducer(kafkaAudioTopic)
+//	time.Sleep(timeIntervalForSending)
+//
+//	for {
+//		s := time.Now()
+//		kafkaPublisher.PublishWithTimestamp(audioBuffer.Next(int(sampleRate * secondsToRecord)))
+//		time.Sleep(timeIntervalForSending - time.Since(s))
+//	}
+//
+//}

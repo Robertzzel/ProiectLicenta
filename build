@@ -4,17 +4,17 @@ cd ImageGeneratorMicroservice
 go build ImageGeneratorMicroservice.go ImageResizer.go ScreenshotGenerator.go ByteImage.go
 cd ..
 
-cd AudioGeneratorMicroservice
-go build AudioGeneratorMicroservice.go
-cd ..
+#cd AudioGeneratorMicroservice
+#go build AudioGeneratorMicroservice.go
+#cd ..
 
 cd SharerMessageComposerMicroservice
 go build SharerMessageComposerMicroservice.go
 cd ..
 
-cd ReceiverMessageRouter
-go build ReceiverMessageRouterMicroservice.go
-cd ..
+#cd ReceiverMessageRouter
+#go build ReceiverMessageRouterMicroservice.go
+#cd ..
 
 cd ImageDisplayerMicroservice
 go build ImageDisplayerMicroservice.go
@@ -22,4 +22,12 @@ cd ..
 
 cd AudioPlayerMicroservice
 go build AudioPlayerMicroservice.go
+cd ..
+
+cd AudioPlayerMicroservice
+go build AudioPlayerMicroservice.go
+cd ..
+
+cd Synchroniser
+go build SynchroniserMicroservice.go
 cd ..

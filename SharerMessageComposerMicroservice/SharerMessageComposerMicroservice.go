@@ -33,7 +33,6 @@ func createKafkaTopics() error {
 }
 
 func main() {
-
 	err := createKafkaTopics()
 	if err != nil {
 		fmt.Println(err)
@@ -57,23 +56,11 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	//interAppProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
+	interAppProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
 
 	var wg sync.WaitGroup
 	for {
-		wg.Add(3)
-		var timestamp = new(time.Time)
-
-		go func(waitG *sync.WaitGroup, ts *time.Time) {
-			msg, err := syncConsumer.Consume()
-			if err != nil {
-				fmt.Println("Sytnc error: ", err)
-				return
-			}
-			*ts, err = time.Parse(kafka.TimeFormat, string(msg.Headers[0].Value))
-			wg.Done()
-
-		}(&wg, timestamp)
+		wg.Add(2)
 
 		go func(waitG *sync.WaitGroup) {
 			_, err = audioConsumer.Consume()
@@ -92,24 +79,26 @@ func main() {
 		}(&wg)
 		wg.Wait()
 
-		err = exec.Command("./CombineAudioAndVideo", outputVideoFile, outputAudioFile, outputFileName).Run()
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
+		go func() {
+			err = exec.Command("./CombineAudioAndVideo", outputVideoFile, outputAudioFile, outputFileName).Run()
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
 
-		file, err := os.ReadFile(outputFileName)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
+			file, err := os.ReadFile(outputFileName)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
 
-		//err = interAppProducer.Publish(file)
-		//if err != nil {
-		//	fmt.Println(err)
-		//	continue
-		//}
-		fmt.Println("componenta", len(file))
+			fmt.Println("New File: ", len(file))
 
+			err = interAppProducer.Publish(file)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		}()
 	}
 }

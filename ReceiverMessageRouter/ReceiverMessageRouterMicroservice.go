@@ -4,6 +4,7 @@ import (
 	"Licenta/kafka"
 	"context"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -14,9 +15,9 @@ const (
 )
 
 func main() {
-	receivedImagesProducer := kafka.NewImageKafkaProducer(receivedImagesTopic)
-	receivedAudioProducer := kafka.NewImageKafkaProducer(receivedAudioTopic)
-	interAppConsumer := kafka.NewInterAppConsumer(interAppTopic)
+	//receivedImagesProducer := kafka.NewImageKafkaProducer(receivedImagesTopic)
+	//receivedAudioProducer := kafka.NewImageKafkaProducer(receivedAudioTopic)
+	interAppConsumer := kafka.NewKafkaConsumer(interAppTopic)
 	err := interAppConsumer.Reader.SetOffsetAt(context.Background(), time.Now().Add(time.Hour))
 	if err != nil {
 		fmt.Println(err)
@@ -30,10 +31,14 @@ func main() {
 			continue
 		}
 
-		fmt.Println(len(message.Images), len(message.Audio), message.Timestamp, time.Now())
-		receivedAudioProducer.Publish(message.Audio)
-		for _, image := range message.Images {
-			receivedImagesProducer.Publish(image)
+		file, err := os.Create("received2")
+		if err != nil {
+			return
 		}
+
+		file.Truncate(0)
+		file.Seek(0, 0)
+		file.Write(message.Value)
+		return
 	}
 }

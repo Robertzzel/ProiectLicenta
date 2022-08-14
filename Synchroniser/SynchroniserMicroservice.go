@@ -8,7 +8,7 @@ import (
 
 const (
 	topic                  = "sync"
-	intervalBetweenSignals = time.Second * 2
+	intervalBetweenSignals = time.Second
 )
 
 func main() {

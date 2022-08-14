@@ -22,7 +22,7 @@ const (
 	videoFileName       = "auxVideo.avi"
 	outputVideoFileName = "video.avi"
 	videoSize           = time.Second
-	compressQuality     = 50
+	compressQuality     = 100
 )
 
 type ImageGeneratorService struct {
@@ -151,23 +151,25 @@ func main() {
 			return
 		}
 
-		fmt.Println(string(syncMsg.Value), time.Now())
-		err = service.GenerateVideo(videoSize)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+		go func() {
+			fmt.Println(string(syncMsg.Value), time.Now())
+			err = service.GenerateVideo(videoSize)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
 
-		err = exec.Command("mv", videoFileName, outputVideoFileName).Run()
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+			err = exec.Command("mv", videoFileName, outputVideoFileName).Run()
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
 
-		err = kafkaProducer.Publish([]byte("."))
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+			err = kafkaProducer.Publish([]byte("."))
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		}()
 	}
 }

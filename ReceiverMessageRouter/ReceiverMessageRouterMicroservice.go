@@ -9,16 +9,18 @@ import (
 )
 
 const (
-	receivedImagesTopic = "rImages"
-	receivedAudioTopic  = "rAudio"
-	interAppTopic       = "messages"
+	interAppTopic = "messages"
 )
 
 func main() {
-	//receivedImagesProducer := kafka.NewImageKafkaProducer(receivedImagesTopic)
-	//receivedAudioProducer := kafka.NewImageKafkaProducer(receivedAudioTopic)
 	interAppConsumer := kafka.NewKafkaConsumer(interAppTopic)
-	err := interAppConsumer.Reader.SetOffsetAt(context.Background(), time.Now().Add(time.Hour))
+
+	if err := interAppConsumer.Reader.SetOffsetAt(context.Background(), time.Now().Add(time.Hour)); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	file, err := os.Create("out")
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -31,14 +33,8 @@ func main() {
 			continue
 		}
 
-		file, err := os.Create("received2")
-		if err != nil {
-			return
-		}
-
 		file.Truncate(0)
 		file.Seek(0, 0)
 		file.Write(message.Value)
-		return
 	}
 }

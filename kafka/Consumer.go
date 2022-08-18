@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	kafka "github.com/segmentio/kafka-go"
+	"time"
 )
 
 type Consumer struct {
@@ -32,6 +33,10 @@ func (kc *Consumer) Consume() (Message, error) {
 	}
 
 	return Message{message}, nil
+}
+
+func (kc *Consumer) SetOffsetToNow() error {
+	return kc.Reader.SetOffsetAt(context.Background(), time.Now())
 }
 
 type InterAppConsumer struct {

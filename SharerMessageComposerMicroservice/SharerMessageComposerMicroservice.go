@@ -2,12 +2,9 @@ package main
 
 import (
 	"Licenta/kafka"
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"sync"
-	"time"
 )
 
 const (
@@ -16,8 +13,6 @@ const (
 	kafkaMessagesTopic = "messages"
 	kafkaSyncTopic     = "sync"
 	outputFileName     = "output.mp4"
-	outputVideoFile    = "video.avi"
-	outputAudioFile    = "audio.wav"
 )
 
 func createKafkaTopics() error {
@@ -32,68 +27,83 @@ func createKafkaTopics() error {
 	return kafka.CreateTopic(kafkaMessagesTopic)
 }
 
-func main() {
-	err := createKafkaTopics()
+func combineVideoAndAudioFiles(videoFileBytes, audioFileBytes []byte) ([]byte, error) {
+	videoTemp, err := os.CreateTemp("", "temp")
 	if err != nil {
+		return nil, err
+	}
+	defer videoTemp.Close()
+
+	if _, err = videoTemp.Write(videoFileBytes); err != nil {
+		return nil, err
+	}
+
+	audioTemp, err := os.CreateTemp("", "temp")
+	if err != nil {
+		return nil, err
+	}
+	defer audioTemp.Close()
+
+	if _, err = audioTemp.Write(audioFileBytes); err != nil {
+		return nil, err
+	}
+
+	if err = exec.Command("./CombineAudioAndVideo", videoTemp.Name(), audioTemp.Name(), outputFileName).Run(); err != nil {
+		return nil, err
+	}
+
+	file, err := os.ReadFile(outputFileName)
+	if err != nil {
+		return nil, err
+	}
+
+	return file, nil
+}
+
+func main() {
+	if err := createKafkaTopics(); err != nil {
 		fmt.Println(err)
 	}
 
 	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
 	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
 	syncConsumer := kafka.NewKafkaConsumer(kafkaSyncTopic)
-	err = syncConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
-	if err != nil {
+
+	if err := syncConsumer.SetOffsetToNow(); err != nil {
 		fmt.Println(err)
 		return
 	}
-	err = audioConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
-	if err != nil {
+
+	if err := audioConsumer.SetOffsetToNow(); err != nil {
 		fmt.Println(err)
 		return
 	}
-	err = videoConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
-	if err != nil {
+
+	if err := videoConsumer.SetOffsetToNow(); err != nil {
 		fmt.Println(err)
 		return
 	}
 	interAppProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
 
-	var wg sync.WaitGroup
 	for {
-		wg.Add(2)
+		videoMessage, err := videoConsumer.Consume()
+		if err != nil {
+			return
+		}
 
-		go func(waitG *sync.WaitGroup) {
-			_, err = audioConsumer.Consume()
-			if err != nil {
-				return
-			}
-			wg.Done()
-		}(&wg)
-
-		go func(waitG *sync.WaitGroup) {
-			_, err = videoConsumer.Consume()
-			if err != nil {
-				return
-			}
-			wg.Done()
-		}(&wg)
-		wg.Wait()
+		audioMessage, err := audioConsumer.Consume()
+		if err != nil {
+			return
+		}
 
 		go func() {
-			err = exec.Command("./CombineAudioAndVideo", outputVideoFile, outputAudioFile, outputFileName).Run()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			file, err := os.ReadFile(outputFileName)
+			file, err := combineVideoAndAudioFiles(videoMessage.Value, audioMessage.Value)
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
 
 			fmt.Println("New File: ", len(file))
-
 			err = interAppProducer.Publish(file)
 			if err != nil {
 				fmt.Println(err)

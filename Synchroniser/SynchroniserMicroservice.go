@@ -12,26 +12,21 @@ const (
 )
 
 func main() {
-	fmt.Println("Starting...")
-
-	err := kafka.CreateTopic(topic)
-	if err != nil {
+	if err := kafka.CreateTopic(topic); err != nil {
 		fmt.Println(err)
 		return
 	}
 	producer := kafka.NewSyncKafkaProducer(topic)
-	i := 0
+
 	for {
 		s := time.Now()
 
-		err := producer.PublishWithTimestamp([]byte(fmt.Sprint(i)))
-		if err != nil {
+		if err := producer.PublishWithTimestamp([]byte(".")); err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		i++
-		fmt.Print("signal ", i, " ")
+		fmt.Print("signal ")
 		time.Sleep(intervalBetweenSignals - time.Since(s))
 	}
 }

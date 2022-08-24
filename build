@@ -1,7 +1,7 @@
 #!/bin/sh
 
 cd ImageGeneratorMicroservice
-go build ImageGeneratorMicroservice.go ImageResizer.go ScreenshotGenerator.go ByteImage.go
+go build VideoFileGenerator.go ImageGeneratorMicroservice.go ImageResizer.go ScreenshotGenerator.go ByteImage.go
 cd ..
 
 #cd AudioGeneratorMicroservice

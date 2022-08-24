@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 )
 
 const (
@@ -27,37 +28,23 @@ func createKafkaTopics() error {
 	return kafka.CreateTopic(kafkaMessagesTopic)
 }
 
-func combineVideoAndAudioFiles(videoFileBytes, audioFileBytes []byte) ([]byte, error) {
-	videoTemp, err := os.CreateTemp("", "temp")
-	if err != nil {
-		return nil, err
-	}
-	defer videoTemp.Close()
-
-	if _, err = videoTemp.Write(videoFileBytes); err != nil {
+func combineVideoAndAudioFiles(videoFileName, audioFileName string) ([]byte, error) {
+	s := time.Now()
+	if _, err := exec.Command("./CombineAudioAndVideo", videoFileName, audioFileName, "aux"+outputFileName).Output(); err != nil {
 		return nil, err
 	}
 
-	audioTemp, err := os.CreateTemp("", "temp")
-	if err != nil {
-		return nil, err
-	}
-	defer audioTemp.Close()
-
-	if _, err = audioTemp.Write(audioFileBytes); err != nil {
+	if _, err := exec.Command("./CompressFile", "aux"+outputFileName, outputFileName, "30").Output(); err != nil {
 		return nil, err
 	}
 
-	if err = exec.Command("./CombineAudioAndVideo", videoTemp.Name(), audioTemp.Name(), outputFileName).Run(); err != nil {
-		return nil, err
-	}
+	/*
+		if _, err := exec.Command("./Mp4ToVP9", "aux2"+outputFileName, outputFileName).Output(); err != nil {
+			return nil, err
+		}*/
+	fmt.Println(time.Since(s))
 
-	file, err := os.ReadFile(outputFileName)
-	if err != nil {
-		return nil, err
-	}
-
-	return file, nil
+	return os.ReadFile(outputFileName)
 }
 
 func main() {
@@ -88,25 +75,57 @@ func main() {
 	for {
 		videoMessage, err := videoConsumer.Consume()
 		if err != nil {
+			fmt.Println(err)
 			return
 		}
 
 		audioMessage, err := audioConsumer.Consume()
 		if err != nil {
+			fmt.Println(err)
 			return
 		}
 
+		timeDifference := videoMessage.Time.Sub(audioMessage.Time)
+		for timeDifference > time.Second {
+			audioMessage, err = audioConsumer.Consume()
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			timeDifference = videoMessage.Time.Sub(audioMessage.Time)
+		}
+		for timeDifference < time.Second {
+			videoMessage, err = videoConsumer.Consume()
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			timeDifference = videoMessage.Time.Sub(audioMessage.Time)
+		}
+
 		go func() {
-			file, err := combineVideoAndAudioFiles(videoMessage.Value, audioMessage.Value)
+			videoFileName := string(videoMessage.Value)
+			audioFileName := string(audioMessage.Value)
+
+			file, err := combineVideoAndAudioFiles(videoFileName, audioFileName)
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
 
 			fmt.Println("New File: ", len(file))
-			err = interAppProducer.Publish(file)
-			if err != nil {
+			if err = interAppProducer.Publish(file); err != nil {
 				fmt.Println(err)
+				return
+			}
+
+			if err = os.Remove(videoFileName); err != nil {
+				fmt.Println("Error: ", err)
+				return
+			}
+
+			if err = os.Remove(audioFileName); err != nil {
+				fmt.Println("Error: ", err)
 				return
 			}
 		}()

@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/xgb v0.0.0-20210121224620-deaf085860bc
 	github.com/go-vgo/robotgo v1.0.0-beta5.3
 	github.com/gordonklaus/portaudio v0.0.0-20220320131553-cc649ad523c1
+	github.com/gorilla/websocket v1.5.0
 	github.com/icza/mjpeg v0.0.0-20220812133530-f79265a232f2
 	github.com/mattn/go-gtk v0.0.0-20191030024613-af2e013261f5
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d

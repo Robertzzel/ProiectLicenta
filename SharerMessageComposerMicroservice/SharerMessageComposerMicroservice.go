@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"time"
 )
 
 const (
@@ -29,7 +28,6 @@ func createKafkaTopics() error {
 }
 
 func combineVideoAndAudioFiles(videoFileName, audioFileName string) ([]byte, error) {
-	s := time.Now()
 	if _, err := exec.Command("./CombineAudioAndVideo", videoFileName, audioFileName, "aux"+outputFileName).Output(); err != nil {
 		return nil, err
 	}
@@ -37,12 +35,6 @@ func combineVideoAndAudioFiles(videoFileName, audioFileName string) ([]byte, err
 	if _, err := exec.Command("./CompressFile", "aux"+outputFileName, outputFileName, "30").Output(); err != nil {
 		return nil, err
 	}
-
-	/*
-		if _, err := exec.Command("./Mp4ToVP9", "aux2"+outputFileName, outputFileName).Output(); err != nil {
-			return nil, err
-		}*/
-	fmt.Println(time.Since(s))
 
 	return os.ReadFile(outputFileName)
 }
@@ -83,24 +75,6 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 			return
-		}
-
-		timeDifference := videoMessage.Time.Sub(audioMessage.Time)
-		for timeDifference > time.Second {
-			audioMessage, err = audioConsumer.Consume()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			timeDifference = videoMessage.Time.Sub(audioMessage.Time)
-		}
-		for timeDifference < time.Second {
-			videoMessage, err = videoConsumer.Consume()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			timeDifference = videoMessage.Time.Sub(audioMessage.Time)
 		}
 
 		go func() {

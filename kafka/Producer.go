@@ -44,7 +44,7 @@ func NewSyncKafkaProducer(topic string) *Producer {
 			Topic:        topic,
 			Balancer:     &kafka.LeastBytes{},
 			RequiredAcks: 1,
-			Async:        true,
+			Async:        false,
 		},
 	}
 }

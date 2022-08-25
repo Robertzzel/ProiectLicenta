@@ -3,12 +3,13 @@ package main
 import (
 	"Licenta/kafka"
 	"fmt"
-	"time"
+	"sync"
 )
 
 const (
-	topic                  = "sync"
-	intervalBetweenSignals = time.Second
+	topic      = "sync"
+	videoTopic = "videoSync"
+	audioSync  = "audioSync"
 )
 
 func main() {
@@ -16,17 +17,47 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+
 	producer := kafka.NewSyncKafkaProducer(topic)
+	videoSyncConsumer := kafka.NewKafkaConsumer(videoTopic)
+	audioSyncConsumer := kafka.NewKafkaConsumer(audioSync)
 
+	if err := videoSyncConsumer.SetOffsetToNow(); err != nil {
+		panic(err)
+	}
+	if err := audioSyncConsumer.SetOffsetToNow(); err != nil {
+		panic(err)
+	}
+
+	var wg sync.WaitGroup
 	for {
-		s := time.Now()
 
-		if err := producer.PublishWithTimestamp([]byte(".")); err != nil {
-			fmt.Println(err)
-			return
+		wg.Add(2)
+		go func() {
+			fmt.Println("w for vid")
+			_, err := videoSyncConsumer.Consume()
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("vid key")
+			wg.Done()
+		}()
+
+		go func() {
+			fmt.Println("w for aud")
+			_, err := audioSyncConsumer.Consume()
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("aud key")
+			wg.Done()
+		}()
+
+		wg.Wait()
+		if err := producer.Publish([]byte(".")); err != nil {
+			panic(err)
 		}
 
-		fmt.Print("signal ")
-		time.Sleep(intervalBetweenSignals - time.Since(s))
+		fmt.Println("Sync")
 	}
 }

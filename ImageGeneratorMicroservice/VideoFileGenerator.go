@@ -6,8 +6,14 @@ import (
 	"github.com/icza/mjpeg"
 	"github.com/pixiv/go-libjpeg/jpeg"
 	"image"
-	"os"
 	"time"
+)
+
+const (
+	FPS                = 30
+	resizedImageWidth  = 1280 // 480p: 852   720p: 1280
+	resizedImageHeight = 720  //       480         720
+	compressQuality    = 100
 )
 
 type VideoFileGenerator struct {
@@ -85,32 +91,25 @@ func (igs *VideoFileGenerator) GenerateImage() error {
 	return nil
 }
 
-func (igs *VideoFileGenerator) GenerateVideoFile(duration time.Duration) (string, error) {
-	tempFile, err := os.CreateTemp("", "temp*.mkv")
+func (igs *VideoFileGenerator) GenerateVideoFile(fileName string, duration time.Duration) error {
+	video, err := mjpeg.New(fileName, resizedImageWidth, resizedImageHeight, FPS)
 	if err != nil {
-		return "", err
+		return err
 	}
-
-	video, err := mjpeg.New(tempFile.Name(), resizedImageWidth, resizedImageHeight, FPS)
-	if err != nil {
-		return "", err
-	}
+	defer video.Close()
 
 	endTime := time.Now().Add(duration)
 	for time.Now().Before(endTime) {
 		s := time.Now()
-		err := igs.GenerateImage()
-		if err != nil {
-			return "", err
+		if err = igs.GenerateImage(); err != nil {
+			return err
+		}
+		if err = video.AddFrame(igs.GeneratedImage.Bytes()); err != nil {
+			return err
 		}
 
-		err = video.AddFrame(igs.GeneratedImage.Bytes())
-		if err != nil {
-			return "", err
-		}
-
-		time.Sleep(time.Second/FPS - time.Since(s))
+		time.Sleep(time.Second/30 - time.Since(s))
 	}
 
-	return tempFile.Name(), video.Close()
+	return nil
 }

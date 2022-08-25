@@ -3,62 +3,72 @@ package main
 import (
 	"Licenta/kafka"
 	"fmt"
-	"sync"
 	"time"
 )
 
 const (
-	kafkaTopic         = "video"
-	syncTopic          = "sync"
-	FPS                = 30
-	resizedImageWidth  = 1280
-	resizedImageHeight = 720
-	videoSize          = time.Second
-	compressQuality    = 100
+	kafkaTopic = "video"
+	syncTopic  = "sync"
+	syncTopic2 = "videoSync"
 )
+
+func synchronise(syncPublisher *kafka.Producer, syncConsumer *kafka.Consumer) error {
+	if err := syncPublisher.Publish([]byte(".")); err != nil {
+		return err
+	}
+
+	_, err := syncConsumer.Consume()
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("sync")
+	return nil
+}
 
 func main() {
 	if err := kafka.CreateTopic(kafkaTopic); err != nil {
-		fmt.Println(err)
-		return
+		panic(err)
 	}
-	kafkaProducer := kafka.NewVideoKafkaProducer(kafkaTopic)
+
+	videoPublisher := kafka.NewVideoKafkaProducer(kafkaTopic)
+	syncPublisher := kafka.NewSyncKafkaProducer(syncTopic2)
+
 	syncConsumer := kafka.NewKafkaConsumer(syncTopic)
 	if err := syncConsumer.SetOffsetToNow(); err != nil {
-		fmt.Println(err)
-		return
+		panic(err)
 	}
 
 	service, err := NewVideoGenerator()
 	if err != nil {
-		fmt.Print(err)
-		return
+		panic(err)
 	}
 
-	var mutex sync.Mutex
+	if err := synchronise(syncPublisher, syncConsumer); err != nil {
+		panic(err)
+	}
+
+	messagesUntilSync := 30
 	for {
-		syncMsg, err := syncConsumer.Consume()
-		if err != nil {
-			fmt.Println(err)
-			return
+		fileName := "videos/" + fmt.Sprint(time.Now().Unix()) + ".mkv"
+		if err = service.GenerateVideoFile(fileName, time.Second); err != nil {
+			panic(err)
 		}
 
-		fmt.Println(string(syncMsg.Value), time.Now())
+		if err = videoPublisher.Publish([]byte(fileName)); err != nil {
+			panic(err)
+		}
 
-		go func() {
-			mutex.Lock()
-			videoFileName, err := service.GenerateVideoFile(videoSize)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			mutex.Unlock()
+		messagesUntilSync--
+		if messagesUntilSync == 0 {
 
-			err = kafkaProducer.Publish([]byte(videoFileName))
-			if err != nil {
-				fmt.Println(err)
-				return
+			if err := synchronise(syncPublisher, syncConsumer); err != nil {
+				panic(err)
 			}
-		}()
+
+			messagesUntilSync = 30
+		}
+		fmt.Println(time.Now())
 	}
+
 }

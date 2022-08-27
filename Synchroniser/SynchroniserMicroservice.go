@@ -4,6 +4,7 @@ import (
 	"Licenta/kafka"
 	"fmt"
 	"sync"
+	"time"
 )
 
 const (
@@ -54,7 +55,7 @@ func main() {
 		}()
 
 		wg.Wait()
-		if err := producer.Publish([]byte(".")); err != nil {
+		if err := producer.Publish([]byte(fmt.Sprint(time.Now().Unix()))); err != nil {
 			panic(err)
 		}
 

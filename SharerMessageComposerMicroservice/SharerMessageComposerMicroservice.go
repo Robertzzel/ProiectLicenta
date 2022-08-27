@@ -13,7 +13,6 @@ const (
 	kafkaAudioTopic    = "audio"
 	kafkaMessagesTopic = "messages"
 	kafkaSyncTopic     = "sync"
-	outputFileName     = "output.mp4"
 )
 
 func checkErr(err error) {
@@ -34,22 +33,22 @@ func createKafkaTopics() error {
 	return kafka.CreateTopic(kafkaMessagesTopic)
 }
 
-func combineVideoAndAudioFiles(videoFileName, audioFileName string) ([]byte, error) {
-
-	/*
-		if _, err := exec.Command("./CombineAudioAndVideo", videoFileName, audioFileName, "aux"+outputFileName).Output(); err != nil {
-			return nil, err
-		}
-
-		if _, err := exec.Command("./CompressFile", "aux"+outputFileName, outputFileName, "30").Output(); err != nil {
-			return nil, err
-		}*/
-
-	if _, err := exec.Command("./CombineAndCompress", videoFileName, audioFileName, outputFileName, "30").Output(); err != nil {
-		return nil, err
+func combineVideoAndAudioFiles(videoFileName, audioFileName string) (string, []byte, error) {
+	outputFile, err := os.CreateTemp("", "*out.mp4")
+	if err != nil {
+		return "", nil, err
 	}
 
-	return os.ReadFile(outputFileName)
+	if _, err := exec.Command("./CombineAndCompress", videoFileName, audioFileName, outputFile.Name(), "30").Output(); err != nil {
+		return "", nil, err
+	}
+
+	fileBytes, err := os.ReadFile(outputFile.Name())
+	if err != nil {
+		return "", nil, err
+	}
+
+	return outputFile.Name(), fileBytes, nil
 }
 
 func main() {
@@ -76,14 +75,17 @@ func main() {
 			videoFileName := string(videoMessage.Value)
 			audioFileName := string(audioMessage.Value)
 
-			file, err := combineVideoAndAudioFiles(videoFileName, audioFileName)
+			fmt.Println(videoFileName, audioFileName)
+
+			fileName, fileBytes, err := combineVideoAndAudioFiles(videoFileName, audioFileName)
 			checkErr(err)
 
-			checkErr(interAppProducer.Publish(file))
-			fmt.Println("New File: ", len(file), time.Since(s))
+			checkErr(interAppProducer.Publish(fileBytes))
+			fmt.Println("New File: ", len(fileBytes), time.Since(s))
 
 			checkErr(os.Remove(videoFileName))
 			checkErr(os.Remove(audioFileName))
+			checkErr(os.Remove(fileName))
 		}()
 	}
 }

@@ -2,22 +2,27 @@ package main
 
 import (
 	"Licenta/kafka"
-	"bytes"
 	"errors"
 	"fmt"
 	"github.com/icza/mjpeg"
+	"log"
 	"strconv"
+	"sync"
 	"time"
 )
 
 const (
-	kafkaTopic = "video"
-	syncTopic  = "sync"
-	syncTopic2 = "videoSync"
+	kafkaTopic   = "video"
+	syncTopic    = "sync"
+	syncTopic2   = "videoSync"
+	syncInterval = 60
+	videoSize    = time.Second
 )
 
+var mutex sync.Mutex
+
 type VideoRecorder struct {
-	buffer       []bytes.Buffer
+	buffer       [][]byte
 	startTime    time.Time
 	videoService *VideoFileGenerator
 }
@@ -33,12 +38,27 @@ func NewVideoRecorder() (*VideoRecorder, error) {
 	}, nil
 }
 func (videoRecorder *VideoRecorder) getEndTime() time.Time {
+	mutex.Lock()
+	defer mutex.Unlock()
 	return videoRecorder.startTime.Add(time.Duration(int64(time.Second/FPS) * int64(len(videoRecorder.buffer))))
 }
 
 func (videoRecorder *VideoRecorder) start() {
 	go videoRecorder.startRecording()
-	go videoRecorder.autoCleanup()
+	go videoRecorder.cleanup()
+}
+
+func (videoRecorder *VideoRecorder) cleanup() {
+	for {
+		if len(videoRecorder.buffer) > 10*FPS {
+			mutex.Lock()
+			videoRecorder.buffer = videoRecorder.buffer[6*FPS:]
+			videoRecorder.startTime = videoRecorder.startTime.Add(6 * time.Second)
+			mutex.Unlock()
+		} else {
+			time.Sleep(time.Second * 5)
+		}
+	}
 }
 
 func (videoRecorder *VideoRecorder) startRecording() {
@@ -49,41 +69,35 @@ func (videoRecorder *VideoRecorder) startRecording() {
 
 		checkErr(videoRecorder.videoService.GenerateImage())
 
-		newBuffer := *bytes.NewBuffer([]byte(""))
-		newBuffer.Reset()
-		newBuffer.Write(videoRecorder.videoService.GeneratedImage.Bytes())
+		videoRecorder.buffer = append(videoRecorder.buffer, make([]byte, videoRecorder.videoService.GeneratedImage.Len()))
+		copy(videoRecorder.buffer[len(videoRecorder.buffer)-1], videoRecorder.videoService.GeneratedImage.Bytes())
 
-		videoRecorder.buffer = append(videoRecorder.buffer, newBuffer)
+		log.Println(time.Second/FPS - time.Since(s))
 		time.Sleep(time.Second/FPS - time.Since(s))
 	}
 }
 
-func (videoRecorder *VideoRecorder) autoCleanup() {
-	for {
-		if len(videoRecorder.buffer) > FPS*6 {
-			videoRecorder.buffer = videoRecorder.buffer[FPS:]
-			videoRecorder.startTime = videoRecorder.startTime.Add(time.Second)
-		} else {
-			time.Sleep(time.Second)
-		}
-	}
-}
-
-func (videoRecorder *VideoRecorder) getFromBuffer(startTime time.Time, duration time.Duration) ([]bytes.Buffer, error) {
+func (videoRecorder *VideoRecorder) getFromBuffer(startTime time.Time, duration time.Duration) ([][]byte, error) {
 	if startTime.Before(videoRecorder.startTime) {
 		return nil, errors.New("requested start time before video recorder start time")
 	}
 
-	endTimeDifference := videoRecorder.getEndTime().Sub(startTime.Add(duration))
-	if endTimeDifference < 0 {
-		time.Sleep(-endTimeDifference + time.Second/FPS)
+	partEndTime := startTime.Add(duration)
+	for videoRecorder.getEndTime().Before(partEndTime) {
+		time.Sleep(videoRecorder.getEndTime().Sub(partEndTime))
 	}
 
+	size := uint(duration.Seconds() * float64(FPS))
+	part := make([][]byte, size)
+
+	mutex.Lock()
 	startTimeDifferenceInSeconds := startTime.Sub(videoRecorder.startTime).Seconds()
 	offset := uint(startTimeDifferenceInSeconds * float64(FPS))
-	size := uint(duration.Seconds() * float64(FPS))
 
-	return videoRecorder.buffer[offset : offset+size], nil
+	copy(part, videoRecorder.buffer[offset:offset+size])
+	mutex.Unlock()
+
+	return part, nil
 }
 
 func (videoRecorder *VideoRecorder) createVideoFile(fileName string, startTime time.Time, duration time.Duration) error {
@@ -99,7 +113,7 @@ func (videoRecorder *VideoRecorder) createVideoFile(fileName string, startTime t
 	defer video.Close()
 
 	for _, image := range images {
-		if err := video.AddFrame(image.Bytes()); err != nil {
+		if err := video.AddFrame(image); err != nil {
 			return err
 		}
 	}
@@ -133,29 +147,27 @@ func synchronise(syncPublisher *kafka.Producer, syncConsumer *kafka.Consumer) (t
 
 func main() {
 	checkErr(kafka.CreateTopic(kafkaTopic))
-
 	videoPublisher := kafka.NewVideoKafkaProducer(kafkaTopic)
 	syncPublisher := kafka.NewSyncKafkaProducer(syncTopic2)
 	syncConsumer := kafka.NewKafkaConsumer(syncTopic)
-
 	checkErr(syncConsumer.SetOffsetToNow())
 
 	videoRecorder, err := NewVideoRecorder()
 	checkErr(err)
-
 	videoRecorder.start()
+
 	startTime, err := synchronise(syncPublisher, syncConsumer)
 	checkErr(err)
 
 	for {
-		for i := 0; i < 15; i++ {
-			fileName := "videos/" + fmt.Sprint(time.Now().Unix()) + ".mkv"
+		for i := 0; i < syncInterval; i++ {
+			partStartTime := startTime.Add(time.Duration(int64(videoSize) * int64(i)))
+			fileName := "videos/" + fmt.Sprint(partStartTime.Unix()) + ".mkv"
 
-			s := time.Now()
-			checkErr(videoRecorder.createVideoFile(fileName, startTime.Add(time.Duration(int64(time.Second)*int64(2*i))), time.Second*2))
+			checkErr(videoRecorder.createVideoFile(fileName, partStartTime, videoSize))
 			checkErr(videoPublisher.Publish([]byte(fileName)))
 
-			fmt.Println("video ", time.Now().Unix(), time.Since(s))
+			log.Println("video", fileName, "Total time: ", time.Now().Sub(partStartTime))
 		}
 
 		startTime, err = synchronise(syncPublisher, syncConsumer)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/go-vgo/robotgo"
 	"github.com/icza/mjpeg"
 	"github.com/pixiv/go-libjpeg/jpeg"
@@ -74,19 +75,25 @@ func (igs *VideoFileGenerator) compressImage(image *image.Image, outputBuffer *b
 }
 
 func (igs *VideoFileGenerator) GenerateImage() error {
+	s := time.Now()
 	img, err := igs.captureScreen()
 	if err != nil {
 		return err
 	}
+	fmt.Print("Captura: ", time.Since(s))
 
+	s = time.Now()
 	igs.appendCursor(img)
 	resizedImage := igs.resizeImage(img)
+	fmt.Print(" Resize: ", time.Since(s))
 
+	s = time.Now()
 	igs.GeneratedImage.Truncate(0)
 	err = igs.compressImage(resizedImage, igs.GeneratedImage)
 	if err != nil {
 		return err
 	}
+	fmt.Println(" Compresie: ", time.Since(s))
 
 	return nil
 }

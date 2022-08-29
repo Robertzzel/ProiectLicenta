@@ -3,6 +3,7 @@ package main
 import (
 	"Licenta/kafka"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
@@ -55,7 +56,9 @@ func main() {
 		}()
 
 		wg.Wait()
-		if err := producer.Publish([]byte(fmt.Sprint(time.Now().Unix()))); err != nil {
+		current_time := time.Now().Unix()
+		log.Print(current_time)
+		if err := producer.Publish([]byte(fmt.Sprint(current_time))); err != nil {
 			panic(err)
 		}
 

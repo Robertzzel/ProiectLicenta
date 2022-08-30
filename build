@@ -1,12 +1,8 @@
 #!/bin/sh
 
-cd ImageGeneratorMicroservice
-go build ImageGeneratorMicroservice.go VideoFileGenerator.go ImageResizer.go ScreenshotGenerator.go ByteImage.go
+cd VideoMicroservice
+go build VideoMicroservice.go recorder.go screenshot.go screen.go byte_image.go
 cd ..
-
-#cd AudioGeneratorMicroservice
-#go build AudioGeneratorMicroservice.go
-#cd ..
 
 cd SharerMessageComposerMicroservice
 go build SharerMessageComposerMicroservice.go
@@ -15,14 +11,6 @@ cd ..
 cd ReceiverMessageRouter
 go build ReceiverMessageRouterMicroservice.go
 cd ..
-
-#cd ImageDisplayerMicroservice
-#go build ImageDisplayerMicroservice.go
-#cd ..
-
-#cd AudioPlayerMicroservice
-#go build AudioPlayerMicroservice.go
-#cd ..
 
 cd Synchroniser
 go build SynchroniserMicroservice.go

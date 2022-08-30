@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"github.com/pixiv/go-libjpeg/jpeg"
 	"image"
 )
 
@@ -21,12 +23,16 @@ func (bi *ByteImage) getPixelsAfter(offset uint) []byte {
 	return bi.Data[offset:]
 }
 
-func (bi *ByteImage) getImageRGBA() *image.RGBA {
+func (bi *ByteImage) getImage() image.Image {
 	for i := 0; i < len(bi.Data); i += 4 {
 		bi.Data[i], bi.Data[i+2], bi.Data[i+3] = bi.Data[i+2], bi.Data[i], 255
 	}
 
-	return &image.RGBA{bi.Data, int(bi.getStride()), image.Rect(0, 0, int(bi.Width), int(bi.Height))}
+	return &image.RGBA{
+		Pix:    bi.Data,
+		Stride: int(bi.getStride()),
+		Rect:   image.Rect(0, 0, int(bi.Width), int(bi.Height)),
+	}
 }
 
 func (bi *ByteImage) SetPixel(x int, y int, r uint8, g uint8, b uint8) error {
@@ -40,4 +46,13 @@ func (bi *ByteImage) SetPixel(x int, y int, r uint8, g uint8, b uint8) error {
 	bi.Data[offset+2] = b
 
 	return nil
+}
+
+func (bi *ByteImage) Compress(outputBuffer *bytes.Buffer, quality int) error {
+	if quality < 1 && quality > 100 {
+		return errors.New("the quality must be between 1 and 100")
+	}
+
+	outputBuffer = new(bytes.Buffer)
+	return jpeg.Encode(outputBuffer, bi.getImage(), &jpeg.EncoderOptions{Quality: quality})
 }

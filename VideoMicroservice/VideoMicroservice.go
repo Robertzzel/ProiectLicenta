@@ -41,6 +41,8 @@ func synchronise(syncPublisher *kafka.Producer, syncConsumer *kafka.Consumer) (t
 }
 
 func main() {
+	log.Println("Starting...")
+
 	checkErr(kafka.CreateTopic(kafkaTopic))
 	videoPublisher := kafka.NewVideoKafkaProducer(kafkaTopic)
 	syncPublisher := kafka.NewSyncKafkaProducer(syncTopic2)
@@ -51,10 +53,11 @@ func main() {
 	checkErr(err)
 	videoRecorder.Start()
 
+	log.Println("Waiting for sync..")
 	startTime, err := synchronise(syncPublisher, syncConsumer)
 	checkErr(err)
-	log.Println("syncked")
 
+	log.Println("Sync done")
 	for {
 		for i := 0; i < syncInterval; i++ {
 			partStartTime := startTime.Add(time.Duration(int64(videoSize) * int64(i)))
@@ -64,7 +67,6 @@ func main() {
 			checkErr(videoPublisher.Publish([]byte(fileName)))
 
 			log.Println("video", fileName, partStartTime.Unix())
-			fmt.Println(" ")
 		}
 
 		startTime, err = synchronise(syncPublisher, syncConsumer)

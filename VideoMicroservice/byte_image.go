@@ -53,6 +53,5 @@ func (bi *ByteImage) Compress(outputBuffer *bytes.Buffer, quality int) error {
 		return errors.New("the quality must be between 1 and 100")
 	}
 
-	outputBuffer = new(bytes.Buffer)
 	return jpeg.Encode(outputBuffer, bi.getImage(), &jpeg.EncoderOptions{Quality: quality})
 }

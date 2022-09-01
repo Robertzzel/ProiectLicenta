@@ -56,9 +56,9 @@ func main() {
 		}()
 
 		wg.Wait()
-		current_time := time.Now().Unix()
-		log.Print(current_time)
-		if err := producer.Publish([]byte(fmt.Sprint(current_time))); err != nil {
+		currentTime := time.Now().Unix() + 1
+		log.Print(currentTime)
+		if err := producer.Publish([]byte(fmt.Sprint(currentTime))); err != nil {
 			panic(err)
 		}
 

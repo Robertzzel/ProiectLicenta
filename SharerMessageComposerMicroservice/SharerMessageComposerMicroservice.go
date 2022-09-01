@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"time"
 )
 
 const (
 	kafkaImagesTopic   = "video"
 	kafkaAudioTopic    = "audio"
 	kafkaMessagesTopic = "messages"
-	kafkaSyncTopic     = "sync"
 )
 
 func checkErr(err error) {
@@ -56,10 +54,8 @@ func main() {
 
 	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
 	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
-	syncConsumer := kafka.NewKafkaConsumer(kafkaSyncTopic)
 	interAppProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
 
-	checkErr(syncConsumer.SetOffsetToNow())
 	checkErr(audioConsumer.SetOffsetToNow())
 	checkErr(videoConsumer.SetOffsetToNow())
 
@@ -70,18 +66,18 @@ func main() {
 		audioMessage, err := audioConsumer.Consume()
 		checkErr(err)
 
+		fmt.Println(string(videoMessage.Value), string(audioMessage.Value))
+
 		go func() {
-			s := time.Now()
 			videoFileName := string(videoMessage.Value)
 			audioFileName := string(audioMessage.Value)
-
 			fmt.Println(videoFileName, audioFileName)
 
 			fileName, fileBytes, err := combineVideoAndAudioFiles(videoFileName, audioFileName)
 			checkErr(err)
 
 			checkErr(interAppProducer.Publish(fileBytes))
-			fmt.Println("New File: ", len(fileBytes), time.Since(s))
+			fmt.Println("New File: ", len(fileBytes))
 
 			checkErr(os.Remove(videoFileName))
 			checkErr(os.Remove(audioFileName))

@@ -15,6 +15,8 @@ type Recorder struct {
 	fps        int64
 }
 
+var mutex sync.Mutex
+
 func NewRecorder(fps int) (*Recorder, error) {
 	if fps > 60 && fps < 1 {
 		return nil, errors.New("fps must be between 1 and 600")
@@ -43,11 +45,13 @@ func (r *Recorder) Start() {
 
 func (r *Recorder) clean() {
 	for {
-		if len(r.buffer) > int(r.fps)*10 {
-			r.buffer = r.buffer[6*r.fps:]
-			r.startTime = r.startTime.Add(6 * time.Second)
+		if len(r.buffer) > int(r.fps)*5 {
+			mutex.Lock()
+			r.buffer = r.buffer[2*r.fps:]
+			r.startTime = r.startTime.Add(2 * time.Second)
+			mutex.Unlock()
 		} else {
-			time.Sleep(5 * time.Second)
+			time.Sleep(time.Second)
 		}
 	}
 }
@@ -129,10 +133,12 @@ func (r *Recorder) getFromBuffer(startTime time.Time, duration time.Duration) ([
 	// Compute offsets and size
 	size := uint(duration.Seconds() * float64(r.fps))
 	part := make([]*ByteImage, size)
+
+	mutex.Lock()
 	startTimeDifference := startTime.Sub(r.startTime).Seconds()
 	offset := uint(startTimeDifference * float64(r.fps))
-
 	copy(part, r.buffer[offset:offset+size])
+	mutex.Unlock()
 
 	return part, nil
 }

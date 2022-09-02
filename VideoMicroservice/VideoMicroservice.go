@@ -58,18 +58,15 @@ func main() {
 	checkErr(err)
 
 	log.Println("Sync done")
+	iteration := 0
 	for {
-		for i := 0; i < syncInterval; i++ {
-			partStartTime := startTime.Add(time.Duration(int64(videoSize) * int64(i)))
-			fileName := "videos/" + fmt.Sprint(partStartTime.Unix()) + ".mkv"
+		partStartTime := startTime.Add(time.Duration(int64(videoSize) * int64(iteration)))
+		fileName := "videos/" + fmt.Sprint(partStartTime.Unix()) + ".mkv"
 
-			checkErr(videoRecorder.CreateFile(fileName, partStartTime, videoSize))
-			checkErr(videoPublisher.Publish([]byte(fileName)))
+		checkErr(videoRecorder.CreateFile(fileName, partStartTime, videoSize))
+		checkErr(videoPublisher.Publish([]byte(fileName)))
 
-			log.Println("video", fileName, partStartTime.Unix())
-		}
-
-		startTime, err = synchronise(syncPublisher, syncConsumer)
-		checkErr(err)
+		log.Println("video", fileName, partStartTime.Unix())
+		iteration++
 	}
 }

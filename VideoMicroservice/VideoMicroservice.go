@@ -9,11 +9,10 @@ import (
 )
 
 const (
-	kafkaTopic   = "video"
-	syncTopic    = "sync"
-	syncTopic2   = "videoSync"
-	syncInterval = 60
-	videoSize    = time.Second
+	kafkaTopic = "video"
+	syncTopic  = "sync"
+	syncTopic2 = "videoSync"
+	videoSize  = time.Second
 )
 
 func checkErr(err error) {

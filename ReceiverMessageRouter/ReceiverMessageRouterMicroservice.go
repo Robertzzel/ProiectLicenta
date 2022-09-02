@@ -29,6 +29,8 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Println("Conectare")
+
 		ws, err := upgrader.Upgrade(w, r, nil)
 		checkErr(err)
 

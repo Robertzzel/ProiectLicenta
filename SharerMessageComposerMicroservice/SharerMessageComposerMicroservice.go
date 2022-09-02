@@ -37,7 +37,7 @@ func combineVideoAndAudioFiles(videoFileName, audioFileName string) (string, []b
 		return "", nil, err
 	}
 
-	if _, err := exec.Command("./CombineAndCompress", videoFileName, audioFileName, outputFile.Name(), "30").Output(); err != nil {
+	if _, err := exec.Command("./CombineAndCompress", videoFileName, audioFileName, outputFile.Name(), "45").Output(); err != nil {
 		return "", nil, err
 	}
 
@@ -65,8 +65,6 @@ func main() {
 
 		audioMessage, err := audioConsumer.Consume()
 		checkErr(err)
-
-		fmt.Println(string(videoMessage.Value), string(audioMessage.Value))
 
 		go func() {
 			videoFileName := string(videoMessage.Value)

@@ -2,20 +2,22 @@ package main
 
 import (
 	"Licenta/kafka"
-	"context"
 	"fmt"
-	"sync"
-	"time"
+	"os"
+	"os/exec"
 )
 
 const (
-	kafkaImagesTopic    = "video"
-	kafkaAudioTopic     = "audio"
-	kafkaInputTopic     = "input"
-	kafkaMessagesTopic  = "messages"
-	kafkaSyncTopic      = "sync"
-	audioRecordInterval = time.Second / 6
+	kafkaImagesTopic   = "video"
+	kafkaAudioTopic    = "audio"
+	kafkaMessagesTopic = "messages"
 )
+
+func checkErr(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
 
 func createKafkaTopics() error {
 	err := kafka.CreateTopic(kafkaImagesTopic)
@@ -26,113 +28,58 @@ func createKafkaTopics() error {
 	if err != nil {
 		return err
 	}
-	err = kafka.CreateTopic(kafkaInputTopic)
+	return kafka.CreateTopic(kafkaMessagesTopic)
+}
+
+func combineVideoAndAudioFiles(videoFileName, audioFileName string) (string, []byte, error) {
+	outputFile, err := os.CreateTemp("", "*out.mp4")
 	if err != nil {
-		return err
-	}
-	err = kafka.CreateTopic(kafkaMessagesTopic)
-	if err != nil {
-		return err
-	}
-	err = kafka.CreateTopic(kafkaSyncTopic)
-	if err != nil {
-		return err
+		return "", nil, err
 	}
 
-	return nil
+	if _, err := exec.Command("./CombineAndCompress", videoFileName, audioFileName, outputFile.Name(), "45").Output(); err != nil {
+		return "", nil, err
+	}
+
+	fileBytes, err := os.ReadFile(outputFile.Name())
+	if err != nil {
+		return "", nil, err
+	}
+
+	return outputFile.Name(), fileBytes, nil
 }
 
 func main() {
-	err := createKafkaTopics()
-	if err != nil {
-		fmt.Println(err)
-	}
+	checkErr(createKafkaTopics())
 
 	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
 	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
-	inputConsumer := kafka.NewKafkaConsumer(kafkaInputTopic)
-	syncConsumer := kafka.NewKafkaConsumer(kafkaSyncTopic)
-	//interAppMessagesProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
+	interAppProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
 
-	err = audioConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	err = videoConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	err = inputConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	err = syncConsumer.Reader.SetOffsetAt(context.Background(), time.Now())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	checkErr(audioConsumer.SetOffsetToNow())
+	checkErr(videoConsumer.SetOffsetToNow())
 
-	syncMessage, err := audioConsumer.Consume()
-	if err != nil {
-		fmt.Println("Sytnc error: ", err)
-		return
-	}
-	lastAudioReceivedTime, _ := time.Parse(kafka.TimeFormat, string(syncMessage.Headers[0].Value))
-
-	var waitGroup sync.WaitGroup
 	for {
-		s := time.Now()
-		messageToBeSent := kafka.InterAppMessage{}
-		waitGroup.Add(2)
+		videoMessage, err := videoConsumer.Consume()
+		checkErr(err)
 
-		go func(wg *sync.WaitGroup) {
-			audioMessage, err := audioConsumer.Consume()
-			if err != nil {
-				fmt.Println("Error while consuming audio: ", err)
-				return
-			}
-			messageToBeSent.Audio = audioMessage.Value
+		audioMessage, err := audioConsumer.Consume()
+		checkErr(err)
 
-			lastAudioReceivedTime, _ = time.Parse(kafka.TimeFormat, string(audioMessage.Headers[0].Value))
-			fmt.Println(lastAudioReceivedTime)
-			waitGroup.Done()
-		}(&waitGroup)
+		go func() {
+			videoFileName := string(videoMessage.Value)
+			audioFileName := string(audioMessage.Value)
+			fmt.Println(videoFileName, audioFileName)
 
-		go func(wg *sync.WaitGroup, timeLimit time.Time) {
-			for {
-				imageMessage, err := videoConsumer.Consume()
-				if err != nil {
-					fmt.Println("Eroare la primirea imaginii ", err)
-					return
-				}
+			fileName, fileBytes, err := combineVideoAndAudioFiles(videoFileName, audioFileName)
+			checkErr(err)
 
-				timestamp, err := time.Parse(kafka.TimeFormat, string(imageMessage.Headers[0].Value))
-				if err != nil {
-					fmt.Println("Eroare la timpstamp la imagine", err)
-				}
+			checkErr(interAppProducer.Publish(fileBytes))
+			fmt.Println("New File: ", len(fileBytes))
 
-				if timestamp.Before(timeLimit) {
-					continue
-				}
-
-				messageToBeSent.Images = append(messageToBeSent.Images, imageMessage.Value)
-				if timestamp.After(timeLimit.Add(audioRecordInterval)) {
-					break
-				}
-			}
-			wg.Done()
-		}(&waitGroup, lastAudioReceivedTime)
-
-		waitGroup.Wait()
-
-		fmt.Println(len(messageToBeSent.Images), len(messageToBeSent.Audio), time.Since(s))
-		//err := interAppMessagesProducer.Publish(messageToBeSent)
-		//if err != nil {
-		//	fmt.Println("Encoding error", err)
-		//	return
-		//}
+			checkErr(os.Remove(videoFileName))
+			checkErr(os.Remove(audioFileName))
+			checkErr(os.Remove(fileName))
+		}()
 	}
 }

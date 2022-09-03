@@ -7,7 +7,7 @@ import (
 )
 
 type InterAppMessage struct {
-	Images [][]byte
+	Video  []byte
 	Audio  []byte
 	Inputs [][]byte
 }

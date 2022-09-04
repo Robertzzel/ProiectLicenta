@@ -1,3 +1,3 @@
 #!/bin/sh
 
-yes | ffmpeg -i "$1" -i "$2" -map 0:v -map 1:a -vcodec libx264 -tune zerolatency -preset ultrafast -movflags frag_keyframe+empty_moov+default_base_moof -crf "$4" -shortest -f mp4 "$3"
+yes | ffmpeg -i "$1" -i "$2" -map 0:v -map 1:a -s 852x480 -vcodec libx264 -tune zerolatency -preset ultrafast -movflags frag_keyframe+empty_moov+default_base_moof -crf "$4" -shortest -f mp4 "$3"

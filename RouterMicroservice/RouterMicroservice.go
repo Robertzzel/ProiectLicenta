@@ -2,11 +2,10 @@ package main
 
 import (
 	"Licenta/kafka"
-	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
-	"time"
+	"os"
 )
 
 const (
@@ -34,17 +33,26 @@ func main() {
 		ws, err := upgrader.Upgrade(w, r, nil)
 		checkErr(err)
 
-		interAppConsumer := kafka.NewKafkaConsumer(interAppTopic)
-		checkErr(interAppConsumer.SetOffsetToNow())
+		routerConsumer := kafka.NewKafkaConsumer(interAppTopic)
+		checkErr(routerConsumer.SetOffsetToNow())
 
 		for {
-			s := time.Now()
-			message, err := interAppConsumer.Consume()
+			message, err := routerConsumer.Consume()
 			checkErr(err)
 
-			checkErr(ws.WriteMessage(websocket.BinaryMessage, message.Value))
-			fmt.Println(time.Since(s))
+			fileName := string(message.Value)
+			fileContents, err := os.ReadFile(fileName)
+			checkErr(err)
+
+			err = ws.WriteMessage(websocket.BinaryMessage, fileContents)
+			if err != nil {
+				break
+			}
+
+			checkErr(os.Remove(fileName))
 		}
+
+		checkErr(ws.Close())
 	})
 
 	log.Fatal(http.ListenAndServe("localhost:8080", nil))

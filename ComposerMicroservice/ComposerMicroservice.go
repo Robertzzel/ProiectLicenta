@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 )
 
 const (
@@ -31,22 +32,17 @@ func createKafkaTopics() error {
 	return kafka.CreateTopic(kafkaMessagesTopic)
 }
 
-func combineVideoAndAudioFiles(videoFileName, audioFileName string) (string, []byte, error) {
+func combineVideoAndAudioFiles(videoFileName, audioFileName string) (string, error) {
 	outputFile, err := os.CreateTemp("", "*out.mp4")
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 
-	if _, err := exec.Command("./CombineAndCompress", videoFileName, audioFileName, outputFile.Name(), "45").Output(); err != nil {
-		return "", nil, err
+	if _, err := exec.Command("./CombineAndCompress", videoFileName, audioFileName, outputFile.Name(), "30").Output(); err != nil {
+		return "", err
 	}
 
-	fileBytes, err := os.ReadFile(outputFile.Name())
-	if err != nil {
-		return "", nil, err
-	}
-
-	return outputFile.Name(), fileBytes, nil
+	return outputFile.Name(), nil
 }
 
 func main() {
@@ -54,7 +50,7 @@ func main() {
 
 	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
 	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
-	interAppProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
+	routerProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
 
 	checkErr(audioConsumer.SetOffsetToNow())
 	checkErr(videoConsumer.SetOffsetToNow())
@@ -69,17 +65,16 @@ func main() {
 		go func() {
 			videoFileName := string(videoMessage.Value)
 			audioFileName := string(audioMessage.Value)
-			fmt.Println(videoFileName, audioFileName)
 
-			fileName, fileBytes, err := combineVideoAndAudioFiles(videoFileName, audioFileName)
+			s := time.Now()
+			fileName, err := combineVideoAndAudioFiles(videoFileName, audioFileName)
 			checkErr(err)
+			fmt.Println(time.Since(s))
 
-			checkErr(interAppProducer.Publish(fileBytes))
-			fmt.Println("New File: ", len(fileBytes))
+			checkErr(routerProducer.Publish([]byte(fileName)))
 
 			checkErr(os.Remove(videoFileName))
 			checkErr(os.Remove(audioFileName))
-			checkErr(os.Remove(fileName))
 		}()
 	}
 }

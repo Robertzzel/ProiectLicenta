@@ -2,10 +2,12 @@ package main
 
 import (
 	"Licenta/kafka"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 const (
@@ -48,6 +50,7 @@ func main() {
 			if err != nil {
 				break
 			}
+			fmt.Println(len(fileContents), "at ", time.Now())
 
 			checkErr(os.Remove(fileName))
 		}

@@ -65,7 +65,7 @@ func main() {
 		checkErr(videoRecorder.CreateFile(fileName, partStartTime, videoSize))
 		checkErr(videoPublisher.Publish([]byte(fileName)))
 
-		log.Println("video", fileName, partStartTime.Unix())
+		fmt.Println("video", fileName, partStartTime.Unix(), " at ", time.Now())
 		iteration++
 	}
 }

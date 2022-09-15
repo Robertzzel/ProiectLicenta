@@ -1,3 +1,4 @@
+import time
 import kafka
 import numpy as np
 import soundfile as sf
@@ -41,7 +42,7 @@ def main():
         create_audio_file(file_path, buffer, SAMPLERATE)
         producer.send(TOPIC_AUDIO, file_path.encode())
 
-        print("audio ", file_path, part_start_time)
+        print("audio ", file_path, time.time())
         iteration += 1
 
 

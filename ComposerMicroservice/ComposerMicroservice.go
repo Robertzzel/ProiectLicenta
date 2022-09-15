@@ -2,7 +2,6 @@ package main
 
 import (
 	"Licenta/kafka"
-	"fmt"
 	"os"
 	"os/exec"
 	"time"
@@ -32,7 +31,7 @@ func createKafkaTopics() error {
 	return kafka.CreateTopic(kafkaMessagesTopic)
 }
 
-func combineVideoAndAudioFiles(videoFileName, audioFileName string) (string, error) {
+func processFiles(videoFileName, audioFileName string) (string, error) {
 	outputFile, err := os.CreateTemp("", "*out.mp4")
 	if err != nil {
 		return "", err
@@ -55,26 +54,45 @@ func main() {
 	checkErr(audioConsumer.SetOffsetToNow())
 	checkErr(videoConsumer.SetOffsetToNow())
 
+	videoFiles := make(chan string, 10)
+	audioFiles := make(chan string, 10)
+	errors := make(chan error, 10)
+
+	go func() {
+		for {
+			videoMessage, err := videoConsumer.Consume()
+			if err != nil {
+				errors <- err
+				break
+			}
+
+			videoFiles <- string(videoMessage.Value)
+		}
+	}()
+
+	go func() {
+		for {
+			audioMessage, err := audioConsumer.Consume()
+			if err != nil {
+				errors <- err
+				break
+			}
+
+			audioFiles <- string(audioMessage.Value)
+		}
+	}()
+
 	for {
-		videoMessage, err := videoConsumer.Consume()
-		checkErr(err)
-
-		audioMessage, err := audioConsumer.Consume()
-		checkErr(err)
-
-		go func() {
-			videoFileName := string(videoMessage.Value)
-			audioFileName := string(audioMessage.Value)
-
-			s := time.Now()
-			fileName, err := combineVideoAndAudioFiles(videoFileName, audioFileName)
+		go func(videoFile, audioFile string) {
+			println("Primit", videoFile, " la ", time.Now())
+			fileName, err := processFiles(videoFile, audioFile)
 			checkErr(err)
-			fmt.Println(time.Since(s))
 
 			checkErr(routerProducer.Publish([]byte(fileName)))
+			println("Trimis", videoFile, "la", time.Now(), "\n")
 
-			checkErr(os.Remove(videoFileName))
-			checkErr(os.Remove(audioFileName))
-		}()
+			checkErr(os.Remove(videoFile))
+			checkErr(os.Remove(audioFile))
+		}(<-videoFiles, <-audioFiles)
 	}
 }

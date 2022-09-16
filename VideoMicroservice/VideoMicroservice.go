@@ -1,18 +1,17 @@
 package main
 
 import (
-	"Licenta/kafka"
 	"fmt"
 	"log"
+	"net"
 	"strconv"
 	"time"
 )
 
 const (
-	kafkaTopic = "video"
-	syncTopic  = "sync"
-	syncTopic2 = "videoSync"
-	videoSize  = time.Second
+	videoSize          = time.Second
+	syncSocketName     = "/tmp/sync.sock"
+	composerSocketName = "/tmp/composer.sock"
 )
 
 func checkErr(err error) {
@@ -21,17 +20,20 @@ func checkErr(err error) {
 	}
 }
 
-func synchronise(syncPublisher *kafka.Producer, syncConsumer *kafka.Consumer) (time.Time, error) {
-	if err := syncPublisher.Publish([]byte(".")); err != nil {
+func synchronise() (time.Time, error) {
+	buffer := make([]byte, 10)
+
+	conn, err := net.Dial("unix", syncSocketName)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer conn.Close()
+
+	if _, err := conn.Read(buffer); err != nil {
 		return time.Time{}, err
 	}
 
-	syncMsg, err := syncConsumer.Consume()
-	if err != nil {
-		return time.Now(), err
-	}
-
-	timestamp, err := strconv.ParseInt(string(syncMsg.Value), 10, 64)
+	timestamp, err := strconv.ParseInt(string(buffer), 10, 64)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -39,33 +41,36 @@ func synchronise(syncPublisher *kafka.Producer, syncConsumer *kafka.Consumer) (t
 	return time.Unix(timestamp, 0), nil
 }
 
+func sendMessage(connection net.Conn, message []byte) error {
+	if _, err := connection.Write([]byte(fmt.Sprintf("%010d", len(message)))); err != nil {
+		return err
+	}
+
+	_, err := connection.Write(message)
+	return err
+}
+
 func main() {
 	log.Println("Starting...")
 
-	checkErr(kafka.CreateTopic(kafkaTopic))
-	videoPublisher := kafka.NewVideoKafkaProducer(kafkaTopic)
-	syncPublisher := kafka.NewSyncKafkaProducer(syncTopic2)
-	syncConsumer := kafka.NewKafkaConsumer(syncTopic)
-	checkErr(syncConsumer.SetOffsetToNow())
+	composerConnection, err := net.Dial("unix", composerSocketName)
+	checkErr(err)
 
 	videoRecorder, err := NewRecorder(30)
 	checkErr(err)
 	videoRecorder.Start()
 
-	log.Println("Waiting for sync..")
-	startTime, err := synchronise(syncPublisher, syncConsumer)
+	startTime, err := synchronise()
 	checkErr(err)
+	fmt.Println("SYNC: ", startTime.Unix())
 
-	log.Println("Sync done")
-	iteration := 0
-	for {
+	for iteration := 0; ; iteration++ {
 		partStartTime := startTime.Add(time.Duration(int64(videoSize) * int64(iteration)))
 		fileName := "videos/" + fmt.Sprint(partStartTime.Unix()) + ".mkv"
 
 		checkErr(videoRecorder.CreateFile(fileName, partStartTime, videoSize))
-		checkErr(videoPublisher.Publish([]byte(fileName)))
+		checkErr(sendMessage(composerConnection, []byte(fileName)))
 
-		log.Println("video", fileName, partStartTime.Unix())
-		iteration++
+		fmt.Println("video", fileName, partStartTime.Unix(), " at ", time.Now().Unix())
 	}
 }

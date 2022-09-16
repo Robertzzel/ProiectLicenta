@@ -4,12 +4,12 @@ cd VideoMicroservice
 go build VideoMicroservice.go recorder.go screenshot.go screen.go byte_image.go
 cd ..
 
-cd SharerMessageComposerMicroservice
-go build SharerMessageComposerMicroservice.go
+cd ComposerMicroservice
+go build ComposerMicroservice.go
 cd ..
 
-cd ReceiverMessageRouter
-go build ReceiverMessageRouterMicroservice.go
+cd RouterMicroservice
+go build RouterMicroservice.go
 cd ..
 
 cd Synchroniser

@@ -1,67 +1,62 @@
 package main
 
 import (
-	"Licenta/kafka"
+	"errors"
 	"fmt"
-	"log"
+	"net"
+	"os"
 	"sync"
 	"time"
 )
 
 const (
-	topic      = "sync"
-	videoTopic = "videoSync"
-	audioSync  = "audioSync"
+	socketName = "/tmp/sync.sock"
 )
 
+func checkErr(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
 func main() {
-	if err := kafka.CreateTopic(topic); err != nil {
-		fmt.Println(err)
-		return
+	if _, err := os.Stat(socketName); !errors.Is(err, os.ErrNotExist) {
+		checkErr(os.Remove(socketName))
 	}
 
-	producer := kafka.NewSyncKafkaProducer(topic)
-	videoSyncConsumer := kafka.NewKafkaConsumer(videoTopic)
-	audioSyncConsumer := kafka.NewKafkaConsumer(audioSync)
+	requestChannel := make(chan int, 2)
+	responseChannel := make(chan int64, 2)
 
-	if err := videoSyncConsumer.SetOffsetToNow(); err != nil {
-		panic(err)
-	}
-	if err := audioSyncConsumer.SetOffsetToNow(); err != nil {
-		panic(err)
-	}
+	go func() {
+		<-requestChannel
+		<-requestChannel
+
+		currentTime := time.Now().Unix() + 1
+
+		responseChannel <- currentTime
+		responseChannel <- currentTime
+	}()
+
+	listener, err := net.Listen("unix", socketName)
+	checkErr(err)
+	defer listener.Close()
 
 	var wg sync.WaitGroup
-	for {
+	for i := 0; i < 2; i++ {
+		conn, err := listener.Accept()
+		checkErr(err)
 
-		wg.Add(2)
+		wg.Add(1)
 		go func() {
-			fmt.Println("w for vid")
-			_, err := videoSyncConsumer.Consume()
-			if err != nil {
-				panic(err)
-			}
-			fmt.Println("vid key")
+			defer conn.Close()
+
+			requestChannel <- 1
+			_, err := conn.Write([]byte(fmt.Sprint(<-responseChannel)))
+			checkErr(err)
+
 			wg.Done()
 		}()
-
-		go func() {
-			fmt.Println("w for aud")
-			_, err := audioSyncConsumer.Consume()
-			if err != nil {
-				panic(err)
-			}
-			fmt.Println("aud key")
-			wg.Done()
-		}()
-
-		wg.Wait()
-		currentTime := time.Now().Unix() + 1
-		log.Print(currentTime)
-		if err := producer.Publish([]byte(fmt.Sprint(currentTime))); err != nil {
-			panic(err)
-		}
-
-		fmt.Println("Sync")
 	}
+
+	wg.Wait()
 }

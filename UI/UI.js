@@ -196,6 +196,8 @@ function openWSConnection(protocol, hostname, port, endpoint) {
                     arrayBuffer = event.target.result;
                     var data = new Uint8Array(arrayBuffer);
                     document.getElementById("incomingMsgOutput").value += "received: " + data.length + " bytes\r\n";
+
+                    console.log(queue.length)
                     if (!streamingStarted) {
                         appendToBuffer(arrayBuffer);
                         streamingStarted=true;

@@ -1,16 +1,21 @@
 package main
 
 import (
-	"Licenta/kafka"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 )
 
 const (
-	kafkaImagesTopic   = "video"
-	kafkaAudioTopic    = "audio"
-	kafkaMessagesTopic = "messages"
+	socketName       = "/tmp/composer.sock"
+	routerSocketName = "/tmp/router.sock"
 )
 
 func checkErr(err error) {
@@ -19,20 +24,10 @@ func checkErr(err error) {
 	}
 }
 
-func createKafkaTopics() error {
-	err := kafka.CreateTopic(kafkaImagesTopic)
-	if err != nil {
-		return err
-	}
-	err = kafka.CreateTopic(kafkaAudioTopic)
-	if err != nil {
-		return err
-	}
-	return kafka.CreateTopic(kafkaMessagesTopic)
-}
-
 func processFiles(videoFileName, audioFileName string) (string, error) {
-	outputFile, err := os.CreateTemp("", "*out.mp4")
+	filePattern := fmt.Sprintf("*out%d.mp4", time.Now().Unix())
+
+	outputFile, err := os.CreateTemp("", filePattern)
 	if err != nil {
 		return "", err
 	}
@@ -44,53 +39,90 @@ func processFiles(videoFileName, audioFileName string) (string, error) {
 	return outputFile.Name(), nil
 }
 
+func readSize(connection net.Conn) (int, error) {
+	buffer := make([]byte, 10)
+	_, err := io.LimitReader(connection, 10).Read(buffer)
+	if err != nil {
+		return 0, err
+	}
+
+	return strconv.Atoi(string(buffer))
+}
+
+func sendMessage(connection net.Conn, message []byte) error {
+	if _, err := connection.Write([]byte(fmt.Sprintf("%010d", len(message)))); err != nil {
+		return err
+	}
+
+	_, err := connection.Write(message)
+	return err
+}
+
 func main() {
-	checkErr(createKafkaTopics())
+	if _, err := os.Stat(socketName); !errors.Is(err, os.ErrNotExist) {
+		checkErr(os.Remove(socketName))
+	}
 
-	audioConsumer := kafka.NewKafkaConsumer(kafkaAudioTopic)
-	videoConsumer := kafka.NewKafkaConsumer(kafkaImagesTopic)
-	routerProducer := kafka.NewInterAppProducer(kafkaMessagesTopic)
-
-	checkErr(audioConsumer.SetOffsetToNow())
-	checkErr(videoConsumer.SetOffsetToNow())
+	if _, err := os.Stat(routerSocketName); !errors.Is(err, os.ErrNotExist) {
+		checkErr(os.Remove(routerSocketName))
+	}
 
 	videoFiles := make(chan string, 10)
 	audioFiles := make(chan string, 10)
-	errors := make(chan error, 10)
+
+	listener, err := net.Listen("unix", socketName)
+	checkErr(err)
+	defer listener.Close()
 
 	go func() {
 		for {
-			videoMessage, err := videoConsumer.Consume()
-			if err != nil {
-				errors <- err
-				break
-			}
+			conn, err := listener.Accept()
+			checkErr(err)
 
-			videoFiles <- string(videoMessage.Value)
+			go func(connection net.Conn) {
+				defer connection.Close()
+
+				for {
+					size, err := readSize(connection)
+					checkErr(err)
+
+					message := make([]byte, size)
+					_, err = connection.Read(message)
+					checkErr(err)
+
+					messageString := string(message)
+					log.Println(messageString)
+
+					if strings.HasSuffix(messageString, ".mkv") {
+						videoFiles <- messageString
+					} else if strings.HasSuffix(messageString, ".wav") {
+						audioFiles <- messageString
+					}
+				}
+			}(conn)
 		}
 	}()
 
-	go func() {
-		for {
-			audioMessage, err := audioConsumer.Consume()
-			if err != nil {
-				errors <- err
-				break
-			}
+	var routerConnection net.Conn = nil
+	routerListener, err := net.Listen("unix", routerSocketName)
+	checkErr(err)
 
-			audioFiles <- string(audioMessage.Value)
-		}
+	go func() {
+		routerConnection, err = routerListener.Accept()
+		checkErr(err)
 	}()
 
 	for {
 		go func(videoFile, audioFile string) {
-			println("Primit", videoFile, " la ", time.Now())
+			fmt.Println("Primit", videoFile, audioFile, " la ", time.Now().Unix())
 			fileName, err := processFiles(videoFile, audioFile)
 			checkErr(err)
 
-			checkErr(routerProducer.Publish([]byte(fileName)))
-			println("Trimis", videoFile, "la", time.Now(), "\n")
+			if routerConnection != nil {
+				checkErr(sendMessage(routerConnection, []byte(fileName)))
+			}
 
+			fmt.Println("Trimis", fileName, "la", time.Now().Unix(), "\n")
 			checkErr(os.Remove(videoFile))
 			checkErr(os.Remove(audioFile))
 		}(<-videoFiles, <-audioFiles)

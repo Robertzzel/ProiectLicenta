@@ -1,3 +1,0 @@
-#!/bin/sh
-
-yes | ffmpeg -i "$1" -vcodec libx264 -tune zerolatency -preset ultrafast -movflags frag_keyframe+empty_moov+default_base_moof -f mp4 -crf "$3" "$2"

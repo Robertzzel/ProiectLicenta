@@ -119,6 +119,10 @@ async def main():
     ip, port = sys.argv[1], int(sys.argv[2])
     reader, writer = await asyncio.open_connection(host=ip, port=port)
 
+    if not os.path.isfile("UI.html"):
+        with open("UI.html", "w") as f:
+            f.write(FRONTEND_PAGE)
+
     webbrowser.open("file://" + os.path.realpath("UI.html"))
 
     async with websockets.serve(lambda ws: handle(ws, reader), "localhost", 8081):

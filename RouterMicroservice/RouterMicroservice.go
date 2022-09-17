@@ -2,11 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/gorilla/websocket"
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -41,43 +39,34 @@ func receiveMessage(connection net.Conn) ([]byte, error) {
 	return messageBuffer, nil
 }
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+func sendMessage(connection net.Conn, message []byte) error {
+	if _, err := connection.Write([]byte(fmt.Sprintf("%010d", len(message)))); err != nil {
+		return err
+	}
+
+	_, err := connection.Write(message)
+	return err
 }
 
 func main() {
+	log.Println("Ascult pentru clenti...")
+	listener, err := net.Listen("tcp", "localhost:8080")
+	checkErr(err)
+
+	clientConn, err := listener.Accept()
+	checkErr(err)
+
+	log.Println("Client conectat")
 	connection, err := net.Dial("unix", routerSocketName)
-	if err != nil {
-		return
-	}
+	checkErr(err)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Println("Conectare")
-
-		ws, err := upgrader.Upgrade(w, r, nil)
+	for {
+		fileName, err := receiveMessage(connection)
+		fileContents, err := os.ReadFile(string(fileName))
 		checkErr(err)
 
-		for {
+		checkErr(sendMessage(clientConn, fileContents))
+		log.Println("Trimis", string(fileName), "la", time.Now().Unix())
+	}
 
-			fileName, err := receiveMessage(connection)
-			fileContents, err := os.ReadFile(string(fileName))
-			checkErr(err)
-
-			err = ws.WriteMessage(websocket.BinaryMessage, fileContents)
-			if err != nil {
-				break
-			}
-			fmt.Println(string(fileName), "at ", time.Now().Unix())
-
-			checkErr(os.Remove(string(fileName)))
-		}
-
-		checkErr(ws.Close())
-	})
-
-	log.Fatal(http.ListenAndServe("localhost:8080", nil))
 }

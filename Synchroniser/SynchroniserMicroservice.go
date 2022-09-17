@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -24,39 +23,24 @@ func main() {
 		checkErr(os.Remove(socketName))
 	}
 
-	requestChannel := make(chan int, 2)
-	responseChannel := make(chan int64, 2)
-
-	go func() {
-		<-requestChannel
-		<-requestChannel
-
-		currentTime := time.Now().Unix() + 1
-
-		responseChannel <- currentTime
-		responseChannel <- currentTime
-	}()
+	connections := make([]net.Conn, 0, 2)
 
 	listener, err := net.Listen("unix", socketName)
 	checkErr(err)
 	defer listener.Close()
 
-	var wg sync.WaitGroup
 	for i := 0; i < 2; i++ {
 		conn, err := listener.Accept()
 		checkErr(err)
 
-		wg.Add(1)
-		go func() {
-			defer conn.Close()
-
-			requestChannel <- 1
-			_, err := conn.Write([]byte(fmt.Sprint(<-responseChannel)))
-			checkErr(err)
-
-			wg.Done()
-		}()
+		connections = append(connections, conn)
 	}
 
-	wg.Wait()
+	currentTime := []byte(fmt.Sprintf("%010d", time.Now().Unix()+1))
+
+	_, err = connections[0].Write(currentTime)
+	checkErr(err)
+
+	_, err = connections[1].Write(currentTime)
+	checkErr(err)
 }

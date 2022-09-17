@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -25,7 +24,7 @@ func checkErr(err error) {
 }
 
 func processFiles(videoFileName, audioFileName string) (string, error) {
-	filePattern := fmt.Sprintf("*out%d.mp4", time.Now().Unix())
+	filePattern := fmt.Sprintf("*out%s.mp4", videoFileName[8:19])
 
 	outputFile, err := os.CreateTemp("", filePattern)
 	if err != nil {
@@ -75,7 +74,7 @@ func main() {
 	defer listener.Close()
 
 	go func() {
-		for {
+		for i := 0; i < 2; i++ {
 			conn, err := listener.Accept()
 			checkErr(err)
 
@@ -91,8 +90,6 @@ func main() {
 					checkErr(err)
 
 					messageString := string(message)
-					log.Println(messageString)
-
 					if strings.HasSuffix(messageString, ".mkv") {
 						videoFiles <- messageString
 					} else if strings.HasSuffix(messageString, ".wav") {
@@ -114,7 +111,7 @@ func main() {
 
 	for {
 		go func(videoFile, audioFile string) {
-			fmt.Println("Primit", videoFile, audioFile, " la ", time.Now().Unix())
+			fmt.Println("Primit", videoFile, audioFile, "la", time.Now().Unix())
 			fileName, err := processFiles(videoFile, audioFile)
 			checkErr(err)
 

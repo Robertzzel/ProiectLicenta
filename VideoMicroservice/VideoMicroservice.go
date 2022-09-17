@@ -71,6 +71,6 @@ func main() {
 		checkErr(videoRecorder.CreateFile(fileName, partStartTime, videoSize))
 		checkErr(sendMessage(composerConnection, []byte(fileName)))
 
-		fmt.Println("video", fileName, partStartTime.Unix(), " at ", time.Now().Unix())
+		fmt.Println("video", fileName, "sent at ", time.Now().Unix())
 	}
 }

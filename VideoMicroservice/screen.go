@@ -3,7 +3,10 @@ package main
 import (
 	"github.com/BurntSushi/xgb"
 	"github.com/BurntSushi/xgb/xproto"
+	"sync"
 )
+
+var screenMutex sync.Mutex
 
 type Screen struct {
 	connection *xgb.Conn
@@ -35,6 +38,7 @@ func NewScreen() (*Screen, error) {
 }
 
 func (ig *Screen) Get() (*ByteImage, error) {
+	screenMutex.Lock()
 	xImg, err := xproto.GetImage(
 		ig.connection,
 		xproto.ImageFormatZPixmap,
@@ -47,6 +51,7 @@ func (ig *Screen) Get() (*ByteImage, error) {
 	if err != nil {
 		return nil, err
 	}
+	screenMutex.Unlock()
 
 	return &ByteImage{
 		Data:      xImg.Data,

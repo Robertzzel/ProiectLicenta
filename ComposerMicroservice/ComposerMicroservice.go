@@ -112,8 +112,10 @@ func main() {
 	for {
 		go func(videoFile, audioFile string) {
 			fmt.Println("Primit", videoFile, audioFile, "la", time.Now().Unix())
+			s := time.Now()
 			fileName, err := processFiles(videoFile, audioFile)
 			checkErr(err)
+			fmt.Println(time.Since(s))
 
 			if routerConnection != nil {
 				checkErr(sendMessage(routerConnection, []byte(fileName)))

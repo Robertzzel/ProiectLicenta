@@ -12,12 +12,29 @@ import (
 
 const (
 	routerSocketName = "/tmp/router.sock"
+	port             = 8080
 )
 
 func checkErr(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func GetLocalIP() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+
+	for _, address := range addrs {
+		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String(), nil
+			}
+		}
+	}
+	return "", nil
 }
 
 func receiveMessage(connection net.Conn) ([]byte, error) {
@@ -49,8 +66,11 @@ func sendMessage(connection net.Conn, message []byte) error {
 }
 
 func main() {
-	log.Println("Ascult pentru clenti...")
-	listener, err := net.Listen("tcp", "localhost:8080")
+	hostname, err := GetLocalIP()
+	checkErr(err)
+
+	log.Println("Ascult pentru clenti la", hostname, ":", port, " ...")
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", hostname, port))
 	checkErr(err)
 
 	clientConn, err := listener.Accept()

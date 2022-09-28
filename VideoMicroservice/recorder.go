@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/icza/mjpeg"
 	"sync"
 	"time"
@@ -58,7 +59,6 @@ func (r *Recorder) clean() {
 
 func (r *Recorder) startRecording() {
 	ticker := time.NewTicker(time.Duration(int64(time.Second) / r.fps))
-	var screenshotMutex sync.Mutex
 
 	for {
 		<-ticker.C
@@ -67,9 +67,9 @@ func (r *Recorder) startRecording() {
 				r.startTime = time.Now()
 			}
 
-			screenshotMutex.Lock()
+			s := time.Now()
 			image, err := r.screenshot.Get()
-			screenshotMutex.Unlock()
+			fmt.Println(time.Since(s))
 			checkErr(err)
 
 			r.buffer = append(r.buffer, image)

@@ -128,4 +128,8 @@ func main() {
 	}
 
 	log.Println("Created", finalVideoFile)
+
+	for _, videoFile := range receivedVideos {
+		os.Remove(videoFile)
+	}
 }

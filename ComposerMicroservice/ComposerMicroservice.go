@@ -23,6 +23,33 @@ func checkErr(err error) {
 	}
 }
 
+func receiveFiles(listener net.Listener, videoFiles, audioFiles chan string) {
+	for i := 0; i < 2; i++ {
+		conn, err := listener.Accept()
+		checkErr(err)
+
+		go func(connection net.Conn) {
+			defer connection.Close()
+
+			for {
+				size, err := readSize(connection)
+				checkErr(err)
+
+				message := make([]byte, size)
+				_, err = connection.Read(message)
+				checkErr(err)
+
+				messageString := string(message)
+				if strings.HasSuffix(messageString, ".mkv") {
+					videoFiles <- messageString
+				} else if strings.HasSuffix(messageString, ".wav") {
+					audioFiles <- messageString
+				}
+			}
+		}(conn)
+	}
+}
+
 func processFiles(videoFileName, audioFileName string) (string, error) {
 	filePattern := fmt.Sprintf("*out%s.mp4", videoFileName[8:19])
 
@@ -73,32 +100,7 @@ func main() {
 	checkErr(err)
 	defer listener.Close()
 
-	go func() {
-		for i := 0; i < 2; i++ {
-			conn, err := listener.Accept()
-			checkErr(err)
-
-			go func(connection net.Conn) {
-				defer connection.Close()
-
-				for {
-					size, err := readSize(connection)
-					checkErr(err)
-
-					message := make([]byte, size)
-					_, err = connection.Read(message)
-					checkErr(err)
-
-					messageString := string(message)
-					if strings.HasSuffix(messageString, ".mkv") {
-						videoFiles <- messageString
-					} else if strings.HasSuffix(messageString, ".wav") {
-						audioFiles <- messageString
-					}
-				}
-			}(conn)
-		}
-	}()
+	go receiveFiles(listener, videoFiles, audioFiles)
 
 	var routerConnection net.Conn = nil
 	routerListener, err := net.Listen("unix", routerSocketName)
@@ -111,19 +113,18 @@ func main() {
 
 	for {
 		go func(videoFile, audioFile string) {
+			defer os.Remove(videoFile)
+			defer os.Remove(audioFile)
+
 			fmt.Println("Primit", videoFile, audioFile, "la", time.Now().Unix())
-			s := time.Now()
 			fileName, err := processFiles(videoFile, audioFile)
 			checkErr(err)
-			fmt.Println(time.Since(s))
 
 			if routerConnection != nil {
 				checkErr(sendMessage(routerConnection, []byte(fileName)))
 			}
 
 			fmt.Println("Trimis", fileName, "la", time.Now().Unix(), "\n")
-			checkErr(os.Remove(videoFile))
-			checkErr(os.Remove(audioFile))
 		}(<-videoFiles, <-audioFiles)
 	}
 }

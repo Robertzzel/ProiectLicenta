@@ -109,7 +109,7 @@ FRONTEND_PAGE = """
 </body>
 </html>
 """
-
+MERGER_SOCKET = "/tmp/merger.sock"
 
 async def main():
     if len(sys.argv) != 3:
@@ -117,7 +117,8 @@ async def main():
         return
 
     ip, port = sys.argv[1], int(sys.argv[2])
-    reader, writer = await asyncio.open_connection(host=ip, port=port)
+    videos_reader, _ = await asyncio.open_connection(host=ip, port=port)
+    _, merger_writer = await asyncio.open_unix_connection(path=MERGER_SOCKET)
 
     if not os.path.isfile("UI.html"):
         with open("UI.html", "w") as f:
@@ -125,11 +126,11 @@ async def main():
 
     webbrowser.open("file://" + os.path.realpath("UI.html"))
 
-    async with websockets.serve(lambda ws: handle(ws, reader), "localhost", 8081):
+    async with websockets.serve(lambda ws: handle(ws, videos_reader, merger_writer), "localhost", 8081):
         await asyncio.Future()
 
 
-async def handle(websocket, reader):
+async def handle(websocket, reader, merger):
     while True:
         print("Waiting for message..")
         size_buffer = b''
@@ -144,6 +145,9 @@ async def handle(websocket, reader):
 
         print("Message received")
         await websocket.send(buffer)
+
+        merger.write(str(len(buffer)).rjust(10, '0').encode())
+        merger.write(buffer)
 
 
 if __name__ == "__main__":

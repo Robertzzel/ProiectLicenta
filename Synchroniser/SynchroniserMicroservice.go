@@ -23,24 +23,26 @@ func main() {
 		checkErr(os.Remove(socketName))
 	}
 
-	connections := make([]net.Conn, 0, 2)
-
 	listener, err := net.Listen("unix", socketName)
 	checkErr(err)
 	defer listener.Close()
 
-	for i := 0; i < 2; i++ {
-		conn, err := listener.Accept()
+	for {
+		connections := make([]net.Conn, 0, 2)
+
+		for i := 0; i < 2; i++ {
+			conn, err := listener.Accept()
+			checkErr(err)
+
+			connections = append(connections, conn)
+		}
+
+		currentTime := []byte(fmt.Sprintf("%010d", time.Now().Unix()+1))
+
+		_, err = connections[0].Write(currentTime)
 		checkErr(err)
 
-		connections = append(connections, conn)
+		_, err = connections[1].Write(currentTime)
+		checkErr(err)
 	}
-
-	currentTime := []byte(fmt.Sprintf("%010d", time.Now().Unix()+1))
-
-	_, err = connections[0].Write(currentTime)
-	checkErr(err)
-
-	_, err = connections[1].Write(currentTime)
-	checkErr(err)
 }

@@ -15,3 +15,7 @@ cd ..
 cd Synchroniser
 go build SynchroniserMicroservice.go
 cd ..
+
+cd MergerMicroservice
+go build MergerMicroservice.go
+cd ..

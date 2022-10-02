@@ -1,12 +1,11 @@
 package main
 
 import (
+	. "Licenta/SocketFunctions"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
-	"strconv"
 	"time"
 )
 
@@ -22,71 +21,43 @@ func checkErr(err error) {
 }
 
 func GetLocalIP() (string, error) {
-	addrs, err := net.InterfaceAddrs()
+	interfaceAddresses, err := net.InterfaceAddrs()
 	if err != nil {
 		return "", err
 	}
 
-	for _, address := range addrs {
-		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String(), nil
+	for _, address := range interfaceAddresses {
+		if ipNet, ok := address.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+			if ipNet.IP.To4() != nil {
+				return ipNet.IP.String(), nil
 			}
 		}
 	}
 	return "", nil
 }
 
-func receiveMessage(connection net.Conn) ([]byte, error) {
-	sizeBuffer := make([]byte, 10)
-	if _, err := io.LimitReader(connection, 10).Read(sizeBuffer); err != nil {
-		return nil, err
-	}
-
-	size, err := strconv.Atoi(string(sizeBuffer))
-	if err != nil {
-		return nil, err
-	}
-
-	messageBuffer := make([]byte, size)
-	if _, err := connection.Read(messageBuffer); err != nil {
-		return nil, err
-	}
-
-	return messageBuffer, nil
-}
-
-func sendMessage(connection net.Conn, message []byte) error {
-	if _, err := connection.Write([]byte(fmt.Sprintf("%010d", len(message)))); err != nil {
-		return err
-	}
-
-	_, err := connection.Write(message)
-	return err
-}
-
 func main() {
 	hostname, err := GetLocalIP()
 	checkErr(err)
 
-	log.Println("Ascult pentru clenti la", hostname, ":", port, " ...")
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", hostname, port))
 	checkErr(err)
 
+	log.Println("Listening at", hostname, ":", port, " ...")
 	clientConn, err := listener.Accept()
 	checkErr(err)
 
-	log.Println("Client conectat")
+	log.Println("Client connected")
 	connection, err := net.Dial("unix", routerSocketName)
 	checkErr(err)
 
 	for {
-		fileName, err := receiveMessage(connection)
+		fileName, err := ReceiveMessage(connection)
 		fileContents, err := os.ReadFile(string(fileName))
 		checkErr(err)
 
-		checkErr(sendMessage(clientConn, fileContents))
-		log.Println("Trimis", string(fileName), "la", time.Now().Unix())
+		checkErr(SendMessage(clientConn, fileContents))
+		log.Println("Sent", string(fileName), "at", time.Now().Unix())
 	}
 
 }

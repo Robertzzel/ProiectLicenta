@@ -1,6 +1,7 @@
 package main
 
 import (
+	. "Licenta/SocketFunctions"
 	"errors"
 	"fmt"
 	"net"
@@ -39,10 +40,7 @@ func main() {
 
 		currentTime := []byte(fmt.Sprintf("%010d", time.Now().Unix()+1))
 
-		_, err = connections[0].Write(currentTime)
-		checkErr(err)
-
-		_, err = connections[1].Write(currentTime)
-		checkErr(err)
+		checkErr(SendMessage(connections[0], currentTime))
+		checkErr(SendMessage(connections[1], currentTime))
 	}
 }

@@ -19,3 +19,7 @@ cd ..
 cd MergerMicroservice
 go build MergerMicroservice.go
 cd ..
+
+cd DatabaseMicroservice
+go build DatabaseMicroservice.go
+cd ..

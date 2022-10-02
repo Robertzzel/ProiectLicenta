@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"github.com/icza/mjpeg"
 	"sync"
 	"time"
@@ -67,9 +66,7 @@ func (r *Recorder) startRecording() {
 				r.startTime = time.Now()
 			}
 
-			s := time.Now()
 			image, err := r.screenshot.Get()
-			fmt.Println(time.Since(s))
 			checkErr(err)
 
 			r.buffer = append(r.buffer, image)

@@ -1,14 +1,13 @@
 package main
 
 import (
+	. "Licenta/SocketFunctions"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
 	"os/exec"
-	"strconv"
 	"time"
 )
 
@@ -25,25 +24,6 @@ func getUIConnection() (net.Conn, error) {
 	defer listener.Close()
 
 	return listener.Accept()
-}
-
-func receiveMessage(connection net.Conn) ([]byte, error) {
-	sizeBuffer := make([]byte, 10)
-	if _, err := io.LimitReader(connection, 10).Read(sizeBuffer); err != nil {
-		return nil, err
-	}
-
-	size, err := strconv.Atoi(string(sizeBuffer))
-	if err != nil {
-		return nil, err
-	}
-
-	messageBuffer := make([]byte, size)
-	if _, err := connection.Read(messageBuffer); err != nil {
-		return nil, err
-	}
-
-	return messageBuffer, nil
 }
 
 func createFileWithVideos(videos []string) (string, error) {
@@ -81,7 +61,6 @@ func main() {
 		}
 	}
 
-	receivedVideos := make([]string, 0, 16)
 	if err := os.Mkdir(receivedVideosDir, os.ModePerm); err != nil {
 		log.Println("Cannot create dir for received videos", err)
 	}
@@ -93,11 +72,12 @@ func main() {
 	}
 	defer uiConnection.Close()
 
+	receivedVideos := make([]string, 0, 16)
 	log.Println("Started...")
 	for {
-		video, err := receiveMessage(uiConnection)
+		video, err := ReceiveMessage(uiConnection)
 		if err != nil {
-			log.Println("Error while receiving videos", err)
+			log.Println("Error while receiving videos ", err)
 			break
 		}
 
@@ -109,7 +89,7 @@ func main() {
 
 		_, err = file.Write(video)
 		if err != nil {
-			log.Println("Cannot write video file", err)
+			log.Println("Cannot write received video in a file", err)
 			break
 		}
 
@@ -129,7 +109,12 @@ func main() {
 
 	log.Println("Created", finalVideoFile)
 
+	log.Println("Cleaning ", len(receivedVideos), " files..")
 	for _, videoFile := range receivedVideos {
-		os.Remove(videoFile)
+		if err = os.Remove(videoFile); err != nil {
+			log.Println("Cannot remove file ", videoFile, " : ", err)
+		}
 	}
+
+	log.Println("Done")
 }

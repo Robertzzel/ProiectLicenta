@@ -4,12 +4,16 @@ import (
 	"database/sql"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
+	"io"
 	"log"
+	"net"
+	"strconv"
 )
 
 const (
 	tableName  = "videos"
 	dbNamePath = "./videos.db"
+	socketName = "/tmp/database.sock"
 )
 
 type Database struct {
@@ -67,6 +71,60 @@ func (db *Database) GetAllRows() ([][2]string, error) {
 	return result, nil
 }
 
+func receiveMessage(connection net.Conn) ([]byte, error) {
+	sizeBuffer := make([]byte, 10)
+	if _, err := io.LimitReader(connection, 10).Read(sizeBuffer); err != nil {
+		return nil, err
+	}
+
+	size, err := strconv.Atoi(string(sizeBuffer))
+	if err != nil {
+		return nil, err
+	}
+
+	messageBuffer := make([]byte, size)
+	if _, err := connection.Read(messageBuffer); err != nil {
+		return nil, err
+	}
+
+	return messageBuffer, nil
+}
+
+func sendMessage(connection net.Conn, message []byte) error {
+	if _, err := connection.Write([]byte(fmt.Sprintf("%010d", len(message)))); err != nil {
+		return err
+	}
+
+	_, err := connection.Write(message)
+	return err
+}
+
+func handleConnection(database *Database, conn net.Conn) {
+	for {
+		message, err := receiveMessage(conn)
+		if err != nil {
+			return
+		}
+
+		result := ""
+		if string(message) == "query;all" {
+			rows, err := database.GetAllRows()
+			if err != nil {
+				return
+			}
+
+			for _, row := range rows {
+				result += row[0] + "," + row[1] + ";"
+			}
+			result = result[:len(result)-1]
+		}
+
+		if err = sendMessage(conn, []byte(result)); err != nil {
+			return
+		}
+	}
+}
+
 func main() {
 	db, err := OpenNewDatabase()
 	if err != nil {
@@ -77,13 +135,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err = db.Insert("sal10", "sal11"); err != nil {
-		log.Println(err)
+	listener, err := net.Listen("unix", socketName)
+	if err != nil {
+		log.Fatal("Deschidere socket", err)
 	}
 
-	rows, err := db.GetAllRows()
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Fatal("Eroare la accept ", err)
+		}
 
-	for _, row := range rows {
-		fmt.Println(row[0], row[1])
+		go handleConnection(db, conn)
 	}
 }

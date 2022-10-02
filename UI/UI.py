@@ -1,5 +1,7 @@
 import os.path
-import sys, asyncio, websockets
+import sys
+import asyncio
+import websockets
 import webbrowser
 
 FRONTEND_PAGE = """
@@ -110,6 +112,30 @@ FRONTEND_PAGE = """
 </html>
 """
 MERGER_SOCKET = "/tmp/merger.sock"
+MESSAGE_SIZE_LENGTH = 10
+
+
+async def receive_message(reader: asyncio.StreamReader) -> bytes:
+    buffer = b''
+    while True:
+        buffer += await reader.read(MESSAGE_SIZE_LENGTH)
+        if len(buffer) >= MESSAGE_SIZE_LENGTH:
+            break
+
+    message_size = int(buffer.decode())
+    buffer = b''
+    while True:
+        buffer += await reader.read(message_size)
+        if len(buffer) >= message_size:
+            break
+
+    return buffer
+
+
+def send_message(writer: asyncio.StreamWriter, message: bytes):
+    writer.write(str(len(message)).rjust(10, '0').encode())
+    writer.write(message)
+
 
 async def main():
     if len(sys.argv) != 3:
@@ -133,21 +159,11 @@ async def main():
 async def handle(websocket, reader, merger):
     while True:
         print("Waiting for message..")
-        size_buffer = b''
-        while len(size_buffer) < 10:
-            size_buffer += await reader.read(10 - len(size_buffer))
-
-        size = int(size_buffer)
-
-        buffer = b''
-        while len(buffer) < size:
-            buffer += await reader.read(size - len(buffer))
+        buffer = await receive_message(reader)
 
         print("Message received")
         await websocket.send(buffer)
-
-        merger.write(str(len(buffer)).rjust(10, '0').encode())
-        merger.write(buffer)
+        send_message(merger, buffer)
 
 
 if __name__ == "__main__":

@@ -1,13 +1,12 @@
 package main
 
 import (
+	. "Licenta/SocketFunctions"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -32,12 +31,10 @@ func receiveFiles(listener net.Listener, videoFiles, audioFiles chan string) {
 			defer connection.Close()
 
 			for {
-				size, err := readSize(connection)
-				checkErr(err)
-
-				message := make([]byte, size)
-				_, err = connection.Read(message)
-				checkErr(err)
+				message, err := ReceiveMessage(connection)
+				if err != nil {
+					return
+				}
 
 				messageString := string(message)
 				if strings.HasSuffix(messageString, ".mkv") {
@@ -63,25 +60,6 @@ func processFiles(videoFileName, audioFileName string) (string, error) {
 	}
 
 	return outputFile.Name(), nil
-}
-
-func readSize(connection net.Conn) (int, error) {
-	buffer := make([]byte, 10)
-	_, err := io.LimitReader(connection, 10).Read(buffer)
-	if err != nil {
-		return 0, err
-	}
-
-	return strconv.Atoi(string(buffer))
-}
-
-func sendMessage(connection net.Conn, message []byte) error {
-	if _, err := connection.Write([]byte(fmt.Sprintf("%010d", len(message)))); err != nil {
-		return err
-	}
-
-	_, err := connection.Write(message)
-	return err
 }
 
 func main() {
@@ -116,15 +94,14 @@ func main() {
 			defer os.Remove(videoFile)
 			defer os.Remove(audioFile)
 
-			fmt.Println("Primit", videoFile, audioFile, "la", time.Now().Unix())
 			fileName, err := processFiles(videoFile, audioFile)
 			checkErr(err)
 
 			if routerConnection != nil {
-				checkErr(sendMessage(routerConnection, []byte(fileName)))
+				checkErr(SendMessage(routerConnection, []byte(fileName)))
 			}
 
-			fmt.Println("Trimis", fileName, "la", time.Now().Unix(), "\n")
+			fmt.Println("Sent", fileName, "at", time.Now().Unix())
 		}(<-videoFiles, <-audioFiles)
 	}
 }

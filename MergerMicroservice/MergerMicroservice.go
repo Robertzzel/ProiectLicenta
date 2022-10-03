@@ -14,6 +14,7 @@ import (
 const (
 	socketName        = "/tmp/merger.sock"
 	receivedVideosDir = "/tmp/receivedVideos"
+	databaseSocket    = "/tmp/database.sock"
 )
 
 func getUIConnection() (net.Conn, error) {
@@ -108,6 +109,15 @@ func main() {
 	}
 
 	log.Println("Created", finalVideoFile)
+	connection, err := net.Dial("unix", databaseSocket)
+	if err != nil {
+		return
+	}
+	defer connection.Close()
+
+	if err := SendMessage(connection, []byte(finalVideoFile)); err != nil {
+		log.Fatal("Sending message to database microserv")
+	}
 
 	log.Println("Cleaning ", len(receivedVideos), " files..")
 	for _, videoFile := range receivedVideos {
@@ -115,6 +125,4 @@ func main() {
 			log.Println("Cannot remove file ", videoFile, " : ", err)
 		}
 	}
-
-	log.Println("Done")
 }

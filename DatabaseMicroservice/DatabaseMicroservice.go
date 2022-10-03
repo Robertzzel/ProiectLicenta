@@ -1,13 +1,15 @@
 package main
 
 import (
+	. "Licenta/SocketFunctions"
 	"database/sql"
+	"errors"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
-	"io"
 	"log"
 	"net"
-	"strconv"
+	"os"
+	"strings"
 )
 
 const (
@@ -27,6 +29,15 @@ func OpenNewDatabase() (*Database, error) {
 	}
 
 	return &Database{db}, err
+}
+
+func cleanSocket(socketPath string) error {
+	if _, err := os.Stat(socketName); !errors.Is(err, os.ErrNotExist) {
+		if err := os.Remove(socketName); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (db *Database) createTable() error {
@@ -71,42 +82,14 @@ func (db *Database) GetAllRows() ([][2]string, error) {
 	return result, nil
 }
 
-func receiveMessage(connection net.Conn) ([]byte, error) {
-	sizeBuffer := make([]byte, 10)
-	if _, err := io.LimitReader(connection, 10).Read(sizeBuffer); err != nil {
-		return nil, err
-	}
-
-	size, err := strconv.Atoi(string(sizeBuffer))
-	if err != nil {
-		return nil, err
-	}
-
-	messageBuffer := make([]byte, size)
-	if _, err := connection.Read(messageBuffer); err != nil {
-		return nil, err
-	}
-
-	return messageBuffer, nil
-}
-
-func sendMessage(connection net.Conn, message []byte) error {
-	if _, err := connection.Write([]byte(fmt.Sprintf("%010d", len(message)))); err != nil {
-		return err
-	}
-
-	_, err := connection.Write(message)
-	return err
-}
-
 func handleConnection(database *Database, conn net.Conn) {
 	for {
-		message, err := receiveMessage(conn)
+		message, err := ReceiveMessage(conn)
 		if err != nil {
 			return
 		}
-
 		result := ""
+
 		if string(message) == "query;all" {
 			rows, err := database.GetAllRows()
 			if err != nil {
@@ -117,18 +100,29 @@ func handleConnection(database *Database, conn net.Conn) {
 				result += row[0] + "," + row[1] + ";"
 			}
 			result = result[:len(result)-1]
+		} else if strings.HasPrefix(string(message), "insert") {
+			insertParts := strings.Split(string(message), ";")
+			if err := database.Insert(insertParts[0], insertParts[1]); err != nil {
+				result = err.Error()
+			} else {
+				result = "success"
+			}
 		}
 
-		if err = sendMessage(conn, []byte(result)); err != nil {
+		if err = SendMessage(conn, []byte(result)); err != nil {
 			return
 		}
 	}
 }
 
 func main() {
+	if err := cleanSocket(socketName); err != nil {
+		log.Fatal("Cleanign socket ", err)
+	}
+
 	db, err := OpenNewDatabase()
 	if err != nil {
-		log.Fatal("Deschidere")
+		log.Fatal("Deschidere", err)
 	}
 
 	if err = db.createTable(); err != nil {

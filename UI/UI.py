@@ -112,6 +112,7 @@ FRONTEND_PAGE = """
 </html>
 """
 MERGER_SOCKET = "/tmp/merger.sock"
+DATABASE_SOCKET_NAME = "/tmp/database.sock"
 MESSAGE_SIZE_LENGTH = 10
 
 
@@ -137,12 +138,7 @@ def send_message(writer: asyncio.StreamWriter, message: bytes):
     writer.write(message)
 
 
-async def main():
-    if len(sys.argv) != 3:
-        print("Error not using pattern: ./python3 UI.py <IP> <PORT>")
-        return
-
-    ip, port = sys.argv[1], int(sys.argv[2])
+async def start_app(ip: str, port: int):
     videos_reader, _ = await asyncio.open_connection(host=ip, port=port)
     _, merger_writer = await asyncio.open_unix_connection(path=MERGER_SOCKET)
 
@@ -166,5 +162,24 @@ async def handle(websocket, reader, merger):
         send_message(merger, buffer)
 
 
+async def print_all_videos():
+    reader, writer = await asyncio.open_unix_connection(path=DATABASE_SOCKET_NAME)
+    send_message(writer, b"query;all")
+    message = await receive_message(reader)
+    print(message)
+
+
+def main():
+    command = sys.argv[1]
+
+    if command == "start":
+        ip, port = sys.argv[2], int(sys.argv[3])
+        asyncio.run(start_app(ip, port))
+    if command == "videos":
+        asyncio.run(print_all_videos())
+    else:
+        print("Command not found")
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

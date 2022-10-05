@@ -4,6 +4,7 @@ import (
 	. "Licenta/SocketFunctions"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"time"
@@ -15,8 +16,21 @@ const (
 
 func checkErr(err error) {
 	if err != nil {
-		panic(err)
+		log.Fatal(err.Error())
 	}
+}
+
+func getVideoAndAudioConnections(listener net.Listener) (net.Conn, net.Conn) {
+	connections := [2]net.Conn{nil, nil}
+
+	for i := 0; i < 2; i++ {
+		conn, err := listener.Accept()
+		checkErr(err)
+
+		connections[i] = conn
+	}
+
+	return connections[0], connections[1]
 }
 
 func main() {
@@ -28,19 +42,11 @@ func main() {
 	checkErr(err)
 	defer listener.Close()
 
-	for {
-		connections := make([]net.Conn, 0, 2)
+	connection1, connection2 := getVideoAndAudioConnections(listener)
+	defer connection1.Close()
+	defer connection2.Close()
 
-		for i := 0; i < 2; i++ {
-			conn, err := listener.Accept()
-			checkErr(err)
-
-			connections = append(connections, conn)
-		}
-
-		currentTime := []byte(fmt.Sprintf("%010d", time.Now().Unix()+1))
-
-		checkErr(SendMessage(connections[0], currentTime))
-		checkErr(SendMessage(connections[1], currentTime))
-	}
+	currentTime := []byte(fmt.Sprintf("%010d", time.Now().Unix()+1))
+	checkErr(SendMessage(connection1, currentTime))
+	checkErr(SendMessage(connection2, currentTime))
 }

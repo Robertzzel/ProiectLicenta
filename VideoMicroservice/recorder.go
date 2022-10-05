@@ -19,7 +19,7 @@ var mutex sync.Mutex
 
 func NewRecorder(fps int) (*Recorder, error) {
 	if fps > 60 && fps < 1 {
-		return nil, errors.New("fps must be between 1 and 600")
+		return nil, errors.New("fps must be between 1 and 60")
 	}
 
 	screenshot, err := NewScreenshot()

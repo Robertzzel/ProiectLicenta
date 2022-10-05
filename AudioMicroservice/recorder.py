@@ -61,6 +61,6 @@ class Recorder:
 
         start_difference_time = start_time - self.buffer.start_time
         part_offset = int(start_difference_time * SAMPLERATE)
-        part_size = seconds * SAMPLERATE
+        part_size = int(seconds * SAMPLERATE)
 
         return self.buffer.get(part_offset, part_size)

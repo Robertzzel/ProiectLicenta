@@ -102,7 +102,8 @@ func handleConnection(database *Database, conn net.Conn) {
 			result = result[:len(result)-1]
 		} else if strings.HasPrefix(string(message), "insert") {
 			insertParts := strings.Split(string(message), ";")
-			if err := database.Insert(insertParts[0], insertParts[1]); err != nil {
+			pathAndTimestamp := strings.Split(insertParts[1], ",")
+			if err := database.Insert(pathAndTimestamp[0], pathAndTimestamp[1]); err != nil {
 				result = err.Error()
 			} else {
 				result = "success"

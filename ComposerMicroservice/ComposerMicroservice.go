@@ -55,7 +55,7 @@ func processFiles(videoFileName, audioFileName string) (string, error) {
 		return "", err
 	}
 
-	if _, err := exec.Command("./CombineAndCompress", videoFileName, audioFileName, outputFile.Name(), "30").Output(); err != nil {
+	if _, err := exec.Command("./CombineAndCompress", videoFileName, audioFileName, outputFile.Name(), "0").Output(); err != nil {
 		return "", err
 	}
 

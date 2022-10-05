@@ -17,7 +17,7 @@ const (
 
 func checkErr(err error) {
 	if err != nil {
-		panic(err)
+		log.Fatal(err.Error())
 	}
 }
 
@@ -43,7 +43,6 @@ func synchronise() (time.Time, error) {
 
 func main() {
 	log.Println("Starting...")
-
 	composerConnection, err := net.Dial("unix", composerSocketName)
 	checkErr(err)
 

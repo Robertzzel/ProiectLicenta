@@ -13,11 +13,13 @@ type Recorder struct {
 	startTime  time.Time
 	screenshot *Screenshot
 	fps        int64
+	width      int
+	height     int
 }
 
 var mutex sync.Mutex
 
-func NewRecorder(fps int) (*Recorder, error) {
+func NewRecorder(fps, width, height int) (*Recorder, error) {
 	if fps > 60 && fps < 1 {
 		return nil, errors.New("fps must be between 1 and 60")
 	}
@@ -27,7 +29,7 @@ func NewRecorder(fps int) (*Recorder, error) {
 		return nil, err
 	}
 
-	return &Recorder{screenshot: screenshot, fps: int64(fps)}, nil
+	return &Recorder{screenshot: screenshot, fps: int64(fps), width: width, height: height}, nil
 }
 
 func (r *Recorder) getEndTime() time.Time {
@@ -89,7 +91,7 @@ func (r *Recorder) CreateFile(fileName string, startTime time.Time, duration tim
 	for index, image := range images {
 		go func(index int, image *ByteImage) {
 			var encodedImageBuffer bytes.Buffer
-			checkErr(image.Compress(&encodedImageBuffer, 100))
+			checkErr(image.Compress(&encodedImageBuffer, 100, r.width, r.height))
 			encodedImages[index] = encodedImageBuffer.Bytes()
 
 			wg.Done()
@@ -98,7 +100,7 @@ func (r *Recorder) CreateFile(fileName string, startTime time.Time, duration tim
 	wg.Wait()
 
 	// Create video file
-	video, err := mjpeg.New(fileName, int32(images[0].Width), int32(images[0].Height), int32(r.fps))
+	video, err := mjpeg.New(fileName, int32(r.width), int32(r.height), int32(r.fps))
 	if err != nil {
 		return err
 	}

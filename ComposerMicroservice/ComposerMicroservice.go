@@ -94,7 +94,9 @@ func main() {
 			defer os.Remove(videoFile)
 			defer os.Remove(audioFile)
 
+			s := time.Now()
 			fileName, err := processFiles(videoFile, audioFile)
+			fmt.Println(time.Since(s))
 			checkErr(err)
 
 			if routerConnection != nil {

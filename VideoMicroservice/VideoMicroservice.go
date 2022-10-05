@@ -46,7 +46,7 @@ func main() {
 	composerConnection, err := net.Dial("unix", composerSocketName)
 	checkErr(err)
 
-	videoRecorder, err := NewRecorder(30)
+	videoRecorder, err := NewRecorder(30, 800, 600)
 	checkErr(err)
 	videoRecorder.Start()
 

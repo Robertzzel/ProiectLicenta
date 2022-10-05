@@ -1,7 +1,7 @@
 #!/bin/sh
 
 cd VideoMicroservice
-go build VideoMicroservice.go recorder.go screenshot.go screen.go byte_image.go
+go build VideoMicroservice.go recorder.go resizer.go screenshot.go screen.go byte_image.go
 cd ..
 
 cd ComposerMicroservice

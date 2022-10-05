@@ -40,10 +40,10 @@ func (bi *ByteImage) SetPixel(x int, y int, r uint8, g uint8, b uint8) error {
 	return nil
 }
 
-func (bi *ByteImage) Compress(outputBuffer *bytes.Buffer, quality int) error {
+func (bi *ByteImage) Compress(outputBuffer *bytes.Buffer, quality, width, height int) error {
 	if quality < 1 && quality > 100 {
 		return errors.New("the quality must be between 1 and 100")
 	}
 
-	return jpeg.Encode(outputBuffer, bi.getImage(), &jpeg.EncoderOptions{Quality: quality})
+	return jpeg.Encode(outputBuffer, Thumbnail(uint(width), uint(height), bi), &jpeg.EncoderOptions{Quality: quality})
 }

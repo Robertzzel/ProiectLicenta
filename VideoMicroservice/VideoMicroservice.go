@@ -46,21 +46,17 @@ func main() {
 	composerConnection, err := net.Dial("unix", composerSocketName)
 	checkErr(err)
 
-	videoRecorder, err := NewRecorder(30, 800, 600)
+	videoRecorder, err := NewRecorder(24)
 	checkErr(err)
-	videoRecorder.Start()
 
 	startTime, err := synchronise()
 	checkErr(err)
 	fmt.Println("SYNC: ", startTime.Unix())
 
-	for iteration := 0; ; iteration++ {
-		partStartTime := startTime.Add(time.Duration(int64(videoSize) * int64(iteration)))
-		fileName := "videos/" + fmt.Sprint(partStartTime.Unix()) + ".mkv"
-
-		checkErr(videoRecorder.CreateFile(fileName, partStartTime, videoSize))
-		checkErr(SendMessage(composerConnection, []byte(fileName)))
-
-		fmt.Println("video", fileName, "sent at ", time.Now().Unix())
+	videoRecorder.Start(startTime, videoSize)
+	for {
+		videoName := <-videoRecorder.VideoBuffer
+		checkErr(SendMessage(composerConnection, []byte(videoName)))
+		fmt.Println("video", videoName, "sent at ", time.Now().Unix())
 	}
 }

@@ -84,6 +84,7 @@ FRONTEND_PAGE = """
         };
         webSocket.onmessage = async function (messageEvent) {
           let wsMsg = messageEvent.data.arrayBuffer();
+          console.log(new Date())
 
           if (!streamingStarted) {
             appendToBuffer(await wsMsg);

@@ -102,9 +102,9 @@ func main() {
 
 			if routerConnection != nil {
 				checkErr(SendMessage(routerConnection, []byte(fileName)))
-				fmt.Println(" Sent", fileName, "at", time.Now().UnixMilli())
+				fmt.Println(" Sent", fileName, "at", time.Now().Unix())
 			} else {
-				fmt.Println(" Not sent at ", time.Now().UnixMilli())
+				fmt.Println(" Not sent at ", time.Now().Unix())
 			}
 		}(<-videoFiles, <-audioFiles)
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/icza/mjpeg"
+	"os"
 	"time"
 )
 
@@ -71,9 +72,10 @@ func (r *Recorder) startRecording() {
 
 func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Duration) {
 	nextChunkEndTime := startTime.Add(chunkSize)
+	cwd, _ := os.Getwd()
 
 	for {
-		videoFileName := fmt.Sprintf("videos/%s.mkv", fmt.Sprint(nextChunkEndTime.Add(-chunkSize).UnixMilli()))
+		videoFileName := fmt.Sprintf("%s/videos/%s.mkv", cwd, fmt.Sprint(nextChunkEndTime.Add(-chunkSize).Unix()))
 
 		video, err := mjpeg.New(
 			videoFileName,

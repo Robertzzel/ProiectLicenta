@@ -1,9 +1,13 @@
 package main
 
 import (
-	"Licenta/kafka"
+	. "Licenta/SocketFunctions"
+	"errors"
 	"fmt"
+	"github.com/go-vgo/robotgo"
 	gohook "github.com/robotn/gohook"
+	"net"
+	"os"
 )
 
 type Command int
@@ -15,60 +19,63 @@ const (
 	MouseUp   Command = 4
 	MouseMove Command = 5
 
-	LeftClick   MouseClick = 1
-	MiddleClick MouseClick = 2
-	RightClick  MouseClick = 3
-
-	kafkaTopic = "input"
+	socketName = "/tmp/inputListener.sock"
 )
 
-type MouseClick int
+var screenWidth, screenHeight = robotgo.GetScreenSize()
+
+func getRelativeWidth(coord int16) float32 {
+	return float32(coord) / float32(screenWidth)
+}
+
+func getRelativeHeight(coord int16) float32 {
+	return float32(coord) / float32(screenHeight)
+}
+
+func cherErr(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
 type function func([]byte)
-type InputListenerService struct {
-	kafkaTopic string
-}
 
-func NewInputListenerService() *InputListenerService {
-	return &InputListenerService{}
-}
-
-func (ils *InputListenerService) Listen(callback function) {
+func Listen(callback function) {
 	eventHook := gohook.Start()
 	var event gohook.Event
 
 	for event = range eventHook {
 		switch event.Kind {
 		case gohook.KeyDown:
-			callback([]byte(fmt.Sprintf("%d,%d,%s\n", KeyDown, event.Rawcode, event.When.Format(kafka.TimeFormat))))
+			callback([]byte(fmt.Sprintf("%d,%d,%d\n", KeyDown, event.Rawcode, event.When.UnixMilli())))
 		case gohook.KeyUp:
-			callback([]byte(fmt.Sprintf("%d,%d,%s\n", KeyUp, event.Rawcode, event.When.Format(kafka.TimeFormat))))
+			callback([]byte(fmt.Sprintf("%d,%d,%d\n", KeyUp, event.Rawcode, event.When.UnixMilli())))
 		case gohook.MouseDown:
-			callback([]byte(fmt.Sprintf("%d,%d,%d,%d,%s\n", MouseDown, event.Button, event.X, event.Y, event.When.Format(kafka.TimeFormat))))
+			callback([]byte(fmt.Sprintf("%d,%d,%f,%f,%d\n", MouseDown, event.Button, getRelativeWidth(event.X), getRelativeHeight(event.Y), event.When.UnixMilli())))
 		case gohook.MouseUp:
-			callback([]byte(fmt.Sprintf("%d,%d,%d,%d,%s\n", MouseUp, event.Button, event.X, event.Y, event.When.Format(kafka.TimeFormat))))
+			callback([]byte(fmt.Sprintf("%d,%d,%f,%f,%d\n", MouseUp, event.Button, getRelativeWidth(event.X), getRelativeHeight(event.Y), event.When.UnixMilli())))
 		case gohook.MouseMove:
-			callback([]byte(fmt.Sprintf("%d,%d,%d,%s\n", MouseMove, event.X, event.Y, event.When.Format(kafka.TimeFormat))))
+			callback([]byte(fmt.Sprintf("%d,%f,%f,%d\n", MouseMove, getRelativeWidth(event.X), getRelativeHeight(event.Y), event.When.UnixMilli())))
 		}
 	}
 }
 
-func main() {
-	err := kafka.DeleteTopics([]string{kafkaTopic})
-	if err != nil {
-		fmt.Println(err)
+func getUiConnection() (net.Conn, error) {
+	if _, err := os.Stat(socketName); !errors.Is(err, os.ErrNotExist) {
+		cherErr(os.Remove(socketName))
 	}
-	err = kafka.CreateTopic(kafkaTopic)
-	if err != nil {
-		fmt.Println(err)
-	}
-	kafkaProducer := kafka.NewKafkaProducer(kafkaTopic)
 
-	service := NewInputListenerService()
-	service.Listen(func(command []byte) {
-		err := kafkaProducer.Publish(command)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+	listen, err := net.Listen("unix", socketName)
+	cherErr(err)
+
+	return listen.Accept()
+}
+
+func main() {
+	uiConn, err := getUiConnection()
+	cherErr(err)
+
+	Listen(func(command []byte) {
+		cherErr(SendMessage(uiConn, command))
 	})
 }

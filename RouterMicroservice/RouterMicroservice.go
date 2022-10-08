@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	routerSocketName = "/tmp/router.sock"
-	port             = 8080
+	routerSocketName    = "/tmp/router.sock"
+	port                = 8080
+	inputExecutorSocket = "/tmp/inputExecutor.sock"
 )
 
 func checkErr(err error) {
@@ -50,6 +51,17 @@ func main() {
 	log.Println("Client connected")
 	connection, err := net.Dial("unix", routerSocketName)
 	checkErr(err)
+
+	go func() {
+		conn, err := net.Dial("unix", inputExecutorSocket)
+		checkErr(err)
+
+		for {
+			inputReceived, err := ReceiveMessage(clientConn)
+			checkErr(err)
+			checkErr(SendMessage(conn, inputReceived))
+		}
+	}()
 
 	for {
 		fileName, err := ReceiveMessage(connection)

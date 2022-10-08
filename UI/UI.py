@@ -116,6 +116,7 @@ FRONTEND_PAGE = """
 """
 MERGER_SOCKET = "/tmp/merger.sock"
 DATABASE_SOCKET_NAME = "/tmp/database.sock"
+INPUTS_SOCKET_NAME = "/tmp/inputListener.sock"
 MESSAGE_SIZE_LENGTH = 10
 
 
@@ -142,8 +143,9 @@ def send_message(writer: asyncio.StreamWriter, message: bytes):
 
 
 async def start_app(ip: str, port: int):
-    videos_reader, _ = await asyncio.open_connection(host=ip, port=port)
+    inputs_reader, _ = await asyncio.open_unix_connection(path=INPUTS_SOCKET_NAME)
     _, merger_writer = await asyncio.open_unix_connection(path=MERGER_SOCKET)
+    router_reader, router_writer = await asyncio.open_connection(host=ip, port=port)
 
     if not os.path.isfile("UI.html"):
         with open("UI.html", "w") as f:
@@ -151,17 +153,28 @@ async def start_app(ip: str, port: int):
 
     webbrowser.open("file://" + os.path.realpath("UI.html"))
 
-    async with websockets.serve(lambda ws: handle(ws, videos_reader, merger_writer), "localhost", 8081):
+    async with websockets.serve(lambda ws: handle(ws, router_reader, merger_writer, inputs_reader, router_writer), "localhost", 8081):
         await asyncio.Future()
 
 
-async def handle(websocket, reader, merger):
-    while True:
-        buffer = await receive_message(reader)
+async def handle(websocket, reader, merger, inputs_reader, videos_writer):
+    inputs_task = asyncio.create_task(send_inputs(videos_writer, inputs_reader))
 
-        print("Message received, ", time.time())
-        await websocket.send(buffer)
-        send_message(merger, buffer)
+    try:
+        while True:
+            buffer = await receive_message(reader)
+            print("Message received, ", time.time())
+            await websocket.send(buffer)
+            send_message(merger, buffer)
+    except Exception as ex:
+        print(ex)
+        await inputs_task
+        sys.exit(1)
+
+
+async def send_inputs(router_writer, inputs_reader):
+    while True:
+        send_message(router_writer, await receive_message(inputs_reader))
 
 
 async def print_all_videos():

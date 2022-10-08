@@ -21,6 +21,17 @@ func checkErr(err error) {
 	}
 }
 
+func inputHandler(conn net.Conn) {
+	conn, err := net.Dial("unix", inputExecutorSocket)
+	checkErr(err)
+
+	for {
+		inputReceived, err := ReceiveMessage(conn)
+		checkErr(err)
+		checkErr(SendMessage(conn, inputReceived))
+	}
+}
+
 func GetLocalIP() (string, error) {
 	interfaceAddresses, err := net.InterfaceAddrs()
 	if err != nil {
@@ -52,17 +63,7 @@ func main() {
 	connection, err := net.Dial("unix", routerSocketName)
 	checkErr(err)
 
-	go func() {
-		conn, err := net.Dial("unix", inputExecutorSocket)
-		checkErr(err)
-
-		for {
-			inputReceived, err := ReceiveMessage(clientConn)
-			checkErr(err)
-			checkErr(SendMessage(conn, inputReceived))
-		}
-	}()
-
+	go inputHandler(clientConn)
 	for {
 		fileName, err := ReceiveMessage(connection)
 		fileContents, err := os.ReadFile(string(fileName))

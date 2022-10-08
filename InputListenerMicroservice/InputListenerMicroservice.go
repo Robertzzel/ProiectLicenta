@@ -65,7 +65,7 @@ func getUiConnection() (net.Conn, error) {
 		cherErr(os.Remove(socketName))
 	}
 
-	listen, err := net.Listen("unix", socketName)
+	listen, err := net.Listen("tcp", "localhost:5001")
 	cherErr(err)
 
 	return listen.Accept()

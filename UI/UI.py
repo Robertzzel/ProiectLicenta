@@ -143,7 +143,7 @@ def send_message(writer: asyncio.StreamWriter, message: bytes):
 
 
 async def start_app(ip: str, port: int):
-    inputs_reader, _ = await asyncio.open_unix_connection(path=INPUTS_SOCKET_NAME)
+    inputs_reader, _ = await asyncio.open_connection(host="localhost", port=5001)
     _, merger_writer = await asyncio.open_unix_connection(path=MERGER_SOCKET)
     router_reader, router_writer = await asyncio.open_connection(host=ip, port=port)
 

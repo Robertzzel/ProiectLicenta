@@ -1,6 +1,8 @@
 import os.path
 import sys
 import asyncio
+import time
+
 import websockets
 import webbrowser
 
@@ -155,10 +157,9 @@ async def start_app(ip: str, port: int):
 
 async def handle(websocket, reader, merger):
     while True:
-        print("Waiting for message..")
         buffer = await receive_message(reader)
 
-        print("Message received")
+        print("Message received, ", time.time())
         await websocket.send(buffer)
         send_message(merger, buffer)
 

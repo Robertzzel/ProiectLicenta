@@ -48,7 +48,7 @@ func receiveFiles(listener net.Listener, videoFiles, audioFiles chan string) {
 }
 
 func processFiles(videoFileName, audioFileName string) (string, error) {
-	filePattern := fmt.Sprintf("*out%s.mp4", videoFileName[8:19])
+	filePattern := fmt.Sprintf("*out%s.mp4", strings.Split(strings.Split(videoFileName, "/")[1], ".")[0])
 
 	outputFile, err := os.CreateTemp("", filePattern)
 	if err != nil {
@@ -93,17 +93,19 @@ func main() {
 		go func(videoFile, audioFile string) {
 			defer os.Remove(videoFile)
 			defer os.Remove(audioFile)
+			fmt.Print("Primit fisierele ", videoFile, " ", audioFile)
 
 			s := time.Now()
 			fileName, err := processFiles(videoFile, audioFile)
-			fmt.Println(time.Since(s))
+			fmt.Print(" ", time.Since(s))
 			checkErr(err)
 
 			if routerConnection != nil {
 				checkErr(SendMessage(routerConnection, []byte(fileName)))
+				fmt.Println(" Sent", fileName, "at", time.Now().UnixMilli())
+			} else {
+				fmt.Println(" Not sent at ", time.Now().UnixMilli())
 			}
-
-			fmt.Println("Sent", fileName, "at", time.Now().Unix())
 		}(<-videoFiles, <-audioFiles)
 	}
 }

@@ -73,7 +73,7 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 	nextChunkEndTime := startTime.Add(chunkSize)
 
 	for {
-		videoFileName := fmt.Sprintf("videos/%s.mkv", fmt.Sprint(nextChunkEndTime.UnixMilli()))
+		videoFileName := fmt.Sprintf("videos/%s.mkv", fmt.Sprint(nextChunkEndTime.Add(-chunkSize).UnixMilli()))
 
 		video, err := mjpeg.New(
 			videoFileName,
@@ -89,7 +89,6 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 
 		checkErr(video.Close())
 		r.VideoBuffer <- videoFileName
-		fmt.Println("video facut la ", time.Now().UnixMilli())
 
 		nextChunkEndTime = nextChunkEndTime.Add(chunkSize)
 	}

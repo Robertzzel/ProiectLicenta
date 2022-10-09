@@ -39,7 +39,7 @@ def get_ui_connection() -> socket.socket:
         os.remove(SOCKET_NAME)
 
     ui_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    ui_connection.bind("localhost", 5001)
+    ui_connection.bind(("localhost", 5001))
 
     return ui_connection
 

@@ -21,14 +21,17 @@ func checkErr(err error) {
 	}
 }
 
-func inputHandler(conn net.Conn) {
+func inputHandler(clientConn net.Conn) {
+	fmt.Println("Wating for executor...")
 	conn, err := net.Dial("unix", inputExecutorSocket)
 	checkErr(err)
 
 	for {
-		inputReceived, err := ReceiveMessage(conn)
+		fmt.Println("wating for command...")
+		inputReceived, err := ReceiveMessage(clientConn)
 		checkErr(err)
 		checkErr(SendMessage(conn, inputReceived))
+		fmt.Println("Sent")
 	}
 }
 

@@ -38,10 +38,21 @@ def get_ui_connection() -> socket.socket:
     if os.path.exists(SOCKET_NAME):
         os.remove(SOCKET_NAME)
 
-    ui_connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    ui_connection.bind(SOCKET_NAME)
+    ui_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    ui_connection.bind("localhost", 5001)
 
     return ui_connection
+
+# def get_ui_connection() -> socket.socket:
+#     import os
+#
+#     if os.path.exists(SOCKET_NAME):
+#         os.remove(SOCKET_NAME)
+#
+#     ui_connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+#     ui_connection.bind(SOCKET_NAME)
+#
+#     return ui_connection
 
 
 def receive_message(connection: socket.socket) -> bytes:
@@ -94,7 +105,7 @@ def on_release(key, ui):
 
 
 def main():
-    ui_connection = None # get_ui_connection()
+    ui_connection = get_ui_connection()
 
     mouse_listener: threading.Thread = mouse.Listener(
         on_move=lambda x, y: on_move(x, y, ui_connection),

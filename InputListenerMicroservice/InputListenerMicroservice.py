@@ -40,19 +40,10 @@ def get_ui_connection() -> socket.socket:
 
     ui_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     ui_connection.bind(("localhost", 5001))
+    ui_connection.listen()
+    conn, _ = ui_connection.accept()
 
-    return ui_connection
-
-# def get_ui_connection() -> socket.socket:
-#     import os
-#
-#     if os.path.exists(SOCKET_NAME):
-#         os.remove(SOCKET_NAME)
-#
-#     ui_connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-#     ui_connection.bind(SOCKET_NAME)
-#
-#     return ui_connection
+    return conn
 
 
 def receive_message(connection: socket.socket) -> bytes:

@@ -58,14 +58,14 @@ def get_ui_connection() -> socket.socket:
 def receive_message(connection: socket.socket) -> bytes:
     message_size = b''
     while True:
-        message_size += connection.recv(MESSAGE_SIZE_LENGTH)
+        message_size += connection.recv(MESSAGE_SIZE_LENGTH - len(message_size))
         if len(message_size) >= MESSAGE_SIZE_LENGTH:
             break
 
     message_size = int(message_size.decode())
     message = b''
     while True:
-        message += connection.recv(message_size)
+        message += connection.recv(message_size - len(message))
         if len(message) >= message_size:
             break
 
@@ -91,14 +91,14 @@ def on_scroll(x, y, dx, dy, ui):
 
 def on_press(key, ui):
     if type(key) == keyboard.KeyCode:
-        send_message(ui, f"{PRESS},{key}".encode())
+        send_message(ui, f"{PRESS},{key.char}".encode())
         return
     send_message(ui, f"{PRESS},{key.name}".encode())
 
 
 def on_release(key, ui):
     if type(key) == keyboard.KeyCode:
-        send_message(ui, f"{RELEASE},{key}".encode())
+        send_message(ui, f"{RELEASE},{key.char}".encode())
         return
 
     send_message(ui, f"{RELEASE},{key.name}".encode())

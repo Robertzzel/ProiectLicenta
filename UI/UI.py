@@ -123,14 +123,14 @@ MESSAGE_SIZE_LENGTH = 10
 async def receive_message(reader: asyncio.StreamReader) -> bytes:
     buffer = b''
     while True:
-        buffer += await reader.read(MESSAGE_SIZE_LENGTH)
+        buffer += await reader.read(MESSAGE_SIZE_LENGTH - len(buffer))
         if len(buffer) >= MESSAGE_SIZE_LENGTH:
             break
 
     message_size = int(buffer.decode())
     buffer = b''
     while True:
-        buffer += await reader.read(message_size)
+        buffer += await reader.read(message_size - len(buffer))
         if len(buffer) >= message_size:
             break
 
@@ -160,16 +160,11 @@ async def start_app(ip: str, port: int):
 async def handle(websocket, reader, merger, inputs_reader, videos_writer):
     inputs_task = asyncio.create_task(send_inputs(videos_writer, inputs_reader))
 
-    try:
-        while True:
-            buffer = await receive_message(reader)
-            print("Message received, ", time.time())
-            await websocket.send(buffer)
-            send_message(merger, buffer)
-    except Exception as ex:
-        print(ex)
-        await inputs_task
-        sys.exit(1)
+    while True:
+        buffer = await receive_message(reader)
+        await websocket.send(buffer)
+        send_message(merger, buffer)
+        print("Message received, ", time.time())
 
 
 async def send_inputs(router_writer, inputs_reader):

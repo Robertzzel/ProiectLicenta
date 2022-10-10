@@ -23,14 +23,14 @@ def synchronise():
 def receive_message(connection: socket.socket) -> bytes:
     message_size = b''
     while True:
-        message_size += connection.recv(MESSAGE_SIZE_LENGTH)
+        message_size += connection.recv(MESSAGE_SIZE_LENGTH - len(message_size))
         if len(message_size) >= MESSAGE_SIZE_LENGTH:
             break
 
     message_size = int(message_size.decode())
     message = b''
     while True:
-        message += connection.recv(message_size)
+        message += connection.recv(message_size - len(message))
         if len(message) >= message_size:
             break
 

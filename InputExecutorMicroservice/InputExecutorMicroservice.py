@@ -13,14 +13,14 @@ RELEASE = 5
 def receive_message(connection: socket.socket) -> bytes:
     message_size = b''
     while True:
-        message_size += connection.recv(MESSAGE_SIZE_LENGTH)
+        message_size += connection.recv(MESSAGE_SIZE_LENGTH - len(message_size))
         if len(message_size) >= MESSAGE_SIZE_LENGTH:
             break
 
     message_size = int(message_size.decode())
     message = b''
     while True:
-        message += connection.recv(message_size)
+        message += connection.recv(message_size - len(message))
         if len(message) >= message_size:
             break
 
@@ -35,8 +35,10 @@ def get_router_connection() -> socket.socket:
 
     router_connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     router_connection.bind(INPUT_EXECUTOR_SOCKET_NAME)
+    router_connection.listen()
+    conn, _ = router_connection.accept()
 
-    return router_connection
+    return conn
 
 
 def get_screen_sizes():
@@ -67,18 +69,28 @@ def main():
         action = int(components[0])
 
         if action == MOVE:
-            x, y = float(components[1]), float(components[2])
-            mouse_controller.move(int(x * width), int(y * height))
+            x, y = int(float(components[1]) * width), int(float(components[2]) * height)
+            mouse_controller.position = (x, y)
         elif action == CLICK:
             button, pressed = components[1], int(components[2])
             if pressed:
-                mouse_controller.press(button)
+                mouse_controller.press(pynput.mouse.Button[button])
             else:
-                mouse_controller.release(button)
+                mouse_controller.release(pynput.mouse.Button[button])
         elif action == PRESS:
-            keyboard_controller.press(components[1])
+            if len(components[1]) == 1:
+                keyboard_controller.press(components[1])
+            elif len(components[1]) > 1:
+                keyboard_controller.press(pynput.keyboard.Key[components[1]])
+            else:
+                keyboard_controller.press(",")
         elif action == RELEASE:
-            keyboard_controller.release(components[1])
+            if len(components[1]) == 1:
+                keyboard_controller.release(components[1])
+            elif len(components[1]) > 1:
+                keyboard_controller.release(pynput.keyboard.Key[components[1]])
+            else:
+                keyboard_controller.press(",")
         elif action == SCROLL:
             dx, dy = int(components[1]), int(components[1])
             mouse_controller.scroll(dx, -dy)

@@ -51,12 +51,12 @@ func main() {
 
 	startTime, err := synchronise()
 	checkErr(err)
-	fmt.Println("SYNC: ", startTime.Unix())
+	log.Println("SYNC: ", startTime.UnixMilli())
 
 	videoRecorder.Start(startTime, videoSize)
 	for {
 		videoName := <-videoRecorder.VideoBuffer
 		checkErr(SendMessage(composerConnection, []byte(videoName)))
-		fmt.Println("video", videoName, "sent at ", time.Now().Unix())
+		fmt.Println(videoName, "sent at ", time.Now().UnixMilli())
 	}
 }

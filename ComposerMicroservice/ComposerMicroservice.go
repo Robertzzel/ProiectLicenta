@@ -4,6 +4,7 @@ import (
 	. "Licenta/SocketFunctions"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -91,14 +92,19 @@ func main() {
 
 	for {
 		go func(videoFile, audioFile string) {
-			defer os.Remove(videoFile)
-			defer os.Remove(audioFile)
-			fmt.Print("Primit fisierele ", videoFile, " ", audioFile)
+			defer func() {
+				os.Remove(videoFile)
+				os.Remove(audioFile)
+			}()
+
+			if videoFile[len(videoFile)-14:len(videoFile)-4] != audioFile[len(audioFile)-14:len(audioFile)-4] {
+				log.Println("DESYNC ", videoFile, " ", audioFile)
+			}
 
 			s := time.Now()
 			fileName, err := processFiles(videoFile, audioFile)
-			fmt.Print(" ", time.Since(s))
 			checkErr(err)
+			fmt.Print(" ", time.Since(s))
 
 			if routerConnection != nil {
 				checkErr(SendMessage(routerConnection, []byte(fileName)))

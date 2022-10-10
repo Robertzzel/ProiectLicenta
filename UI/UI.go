@@ -148,7 +148,7 @@ func handleInputs(inputsReader net.Conn, inputsWriter net.Conn) {
 
 func main() {
 	if len(os.Args) < 3 {
-		log.Fatal("Need host and ip to connect")
+		log.Fatal("Need host and port to connect")
 	}
 
 	host := os.Args[1]

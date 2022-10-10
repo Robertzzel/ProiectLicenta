@@ -23,11 +23,3 @@ cd ..
 cd DatabaseMicroservice
 go build DatabaseMicroservice.go
 cd ..
-
-cd InputListenerMicroservice
-go build InputListenerMicroservice.go
-cd ..
-
-cd InputExecutorMicroservice
-go build InputExecutorMicroservice.go
-cd ..

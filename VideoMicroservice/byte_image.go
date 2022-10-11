@@ -15,14 +15,6 @@ type ByteImage struct {
 	Stride    uint
 }
 
-func (bi *ByteImage) getStride() uint {
-	return bi.Stride
-}
-
-func (bi *ByteImage) getPixelsAfter(offset uint) []byte {
-	return bi.Data[offset:]
-}
-
 func (bi *ByteImage) getImage() image.Image {
 	for i := 0; i < len(bi.Data); i += 4 {
 		bi.Data[i], bi.Data[i+2], bi.Data[i+3] = bi.Data[i+2], bi.Data[i], 255
@@ -30,7 +22,7 @@ func (bi *ByteImage) getImage() image.Image {
 
 	return &image.RGBA{
 		Pix:    bi.Data,
-		Stride: int(bi.getStride()),
+		Stride: int(bi.Stride),
 		Rect:   image.Rect(0, 0, int(bi.Width), int(bi.Height)),
 	}
 }
@@ -53,5 +45,5 @@ func (bi *ByteImage) Compress(outputBuffer *bytes.Buffer, quality int) error {
 		return errors.New("the quality must be between 1 and 100")
 	}
 
-	return jpeg.Encode(outputBuffer, bi.getImage(), &jpeg.EncoderOptions{Quality: quality})
+	return jpeg.Encode(outputBuffer, Thumbnail(854, 480, bi), &jpeg.EncoderOptions{Quality: quality})
 }

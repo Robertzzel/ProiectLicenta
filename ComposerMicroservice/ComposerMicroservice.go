@@ -4,9 +4,11 @@ import (
 	. "Licenta/SocketFunctions"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,7 +24,15 @@ func checkErr(err error) {
 	}
 }
 
-func receiveFiles(listener net.Listener, videoFiles, audioFiles chan string) {
+func receiveFiles(videoFiles, audioFiles chan string) {
+	if _, err := os.Stat(socketName); !errors.Is(err, os.ErrNotExist) {
+		checkErr(os.Remove(socketName))
+	}
+
+	listener, err := net.Listen("unix", socketName)
+	checkErr(err)
+	defer listener.Close()
+
 	for i := 0; i < 2; i++ {
 		conn, err := listener.Accept()
 		checkErr(err)
@@ -47,61 +57,74 @@ func receiveFiles(listener net.Listener, videoFiles, audioFiles chan string) {
 	}
 }
 
-func processFiles(videoFileName, audioFileName string) (string, error) {
-	filePattern := fmt.Sprintf("*out%s.mp4", videoFileName[8:19])
+func getRouterConnection() (net.Conn, error) {
+	if _, err := os.Stat(routerSocketName); !errors.Is(err, os.ErrNotExist) {
+		if err := os.Remove(routerSocketName); err != nil {
+			return nil, err
+		}
+	}
 
-	outputFile, err := os.CreateTemp("", filePattern)
+	routerListener, err := net.Listen("unix", routerSocketName)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	if _, err := exec.Command("./CombineAndCompress", videoFileName, audioFileName, outputFile.Name(), "30").Output(); err != nil {
-		return "", err
+	return routerListener.Accept()
+}
+
+func getSyncedAudioAndVideo(videoChannel chan string, audioChannel chan string) (string, string, error) {
+	videoFile := <-videoChannel
+	audioFile := <-audioChannel
+
+	videoTimestamp, err := strconv.Atoi(videoFile[len(videoFile)-14 : len(videoFile)-4])
+	checkErr(err)
+	audioTimestamp, err := strconv.Atoi(audioFile[len(audioFile)-14 : len(audioFile)-4])
+	checkErr(err)
+
+	timestampDifference := videoTimestamp - audioTimestamp
+	if timestampDifference > 0 {
+		log.Println("Desync ", "audio by ", timestampDifference)
+		for i := 0; i < timestampDifference; i++ {
+			audioFile = <-audioChannel
+		}
+	} else if timestampDifference < 0 {
+		log.Println("Desync ", "video by ", timestampDifference)
+		for i := 0; i < timestampDifference; i++ {
+			videoFile = <-videoChannel
+		}
 	}
 
-	return outputFile.Name(), nil
+	return videoFile, audioFile, nil
 }
 
 func main() {
-	if _, err := os.Stat(socketName); !errors.Is(err, os.ErrNotExist) {
-		checkErr(os.Remove(socketName))
-	}
-
-	if _, err := os.Stat(routerSocketName); !errors.Is(err, os.ErrNotExist) {
-		checkErr(os.Remove(routerSocketName))
-	}
-
 	videoFiles := make(chan string, 10)
 	audioFiles := make(chan string, 10)
 
-	listener, err := net.Listen("unix", socketName)
+	go receiveFiles(videoFiles, audioFiles)
+
+	routerConnection, err := getRouterConnection()
 	checkErr(err)
-	defer listener.Close()
-
-	go receiveFiles(listener, videoFiles, audioFiles)
-
-	var routerConnection net.Conn = nil
-	routerListener, err := net.Listen("unix", routerSocketName)
-	checkErr(err)
-
-	go func() {
-		routerConnection, err = routerListener.Accept()
-		checkErr(err)
-	}()
 
 	for {
-		go func(videoFile, audioFile string) {
-			defer os.Remove(videoFile)
-			defer os.Remove(audioFile)
+		outputFile, err := os.CreateTemp("", "composed*.mp4")
+		checkErr(err)
+		checkErr(outputFile.Close())
 
-			fileName, err := processFiles(videoFile, audioFile)
-			checkErr(err)
+		videoFile, audioFile, err := getSyncedAudioAndVideo(videoFiles, audioFiles)
+		checkErr(err)
 
-			if routerConnection != nil {
-				checkErr(SendMessage(routerConnection, []byte(fileName)))
-			}
+		go func(videoFile, audioFile, outputFile string) {
+			s := time.Now()
 
-			fmt.Println("Sent", fileName, "at", time.Now().Unix())
-		}(<-videoFiles, <-audioFiles)
+			checkErr(exec.Command("./CombineAndCompress", videoFile, audioFile, outputFile, "0").Run())
+
+			checkErr(SendMessage(routerConnection, []byte(outputFile)))
+			fmt.Println(" video: ", outputFile, ", timestamp: ", videoFile[len(videoFile)-14:len(videoFile)-4], " at", time.Now().UnixMilli(), " (", time.Since(s), " )")
+
+			os.Remove(videoFile)
+			os.Remove(audioFile)
+		}(videoFile, audioFile, outputFile.Name())
+
 	}
 }

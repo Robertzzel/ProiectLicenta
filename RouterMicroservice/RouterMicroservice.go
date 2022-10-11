@@ -10,13 +10,28 @@ import (
 )
 
 const (
-	routerSocketName = "/tmp/router.sock"
-	port             = 8080
+	routerSocketName    = "/tmp/router.sock"
+	port                = 8080
+	inputExecutorSocket = "/tmp/inputExecutor.sock"
 )
 
 func checkErr(err error) {
 	if err != nil {
 		panic(err)
+	}
+}
+
+func inputHandler(clientConn net.Conn) {
+	fmt.Println("Wating for executor...")
+	conn, err := net.Dial("unix", inputExecutorSocket)
+	checkErr(err)
+
+	for {
+		fmt.Println("wating for command...")
+		inputReceived, err := ReceiveMessage(clientConn)
+		checkErr(err)
+		checkErr(SendMessage(conn, inputReceived))
+		fmt.Println("Sent")
 	}
 }
 
@@ -46,11 +61,15 @@ func main() {
 	log.Println("Listening at", hostname, ":", port, " ...")
 	clientConn, err := listener.Accept()
 	checkErr(err)
+	listener.Close()
+	defer clientConn.Close()
 
 	log.Println("Client connected")
 	connection, err := net.Dial("unix", routerSocketName)
 	checkErr(err)
+	defer connection.Close()
 
+	go inputHandler(clientConn)
 	for {
 		fileName, err := ReceiveMessage(connection)
 		fileContents, err := os.ReadFile(string(fileName))

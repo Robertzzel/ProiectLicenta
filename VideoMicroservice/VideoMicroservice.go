@@ -17,7 +17,7 @@ const (
 
 func checkErr(err error) {
 	if err != nil {
-		panic(err)
+		log.Fatal(err.Error())
 	}
 }
 
@@ -43,25 +43,20 @@ func synchronise() (time.Time, error) {
 
 func main() {
 	log.Println("Starting...")
-
 	composerConnection, err := net.Dial("unix", composerSocketName)
 	checkErr(err)
 
-	videoRecorder, err := NewRecorder(30)
+	videoRecorder, err := NewRecorder(24)
 	checkErr(err)
-	videoRecorder.Start()
 
 	startTime, err := synchronise()
 	checkErr(err)
-	fmt.Println("SYNC: ", startTime.Unix())
+	log.Println("SYNC: ", startTime.UnixMilli())
 
-	for iteration := 0; ; iteration++ {
-		partStartTime := startTime.Add(time.Duration(int64(videoSize) * int64(iteration)))
-		fileName := "videos/" + fmt.Sprint(partStartTime.Unix()) + ".mkv"
-
-		checkErr(videoRecorder.CreateFile(fileName, partStartTime, videoSize))
-		checkErr(SendMessage(composerConnection, []byte(fileName)))
-
-		fmt.Println("video", fileName, "sent at ", time.Now().Unix())
+	videoRecorder.Start(startTime, videoSize)
+	for {
+		videoName := <-videoRecorder.VideoBuffer
+		checkErr(SendMessage(composerConnection, []byte(videoName)))
+		fmt.Println(videoName, "sent at ", time.Now().UnixMilli())
 	}
 }

@@ -3,23 +3,24 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/icza/mjpeg"
-	"sync"
+	"os"
 	"time"
 )
 
 type Recorder struct {
-	buffer     []*ByteImage
-	startTime  time.Time
-	screenshot *Screenshot
-	fps        int64
+	screenshotTool *Screenshot
+	fps            int
+	width          int
+	height         int
+	imageBuffer    chan []byte
+	VideoBuffer    chan string
 }
-
-var mutex sync.Mutex
 
 func NewRecorder(fps int) (*Recorder, error) {
 	if fps > 60 && fps < 1 {
-		return nil, errors.New("fps must be between 1 and 600")
+		return nil, errors.New("fps must be between 1 and 60")
 	}
 
 	screenshot, err := NewScreenshot()
@@ -27,115 +28,70 @@ func NewRecorder(fps int) (*Recorder, error) {
 		return nil, err
 	}
 
-	return &Recorder{screenshot: screenshot, fps: int64(fps)}, nil
-}
-
-func (r *Recorder) getEndTime() time.Time {
-	return r.startTime.Add(
-		time.Duration(
-			int64(time.Second) / r.fps * int64(len(r.buffer)),
-		),
-	)
-}
-
-func (r *Recorder) Start() {
-	go r.startRecording()
-	go r.clean()
-}
-
-func (r *Recorder) clean() {
-	for {
-		if len(r.buffer) > int(r.fps)*5 {
-			mutex.Lock()
-			r.buffer = r.buffer[2*r.fps:]
-			r.startTime = r.startTime.Add(2 * time.Second)
-			mutex.Unlock()
-		} else {
-			time.Sleep(time.Second)
-		}
+	img, err := screenshot.Get()
+	if err != nil {
+		return nil, err
 	}
+
+	return &Recorder{
+		screenshotTool: screenshot,
+		fps:            fps,
+		width:          int(img.Width),
+		height:         int(img.Height),
+	}, nil
+}
+
+func (r *Recorder) Start(startTime time.Time, chunkSize time.Duration) {
+	r.imageBuffer = make(chan []byte, 256)
+	r.VideoBuffer = make(chan string, 10)
+	go func() {
+		for time.Now().Before(startTime) {
+			time.Sleep(time.Now().Sub(startTime))
+		}
+
+		go r.startRecording()
+		go r.processImagesBuffer(startTime, chunkSize)
+	}()
 }
 
 func (r *Recorder) startRecording() {
-	ticker := time.NewTicker(time.Duration(int64(time.Second) / r.fps))
+	ticker := time.NewTicker(time.Duration(int64(time.Second) / int64(r.fps)))
 
 	for {
-		<-ticker.C
-		go func() {
-			if r.startTime.IsZero() {
-				r.startTime = time.Now()
-			}
-
-			image, err := r.screenshot.Get()
+		go func(timeInitiated time.Time) {
+			img, err := r.screenshotTool.Get()
 			checkErr(err)
 
-			r.buffer = append(r.buffer, image)
-		}()
-	}
-}
-
-func (r *Recorder) CreateFile(fileName string, startTime time.Time, duration time.Duration) error {
-	// Get needed images
-	images, err := r.getFromBuffer(startTime, duration)
-	if err != nil {
-		return err
-	}
-
-	// Encode to png
-	encodedImages := make([][]byte, len(images))
-	var wg sync.WaitGroup
-	wg.Add(len(images))
-
-	for index, image := range images {
-		go func(index int, image *ByteImage) {
 			var encodedImageBuffer bytes.Buffer
-			checkErr(image.Compress(&encodedImageBuffer, 100))
-			encodedImages[index] = encodedImageBuffer.Bytes()
+			checkErr(img.Compress(&encodedImageBuffer, 100))
 
-			wg.Done()
-		}(index, image)
+			r.imageBuffer <- encodedImageBuffer.Bytes()
+		}(<-ticker.C)
 	}
-	wg.Wait()
-
-	// Create video file
-	video, err := mjpeg.New(fileName, int32(images[0].Width), int32(images[0].Height), int32(r.fps))
-	if err != nil {
-		return err
-	}
-
-	for _, image := range encodedImages {
-		if err := video.AddFrame(image); err != nil {
-			return err
-		}
-	}
-
-	return video.Close()
 }
 
-func (r *Recorder) getFromBuffer(startTime time.Time, duration time.Duration) ([]*ByteImage, error) {
-	if startTime.Before(r.startTime) {
-		return nil, errors.New("requested start time before video recorder start time")
+func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Duration) {
+	nextChunkEndTime := startTime.Add(chunkSize)
+	cwd, _ := os.Getwd()
+
+	for {
+		videoFileName := fmt.Sprintf("%s/videos/%s.mkv", cwd, fmt.Sprint(nextChunkEndTime.Add(-chunkSize).Unix()))
+
+		video, err := mjpeg.New(
+			videoFileName,
+			854,
+			480,
+			int32(r.fps),
+		)
+		checkErr(err)
+
+		for time.Now().Before(nextChunkEndTime) {
+			checkErr(video.AddFrame(<-r.imageBuffer))
+		}
+
+		checkErr(video.Close())
+		r.VideoBuffer <- videoFileName
+
+		nextChunkEndTime = nextChunkEndTime.Add(chunkSize)
 	}
-
-	if duration < 0 {
-		return nil, errors.New("duration must be positive")
-	}
-
-	// Wait for the recorder to record all needed images
-	partEndTime := startTime.Add(duration)
-	for r.getEndTime().Before(partEndTime) {
-		time.Sleep(partEndTime.Sub(r.getEndTime()))
-	}
-
-	// Compute offsets and size
-	size := uint(duration.Seconds() * float64(r.fps))
-	part := make([]*ByteImage, size)
-
-	mutex.Lock()
-	startTimeDifference := startTime.Sub(r.startTime).Seconds()
-	offset := uint(startTimeDifference * float64(r.fps))
-	copy(part, r.buffer[offset:offset+size])
-	mutex.Unlock()
-
-	return part, nil
 }

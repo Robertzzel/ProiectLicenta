@@ -115,7 +115,8 @@ func main() {
 	}
 	defer connection.Close()
 
-	if err := SendMessage(connection, []byte(finalVideoFile)); err != nil {
+	databaseMessage := fmt.Sprintf("insert;%s,%d", finalVideoFile, time.Now().Unix())
+	if err := SendMessage(connection, []byte(databaseMessage)); err != nil {
 		log.Fatal("Sending message to database microserv")
 	}
 

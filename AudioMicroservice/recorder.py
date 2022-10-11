@@ -1,16 +1,26 @@
+import os
 import threading
+import soundfile as sf
 import sounddevice as sd
-from threading import Thread, Event
-from audio_buffer import AudioBuffer
+import numpy as np
+import queue
+from typing import *
 import time
 
 SAMPLERATE = 44100
 CHANNELS = 1
 
 
+def create_audio_file(path, audio_buffer: np.ndarray, samplerate):
+    open(path, "w").close()  # create file
+    sf.write(path, audio_buffer, samplerate=samplerate)
+
+
 class Recorder:
-    def __init__(self):
-        self.buffer = AudioBuffer()
+    def __init__(self, audio_queue: queue.Queue):
+        self.buffer: np.ndarray = np.array([])
+        self.lock = threading.Lock()
+        self.audio_queue = audio_queue
         self.input_stream = sd.InputStream(
             samplerate=SAMPLERATE,
             channels=CHANNELS,
@@ -18,33 +28,45 @@ class Recorder:
             callback=self.stream_callback,
             latency='low', dtype='float32',
         )
-        self.cleanup_thread: Thread = threading.Thread(target=self.auto_cleanup)
-        self.close_event = Event()
+        self.process_thread: Optional[threading.Thread] = None
 
-    def start(self):
+    def start(self, start_time: time.time, chunk_size_seconds: int):
+        while start_time - 1 - time.time() > 0:
+            time.sleep(start_time - time.time())
+
         self.input_stream.start()
-        while self.buffer.start_time is None:
-            time.sleep(0.01)
-
-        self.cleanup_thread.start()
-
-    def stop(self):
-        self.input_stream.stop()
+        self.process_thread = threading.Thread(target=self.process_buffer, args=(start_time, chunk_size_seconds))
+        self.process_thread.start()
 
     def close(self):
-        self.close_event.set()
         self.input_stream.close()
-        self.cleanup_thread.join()
 
-    def auto_cleanup(self):
-        while not self.close_event.is_set():
-            if len(self.buffer) >= SAMPLERATE * 10:
-                self.buffer.delete_from(SAMPLERATE * 3)
-            else:
-                time.sleep(1)
+    def stream_callback(self, indata, _, time_info, s_):
+        self.lock.acquire()
+        self.buffer = np.append(self.buffer, indata)
+        self.lock.release()
 
-    def stream_callback(self, indata, _, t_, s_):
-        self.buffer.append(indata)
+    def process_buffer(self, start_time: time.time, chunk_size_seconds: int):
+        next_chunk_end = start_time + chunk_size_seconds
+        cwd = os.getcwd()
+
+        while True:
+            while next_chunk_end - time.time() > 0:
+                time.sleep(next_chunk_end - time.time())
+
+            self.lock.acquire()
+            audio_chunk = self.buffer.tolist()[:]
+            self.buffer = np.array([])
+            self.lock.release()
+
+            if len(audio_chunk) > SAMPLERATE:
+                audio_chunk = audio_chunk[len(audio_chunk) - SAMPLERATE:]
+
+            audio_file_name = cwd + "/audio/" + str(int(next_chunk_end - chunk_size_seconds)) + ".wav"
+            create_audio_file(audio_file_name, audio_chunk, SAMPLERATE)
+            self.audio_queue.put_nowait(audio_file_name)
+
+            next_chunk_end = next_chunk_end + chunk_size_seconds
 
     @staticmethod
     def get_device(device_name: str):
@@ -52,15 +74,3 @@ class Recorder:
             if device_name in dev['name']:
                 return index
         return None
-
-    def get(self, start_time, seconds):
-        end_time_difference = self.buffer.end_time() - (start_time + seconds)
-        while end_time_difference < 0:
-            time.sleep(-end_time_difference)
-            end_time_difference = self.buffer.end_time() - (start_time + seconds)
-
-        start_difference_time = start_time - self.buffer.start_time
-        part_offset = int(start_difference_time * SAMPLERATE)
-        part_size = seconds * SAMPLERATE
-
-        return self.buffer.get(part_offset, part_size)

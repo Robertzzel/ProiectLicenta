@@ -1,3 +1,4 @@
+import queue
 import socket
 import time
 import numpy as np
@@ -22,14 +23,14 @@ def synchronise():
 def receive_message(connection: socket.socket) -> bytes:
     message_size = b''
     while True:
-        message_size += connection.recv(MESSAGE_SIZE_LENGTH)
+        message_size += connection.recv(MESSAGE_SIZE_LENGTH - len(message_size))
         if len(message_size) >= MESSAGE_SIZE_LENGTH:
             break
 
     message_size = int(message_size.decode())
     message = b''
     while True:
-        message += connection.recv(message_size)
+        message += connection.recv(message_size - len(message))
         if len(message) >= message_size:
             break
 
@@ -49,8 +50,8 @@ def create_audio_file(path, audio_buffer, samplerate):
 if __name__ == "__main__":
     print("Starting...")
 
-    audio_recorder: Recorder = Recorder()
-    audio_recorder.start()
+    recorder_queue = queue.Queue(10)
+    audio_recorder: Recorder = Recorder(recorder_queue)
 
     composer_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     composer_socket.connect(COMPOSER_SOCKET_NAME)
@@ -58,14 +59,9 @@ if __name__ == "__main__":
     current_time = synchronise()
     print("SYNC: ", current_time)
 
-    iteration = 0
+    audio_recorder.start(current_time, VIDE_SIZE)
     while True:
-        part_start_time = current_time + iteration * VIDE_SIZE
-        buffer = audio_recorder.get(part_start_time, VIDE_SIZE)
-        file_path = f"audio/" + str(part_start_time) + ".wav"
+        audio_file: str = recorder_queue.get(block=True)
+        send_message(composer_socket, audio_file.encode())
+        print(f"message {audio_file} sent at {time.time()}")
 
-        create_audio_file(file_path, buffer, SAMPLERATE)
-        send_message(composer_socket, file_path.encode())
-        print(f"message {file_path} sent at {time.time()}")
-
-        iteration += 1

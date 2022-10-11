@@ -117,16 +117,13 @@ func main() {
 		go func(videoFile, audioFile, outputFile string) {
 			s := time.Now()
 
-			defer func() {
-				os.Remove(videoFile)
-				os.Remove(audioFile)
-			}()
-
-			checkErr(exec.Command("./CombineAndCompress", videoFile, audioFile, outputFile, "35").Run())
+			checkErr(exec.Command("./CombineAndCompress", videoFile, audioFile, outputFile, "0").Run())
 
 			checkErr(SendMessage(routerConnection, []byte(outputFile)))
 			fmt.Println(" video: ", outputFile, ", timestamp: ", videoFile[len(videoFile)-14:len(videoFile)-4], " at", time.Now().UnixMilli(), " (", time.Since(s), " )")
 
+			os.Remove(videoFile)
+			os.Remove(audioFile)
 		}(videoFile, audioFile, outputFile.Name())
 
 	}

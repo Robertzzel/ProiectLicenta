@@ -61,10 +61,13 @@ func main() {
 	log.Println("Listening at", hostname, ":", port, " ...")
 	clientConn, err := listener.Accept()
 	checkErr(err)
+	listener.Close()
+	defer clientConn.Close()
 
 	log.Println("Client connected")
 	connection, err := net.Dial("unix", routerSocketName)
 	checkErr(err)
+	defer connection.Close()
 
 	go inputHandler(clientConn)
 	for {

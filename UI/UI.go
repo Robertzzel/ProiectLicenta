@@ -140,10 +140,12 @@ func openUIInBrowser() error {
 }
 
 func handleInputs(inputsReader net.Conn, inputsWriter net.Conn) {
-	inputCommand, err := ReceiveMessage(inputsReader)
-	checkErr(err)
+	for {
+		inputCommand, err := ReceiveMessage(inputsReader)
+		checkErr(err)
 
-	checkErr(SendMessage(inputsWriter, inputCommand))
+		checkErr(SendMessage(inputsWriter, inputCommand))
+	}
 }
 
 func main() {

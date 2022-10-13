@@ -1,67 +1,46 @@
 import queue
-import socket
+import sys
 import time
 import numpy as np
 import soundfile as sf
 from recorder import Recorder
+import kafka
 
-SYNC_SOCKET_NAME = "/tmp/sync.sock"
-COMPOSER_SOCKET_NAME = "/tmp/composer.sock"
+AUDIO_TOPIC = "audio"
 VIDE_SIZE = 1
 SAMPLERATE = 44100
 MESSAGE_SIZE_LENGTH = 10
+BROKER_ADDRESS = "localhost:9092"
 
 
-def synchronise():
-    sync_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sync_socket.connect(SYNC_SOCKET_NAME)
-
-    timestamp = receive_message(sync_socket)
-    return int(timestamp.decode())
-
-
-def receive_message(connection: socket.socket) -> bytes:
-    message_size = b''
-    while True:
-        message_size += connection.recv(MESSAGE_SIZE_LENGTH - len(message_size))
-        if len(message_size) >= MESSAGE_SIZE_LENGTH:
-            break
-
-    message_size = int(message_size.decode())
-    message = b''
-    while True:
-        message += connection.recv(message_size - len(message))
-        if len(message) >= message_size:
-            break
-
-    return message
-
-
-def send_message(connection: socket.socket, message: bytes):
-    connection.sendall(str(len(message)).rjust(10, '0').encode())
-    connection.sendall(message)
-
-
-def create_audio_file(path, audio_buffer, samplerate):
+def create_audio_file(path, audio_buffer):
     open(path, "w").close()  # create file
-    sf.write(path, np.array(audio_buffer, dtype='float32'), samplerate=samplerate)
+    sf.write(path, np.array(audio_buffer, dtype='float32'), samplerate=SAMPLERATE)
 
 
 if __name__ == "__main__":
-    print("Starting...")
+    if len(sys.argv) < 2:
+        print("No timestamp given")
+        sys.exit(1)
 
     recorder_queue = queue.Queue(10)
     audio_recorder: Recorder = Recorder(recorder_queue)
+    producer = kafka.KafkaProducer(bootstrap_servers=BROKER_ADDRESS, acks=1)
 
-    composer_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    composer_socket.connect(COMPOSER_SOCKET_NAME)
+    try:
+        audio_recorder.start(int(sys.argv[1]), VIDE_SIZE)
 
-    current_time = synchronise()
-    print("SYNC: ", current_time)
+        while True:
+            audio_file: str = recorder_queue.get(block=True)
+            producer.send(AUDIO_TOPIC, audio_file.encode())
+            print(f"message {audio_file} sent at {time.time()}")
+    except KeyboardInterrupt:
+        print("Keyboard interrupt")
+    except Exception as ex:
+        print("ERROR!: ", ex)
 
-    audio_recorder.start(current_time, VIDE_SIZE)
-    while True:
-        audio_file: str = recorder_queue.get(block=True)
-        send_message(composer_socket, audio_file.encode())
-        print(f"message {audio_file} sent at {time.time()}")
+    audio_recorder.close()
+    producer.close()
+    kafka.KafkaAdminClient(bootstrap_servers=BROKER_ADDRESS).delete_topics([AUDIO_TOPIC])
+    print("Cleanup done")
 

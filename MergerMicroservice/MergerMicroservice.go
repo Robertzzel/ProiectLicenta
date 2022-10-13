@@ -1,33 +1,27 @@
 package main
 
 import (
-	. "Licenta/SocketFunctions"
-	"errors"
+	"Licenta/Kafka"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/exec"
 	"time"
 )
 
 const (
-	socketName        = "/tmp/merger.sock"
 	receivedVideosDir = "/tmp/receivedVideos"
-	databaseSocket    = "/tmp/database.sock"
+	UiTopic           = "UI"
+	MergerTopic       = "Merger"
 )
 
-func getUIConnection() (net.Conn, error) {
-	listener, err := net.Listen("unix", socketName)
+func checkErr(err error) {
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	defer listener.Close()
-
-	return listener.Accept()
 }
 
-func createFileWithVideos(videos []string) (string, error) {
+func createFileWithVideoNames(videos []string) (string, error) {
 	txtFile, err := os.CreateTemp(receivedVideosDir, "*.txt")
 	if err != nil {
 		return "", err
@@ -56,29 +50,28 @@ func createFileWithVideos(videos []string) (string, error) {
 }
 
 func main() {
-	if _, err := os.Stat(socketName); !errors.Is(err, os.ErrNotExist) {
-		if err := os.Remove(socketName); err != nil {
-			log.Fatal("Cannot delete last unix socket", err)
-		}
-	}
+	log.Println("Started...")
 
-	if err := os.Mkdir(receivedVideosDir, os.ModePerm); err != nil {
-		log.Println("Cannot create dir for received videos", err)
-	}
+	checkErr(Kafka.CreateTopic(MergerTopic))
+	defer Kafka.DeleteTopic(MergerTopic)
 
-	log.Println("Connecting to UI...")
-	uiConnection, err := getUIConnection()
-	if err != nil {
-		log.Fatal("Cannot connect to UI", err)
-	}
-	defer uiConnection.Close()
+	uiConsumer := Kafka.NewConsumer(UiTopic)
+	defer uiConsumer.Close()
+
+	mergerPublisher := Kafka.NewProducer(MergerTopic)
+	defer mergerPublisher.Close()
+
+	os.Mkdir(receivedVideosDir, os.ModePerm)
 
 	receivedVideos := make([]string, 0, 16)
-	log.Println("Started...")
 	for {
-		video, err := ReceiveMessage(uiConnection)
+		video, err := uiConsumer.Consume()
 		if err != nil {
 			log.Println("Error while receiving videos ", err)
+			break
+		}
+
+		if string(video.Value) == "quit" {
 			break
 		}
 
@@ -88,7 +81,7 @@ func main() {
 			break
 		}
 
-		_, err = file.Write(video)
+		_, err = file.Write(video.Value)
 		if err != nil {
 			log.Println("Cannot write received video in a file", err)
 			break
@@ -98,28 +91,17 @@ func main() {
 		receivedVideos = append(receivedVideos, file.Name())
 	}
 
-	txtFileName, err := createFileWithVideos(receivedVideos)
-	if err != nil {
-		log.Fatal("Error while creating txt file with all videos ", err)
-	}
+	txtFileName, err := createFileWithVideoNames(receivedVideos)
+	checkErr(err)
 
 	finalVideoFile := fmt.Sprintf("%d.mp4", time.Now().Unix())
-	if _, err := exec.Command("./VideoConcatter", txtFileName, finalVideoFile).Output(); err != nil {
-		log.Fatal("Error while concatting received videos ", err)
-	}
-
+	checkErr(exec.Command("./VideoConcatter", txtFileName, finalVideoFile).Run())
 	log.Println("Created", finalVideoFile)
-	connection, err := net.Dial("unix", databaseSocket)
-	if err != nil {
-		return
-	}
-	defer connection.Close()
 
 	databaseMessage := fmt.Sprintf("insert;%s,%d", finalVideoFile, time.Now().Unix())
-	if err := SendMessage(connection, []byte(databaseMessage)); err != nil {
-		log.Fatal("Sending message to database microserv")
-	}
+	checkErr(mergerPublisher.Publish([]byte(databaseMessage)))
 
+	// Cleaning
 	log.Println("Cleaning ", len(receivedVideos), " files..")
 	for _, videoFile := range receivedVideos {
 		if err = os.Remove(videoFile); err != nil {

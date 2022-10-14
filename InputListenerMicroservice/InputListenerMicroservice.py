@@ -1,6 +1,8 @@
 import threading
 
 import queue
+
+import time
 from pynput import mouse
 from pynput import keyboard
 import kafka
@@ -13,6 +15,27 @@ CLICK = 2
 SCROLL = 3
 PRESS = 4
 RELEASE = 5
+
+
+class SafeBytes:
+    def __init__(self, txt: bytes = b""):
+        self.text = txt
+        self.lock = threading.Lock()
+        self.last_update: time.time = None
+
+    def add(self, text: bytes):
+        with self.lock:
+            current_time = time.time()
+            self.text += text + b"," + str(round(current_time - self.last_update, 4) if self.last_update is not None else 0).encode() + b";"
+            self.last_update = current_time
+
+    def get(self) -> bytes:
+        with self.lock:
+            returned = self.text[:-1]
+            self.text = b""
+            self.last_update = None
+
+        return returned
 
 
 def get_screen_sizes():
@@ -34,40 +57,40 @@ def get_screen_sizes():
 screen_width, screen_height = get_screen_sizes()
 producer = kafka.KafkaProducer(bootstrap_servers=BROKER_ADDRESS, acks=1)
 inputs_queue = queue.Queue(100)
+inputs_message = SafeBytes()
 
 
 def send_inputs():
-    next_message = b""
-
     while True:
-        command = inputs_queue.get()
-        next_message += command
+        time.sleep(1)
+        print(inputs_message.get())
+
 
 def on_move(x, y):
-    producer.send(INPUTS_TOPIC, f"{MOVE},{x/screen_width},{y/screen_height}".encode())
+    inputs_message.add(f"{MOVE},{round(x/screen_width, 2)},{round(y/screen_height, 2)}".encode())
 
 
 def on_click(x, y, button, pressed):
-    producer.send(INPUTS_TOPIC, f"{CLICK},{button.name},{int(pressed)}".encode())
+    inputs_message.add(f"{CLICK},{button.name},{int(pressed)}".encode())
 
 
 def on_scroll(x, y, dx, dy):
-    producer.send(INPUTS_TOPIC, f"{SCROLL},{dx},{dy}".encode())
+    inputs_message.add(f"{SCROLL},{dx},{dy}".encode())
 
 
 def on_press(key):
     if type(key) == keyboard.KeyCode:
-        producer.send(INPUTS_TOPIC, f"{PRESS},{ord(key.char)}".encode())
+        inputs_message.add(f"{PRESS},{ord(key.char)}".encode())
         return
-    producer.send(INPUTS_TOPIC, f"{PRESS},{key.name}".encode())
+    inputs_message.add(f"{PRESS},{key.name}".encode())
 
 
 def on_release(key):
     if type(key) == keyboard.KeyCode:
-        producer.send(INPUTS_TOPIC, f"{RELEASE},{ord(key.char)}".encode())
+        inputs_message.add(f"{RELEASE},{ord(key.char)}".encode())
         return
 
-    producer.send(INPUTS_TOPIC, f"{RELEASE},{key.name}".encode())
+    inputs_message.add(f"{RELEASE},{key.name}".encode())
 
 
 def main():
@@ -83,11 +106,15 @@ def main():
             on_release=on_release,
         )
 
+        sending_thread = threading.Thread(target=send_inputs)
+
         keyboard_listener.start()
         mouse_listener.start()
+        sending_thread.start()
 
         mouse_listener.join()
         keyboard_listener.join()
+        sending_thread.join()
     except KeyboardInterrupt:
         pass
     except Exception:

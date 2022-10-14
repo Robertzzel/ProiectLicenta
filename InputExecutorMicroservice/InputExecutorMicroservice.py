@@ -1,5 +1,6 @@
 import kafka
 import pynput
+import time
 
 INPUTS_TOPIC = "inputs"
 MOVE = 1
@@ -32,35 +33,40 @@ def main():
     consumer = kafka.KafkaConsumer(INPUTS_TOPIC)
 
     for msg in consumer:
-        components = msg.value.decode().split(",")
-        action = int(components[0])
+        commands = msg.value.decode().split(";")
+        for command in commands:
+            components = command.split(",")
+            action = int(components[0])
 
-        if action == MOVE:
-            x, y = int(float(components[1]) * width), int(float(components[2]) * height)
-            mouse_controller.position = (x, y)
-        elif action == CLICK:
-            button, pressed = components[1], int(components[2])
-            if pressed:
-                mouse_controller.press(pynput.mouse.Button[button])
-            else:
-                mouse_controller.release(pynput.mouse.Button[button])
-        elif action == PRESS:
-            if len(components[1]) == 1:
-                keyboard_controller.press(chr(int(components[1])))
-            elif len(components[1]) > 1:
-                keyboard_controller.press(pynput.keyboard.Key[components[1]])
-            else:
-                keyboard_controller.press(",")
-        elif action == RELEASE:
-            if len(components[1]) == 1:
-                keyboard_controller.release(chr(int(components[1])))
-            elif len(components[1]) > 1:
-                keyboard_controller.release(pynput.keyboard.Key[components[1]])
-            else:
-                keyboard_controller.press(",")
-        elif action == SCROLL:
-            dx, dy = int(components[1]), int(components[1])
-            mouse_controller.scroll(dx, -dy)
+            if action == MOVE:
+                x, y = int(float(components[1]) * width), int(float(components[2]) * height)
+                time.sleep(time.time() - int(components[3]))
+                mouse_controller.position = (x, y)
+            elif action == CLICK:
+                button, pressed = components[1], int(components[2])
+                time.sleep(time.time() - int(components[3]))
+                if pressed:
+                    mouse_controller.press(pynput.mouse.Button[button])
+                else:
+                    mouse_controller.release(pynput.mouse.Button[button])
+            elif action == PRESS:
+                if components[1].isnumeric():
+                    time.sleep(time.time() - int(components[2]))
+                    keyboard_controller.press(chr(int(components[1])))
+                else:
+                    time.sleep(time.time() - int(components[2]))
+                    keyboard_controller.press(pynput.keyboard.Key[components[1]])
+            elif action == RELEASE:
+                if components[1].isnumeric():
+                    time.sleep(time.time() - int(components[2]))
+                    keyboard_controller.release(chr(int(components[1])))
+                else:
+                    time.sleep(time.time() - int(components[2]))
+                    keyboard_controller.release(pynput.keyboard.Key[components[1]])
+            elif action == SCROLL:
+                dx, dy = int(components[1]), int(components[1])
+                time.sleep(time.time() - int(components[3]))
+                mouse_controller.scroll(dx, -dy)
 
 
 if __name__ == "__main__":

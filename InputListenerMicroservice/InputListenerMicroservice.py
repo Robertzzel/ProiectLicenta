@@ -1,7 +1,6 @@
 import threading
-
 import queue
-
+import sys
 import time
 from pynput import mouse
 from pynput import keyboard
@@ -62,8 +61,8 @@ inputs_message = SafeBytes()
 
 def send_inputs():
     while True:
-        time.sleep(1)
-        print(inputs_message.get())
+        time.sleep(0.1)
+        producer.send(INPUTS_TOPIC, inputs_message.get())
 
 
 def on_move(x, y):
@@ -122,6 +121,7 @@ def main():
 
     kafka.KafkaAdminClient(bootstrap_servers=BROKER_ADDRESS).delete_topics([INPUTS_TOPIC])
     print("Cleanup done.")
+    sys.exit(0)
 
 
 if __name__ == "__main__":

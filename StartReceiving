@@ -4,4 +4,5 @@
 ./build
 xterm -hold -T "Merger" -e ./MergerMicroservice/MergerMicroservice &
 xterm -hold -T "Database" -e ./DatabaseMicroservice/DatabaseMicroservice &
+xterm -hold -T "InputExecutor" -e venv/bin/python3 InputExecutorMicroservice/InputExecutorMicroservice.py &
 xterm -hold -T "UI" -e ./UI/UI

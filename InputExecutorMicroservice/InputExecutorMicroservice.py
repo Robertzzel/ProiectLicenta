@@ -46,14 +46,14 @@ def main():
                 mouse_controller.release(pynput.mouse.Button[button])
         elif action == PRESS:
             if len(components[1]) == 1:
-                keyboard_controller.press(components[1])
+                keyboard_controller.press(chr(int(components[1])))
             elif len(components[1]) > 1:
                 keyboard_controller.press(pynput.keyboard.Key[components[1]])
             else:
                 keyboard_controller.press(",")
         elif action == RELEASE:
             if len(components[1]) == 1:
-                keyboard_controller.release(components[1])
+                keyboard_controller.release(chr(int(components[1])))
             elif len(components[1]) > 1:
                 keyboard_controller.release(pynput.keyboard.Key[components[1]])
             else:

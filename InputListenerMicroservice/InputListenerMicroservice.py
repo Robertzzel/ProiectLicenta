@@ -1,4 +1,6 @@
 import threading
+
+import queue
 from pynput import mouse
 from pynput import keyboard
 import kafka
@@ -31,7 +33,15 @@ def get_screen_sizes():
 
 screen_width, screen_height = get_screen_sizes()
 producer = kafka.KafkaProducer(bootstrap_servers=BROKER_ADDRESS, acks=1)
+inputs_queue = queue.Queue(100)
 
+
+def send_inputs():
+    next_message = b""
+
+    while True:
+        command = inputs_queue.get()
+        next_message += command
 
 def on_move(x, y):
     producer.send(INPUTS_TOPIC, f"{MOVE},{x/screen_width},{y/screen_height}".encode())
@@ -47,14 +57,14 @@ def on_scroll(x, y, dx, dy):
 
 def on_press(key):
     if type(key) == keyboard.KeyCode:
-        producer.send(INPUTS_TOPIC, f"{PRESS},{key.char}".encode())
+        producer.send(INPUTS_TOPIC, f"{PRESS},{ord(key.char)}".encode())
         return
     producer.send(INPUTS_TOPIC, f"{PRESS},{key.name}".encode())
 
 
 def on_release(key):
     if type(key) == keyboard.KeyCode:
-        producer.send(INPUTS_TOPIC, f"{RELEASE},{key.char}".encode())
+        producer.send(INPUTS_TOPIC, f"{RELEASE},{ord(key.char)}".encode())
         return
 
     producer.send(INPUTS_TOPIC, f"{RELEASE},{key.name}".encode())

@@ -1,44 +1,12 @@
-import socket
+import kafka
 import pynput
 
-INPUT_EXECUTOR_SOCKET_NAME = "/tmp/inputExecutor.sock"
-MESSAGE_SIZE_LENGTH = 10
+INPUTS_TOPIC = "inputs"
 MOVE = 1
 CLICK = 2
 SCROLL = 3
 PRESS = 4
 RELEASE = 5
-
-
-def receive_message(connection: socket.socket) -> bytes:
-    message_size = b''
-    while True:
-        message_size += connection.recv(MESSAGE_SIZE_LENGTH - len(message_size))
-        if len(message_size) >= MESSAGE_SIZE_LENGTH:
-            break
-
-    message_size = int(message_size.decode())
-    message = b''
-    while True:
-        message += connection.recv(message_size - len(message))
-        if len(message) >= message_size:
-            break
-
-    return message
-
-
-def get_router_connection() -> socket.socket:
-    import os
-
-    if os.path.exists(INPUT_EXECUTOR_SOCKET_NAME):
-        os.remove(INPUT_EXECUTOR_SOCKET_NAME)
-
-    router_connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    router_connection.bind(INPUT_EXECUTOR_SOCKET_NAME)
-    router_connection.listen()
-    conn, _ = router_connection.accept()
-
-    return conn
 
 
 def get_screen_sizes():
@@ -58,14 +26,13 @@ def get_screen_sizes():
 
 
 def main():
-    router = get_router_connection()
     width, height = get_screen_sizes()
     keyboard_controller: pynput.keyboard.Controller = pynput.keyboard.Controller()
     mouse_controller: pynput.mouse.Controller = pynput.mouse.Controller()
+    consumer = kafka.KafkaConsumer(INPUTS_TOPIC)
 
-    while True:
-        command = receive_message(router).decode()
-        components = command.split(",")
+    for msg in consumer:
+        components = msg.value.decode().split(",")
         action = int(components[0])
 
         if action == MOVE:

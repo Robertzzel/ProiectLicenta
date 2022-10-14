@@ -60,6 +60,8 @@ func getSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer) (strin
 }
 
 func main() {
+	checkErr(Kafka.CreateTopic(ComposerTopic))
+
 	videoConsumer := Kafka.NewConsumer(VideoTopic)
 	audioConsumer := Kafka.NewConsumer(AudioTopic)
 	composerProducer := Kafka.NewProducerAsync(ComposerTopic)

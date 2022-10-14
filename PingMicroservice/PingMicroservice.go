@@ -3,7 +3,10 @@ package main
 import (
 	"Licenta/Kafka"
 	"fmt"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 )
 
 const (
@@ -17,7 +20,7 @@ func checkErr(err error) {
 	}
 }
 
-func Abs(nr int64) int64 {
+func Abs(nr int) int {
 	if nr > 0 {
 		return nr
 	}
@@ -25,42 +28,42 @@ func Abs(nr int64) int64 {
 }
 
 func main() {
-	streamerPings := make(chan int64, 10)
-	receiverPings := make(chan int64, 10)
+	checkErr(Kafka.CreateTopic(ReceiverTopic))
+	defer Kafka.DeleteTopic(ReceiverTopic)
 
+	checkErr(Kafka.CreateTopic(StreamerTopic))
+	defer Kafka.DeleteTopic(StreamerTopic)
+
+	receiverConsumer := Kafka.NewConsumer(ReceiverTopic)
+	defer receiverConsumer.Close()
+
+	streamerConsumer := Kafka.NewConsumer(StreamerTopic)
+	defer streamerConsumer.Close()
+
+	quit := make(chan os.Signal, 2)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		checkErr(Kafka.CreateTopic(StreamerTopic))
-		defer Kafka.DeleteTopic(StreamerTopic)
-
-		producer := Kafka.NewConsumer(StreamerTopic)
-		defer producer.Close()
-
-		msg, err := producer.Consume()
-		checkErr(err)
-
-		timestamp, err := strconv.Atoi(string(msg.Value))
-		checkErr(err)
-
-		streamerPings <- int64(timestamp)
-	}()
-
-	go func() {
-		checkErr(Kafka.CreateTopic(ReceiverTopic))
-		defer Kafka.DeleteTopic(ReceiverTopic)
-
-		producer := Kafka.NewConsumer(ReceiverTopic)
-		defer producer.Close()
-
-		msg, err := producer.Consume()
-		checkErr(err)
-
-		timestamp, err := strconv.Atoi(string(msg.Value))
-		checkErr(err)
-
-		receiverPings <- int64(timestamp)
+		<-quit
+		fmt.Println("Starting cleanup")
+		Kafka.DeleteTopic(ReceiverTopic)
+		Kafka.DeleteTopic(StreamerTopic)
+		fmt.Println("Cleanup done")
+		os.Exit(1)
 	}()
 
 	for {
-		fmt.Println(Abs(<-streamerPings - <-receiverPings))
+		msgStreamer, err := receiverConsumer.Consume()
+		checkErr(err)
+
+		msgReceiver, err := streamerConsumer.Consume()
+		checkErr(err)
+
+		tsReceiver, err := strconv.Atoi(string(msgReceiver.Value))
+		checkErr(err)
+
+		tsStreamer, err := strconv.Atoi(string(msgStreamer.Value))
+		checkErr(err)
+
+		fmt.Println(Abs(tsReceiver - tsStreamer))
 	}
 }

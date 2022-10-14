@@ -4,16 +4,12 @@ cd VideoMicroservice
 go build VideoMicroservice.go recorder.go resizer.go screenshot.go screen.go byte_image.go
 cd ..
 
-cd ComposerMicroservice
-go build ComposerMicroservice.go
+cd AggregatorMicroservice
+go build AggregatorMicroservice.go
 cd ..
 
-cd RouterMicroservice
-go build RouterMicroservice.go
-cd ..
-
-cd Synchroniser
-go build SynchroniserMicroservice.go
+cd UI
+go build UI.go
 cd ..
 
 cd MergerMicroservice

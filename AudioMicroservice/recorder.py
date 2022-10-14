@@ -29,6 +29,7 @@ class Recorder:
             latency='low', dtype='float32',
         )
         self.process_thread: Optional[threading.Thread] = None
+        self.running = True
 
     def start(self, start_time: time.time, chunk_size_seconds: int):
         while start_time - 1 - time.time() > 0:
@@ -40,6 +41,8 @@ class Recorder:
 
     def close(self):
         self.input_stream.close()
+        self.running = False
+        self.process_thread.join()
 
     def stream_callback(self, indata, _, time_info, s_):
         self.lock.acquire()
@@ -50,7 +53,7 @@ class Recorder:
         next_chunk_end = start_time + chunk_size_seconds
         cwd = os.getcwd()
 
-        while True:
+        while self.running:
             while next_chunk_end - time.time() > 0:
                 time.sleep(next_chunk_end - time.time())
 

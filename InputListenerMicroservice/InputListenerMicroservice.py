@@ -1,10 +1,10 @@
 import threading
 from pynput import mouse
 from pynput import keyboard
-import socket
+import kafka
 
-MESSAGE_SIZE_LENGTH = 10
-SOCKET_NAME = "/tmp/inputListener.sock"
+INPUTS_TOPIC = "inputs"
+BROKER_ADDRESS = "localhost:9092"
 
 MOVE = 1
 CLICK = 2
@@ -30,90 +30,61 @@ def get_screen_sizes():
 
 
 screen_width, screen_height = get_screen_sizes()
+producer = kafka.KafkaProducer(bootstrap_servers=BROKER_ADDRESS, acks=1)
 
 
-def get_ui_connection() -> socket.socket:
-    import os
-
-    if os.path.exists(SOCKET_NAME):
-        os.remove(SOCKET_NAME)
-
-    ui_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    ui_connection.bind(("localhost", 5001))
-    ui_connection.listen()
-    conn, _ = ui_connection.accept()
-
-    return conn
+def on_move(x, y):
+    producer.send(INPUTS_TOPIC, f"{MOVE},{x/screen_width},{y/screen_height}".encode())
 
 
-def receive_message(connection: socket.socket) -> bytes:
-    message_size = b''
-    while True:
-        message_size += connection.recv(MESSAGE_SIZE_LENGTH - len(message_size))
-        if len(message_size) >= MESSAGE_SIZE_LENGTH:
-            break
-
-    message_size = int(message_size.decode())
-    message = b''
-    while True:
-        message += connection.recv(message_size - len(message))
-        if len(message) >= message_size:
-            break
-
-    return message
+def on_click(x, y, button, pressed):
+    producer.send(INPUTS_TOPIC, f"{CLICK},{button.name},{int(pressed)}".encode())
 
 
-def send_message(connection: socket.socket, message: bytes):
-    connection.sendall(str(len(message)).rjust(10, '0').encode())
-    connection.sendall(message)
+def on_scroll(x, y, dx, dy):
+    producer.send(INPUTS_TOPIC, f"{SCROLL},{dx},{dy}".encode())
 
 
-def on_move(x, y, ui):
-    send_message(ui, f"{MOVE},{x/screen_width},{y/screen_height}".encode())
-
-
-def on_click(x, y, button, pressed, ui):
-    send_message(ui, f"{CLICK},{button.name},{int(pressed)}".encode())
-
-
-def on_scroll(x, y, dx, dy, ui):
-    send_message(ui, f"{SCROLL},{dx},{dy}".encode())
-
-
-def on_press(key, ui):
+def on_press(key):
     if type(key) == keyboard.KeyCode:
-        send_message(ui, f"{PRESS},{key.char}".encode())
+        producer.send(INPUTS_TOPIC, f"{PRESS},{key.char}".encode())
         return
-    send_message(ui, f"{PRESS},{key.name}".encode())
+    producer.send(INPUTS_TOPIC, f"{PRESS},{key.name}".encode())
 
 
-def on_release(key, ui):
+def on_release(key):
     if type(key) == keyboard.KeyCode:
-        send_message(ui, f"{RELEASE},{key.char}".encode())
+        producer.send(INPUTS_TOPIC, f"{RELEASE},{key.char}".encode())
         return
 
-    send_message(ui, f"{RELEASE},{key.name}".encode())
+    producer.send(INPUTS_TOPIC, f"{RELEASE},{key.name}".encode())
 
 
 def main():
-    ui_connection = get_ui_connection()
+    try:
+        mouse_listener: threading.Thread = mouse.Listener(
+            on_move=on_move,
+            on_click=on_click,
+            on_scroll=on_scroll,
+        )
 
-    mouse_listener: threading.Thread = mouse.Listener(
-        on_move=lambda x, y: on_move(x, y, ui_connection),
-        on_click=lambda x, y, button, pressed: on_click(x, y, button, pressed, ui_connection),
-        on_scroll=lambda x, y, dx, dy: on_scroll(x, y, dx, dy, ui_connection)
-    )
+        keyboard_listener: threading.Thread = keyboard.Listener(
+            on_press=on_press,
+            on_release=on_release,
+        )
 
-    keyboard_listener: threading.Thread = keyboard.Listener(
-        on_press=lambda key: on_press(key, ui_connection),
-        on_release=lambda key: on_release(key, ui_connection),
-    )
+        keyboard_listener.start()
+        mouse_listener.start()
 
-    keyboard_listener.start()
-    mouse_listener.start()
+        mouse_listener.join()
+        keyboard_listener.join()
+    except KeyboardInterrupt:
+        pass
+    except Exception:
+        pass
 
-    mouse_listener.join()
-    keyboard_listener.join()
+    kafka.KafkaAdminClient(bootstrap_servers=BROKER_ADDRESS).delete_topics([INPUTS_TOPIC])
+    print("Cleanup done.")
 
 
 if __name__ == "__main__":

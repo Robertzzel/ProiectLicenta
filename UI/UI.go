@@ -1,15 +1,16 @@
 package main
 
 import (
-	. "Licenta/SocketFunctions"
+	"Licenta/Kafka"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
-	"strconv"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 const (
@@ -93,7 +94,7 @@ const (
 	};
 	webSocket.onmessage = async function (messageEvent) {
 	let wsMsg = messageEvent.data.arrayBuffer();
-	console.log(new Date())
+	console.log(queue.length)
 	
 	if (!streamingStarted) {
 	appendToBuffer(await wsMsg);
@@ -120,8 +121,9 @@ const (
 </script>
 </body>
 </html>`
-	HtmlFileName = "UI.html"
-	MergerSocket = "/tmp/merger.sock"
+	HtmlFileName    = "UI.html"
+	UiTopic         = "UI"
+	AggregatorTopic = "aggregator"
 )
 
 func checkErr(err error) {
@@ -130,7 +132,7 @@ func checkErr(err error) {
 	}
 }
 
-func openUIInBrowser() error {
+func openUiInBrowser() error {
 	err := os.WriteFile(HtmlFileName, []byte(HtmlFileContents), 0777)
 	if err != nil {
 		return err
@@ -139,32 +141,13 @@ func openUIInBrowser() error {
 	return exec.Command("xdg-open", HtmlFileName).Run()
 }
 
-func handleInputs(inputsReader net.Conn, inputsWriter net.Conn) {
-	for {
-		inputCommand, err := ReceiveMessage(inputsReader)
-		checkErr(err)
-
-		checkErr(SendMessage(inputsWriter, inputCommand))
-	}
-}
-
 func main() {
-	if len(os.Args) < 3 {
-		log.Fatal("Need host and port to connect")
-	}
+	checkErr(Kafka.CreateTopic(UiTopic))
 
-	host := os.Args[1]
-	port, err := strconv.Atoi(os.Args[2])
-	checkErr(err)
+	uiProducer := Kafka.NewProducerAsync(UiTopic)
+	aggregatorConsumer := Kafka.NewConsumer(AggregatorTopic)
 
-	inputListener, err := net.Dial("tcp", "localhost:5001")
-	checkErr(err)
-	merger, err := net.Dial("unix", MergerSocket)
-	checkErr(err)
-	router, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
-	checkErr(err)
-
-	checkErr(openUIInBrowser())
+	checkErr(openUiInBrowser())
 
 	var upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -178,15 +161,29 @@ func main() {
 		ws, err := upgrader.Upgrade(w, r, nil)
 		checkErr(err)
 
-		go handleInputs(inputListener, router)
 		for {
-			routerMessage, err := ReceiveMessage(router)
+			message, err := aggregatorConsumer.Consume()
 			checkErr(err)
 
-			checkErr(ws.WriteMessage(websocket.BinaryMessage, routerMessage))
-			checkErr(SendMessage(merger, routerMessage))
+			checkErr(ws.WriteMessage(websocket.BinaryMessage, message.Value))
+			fmt.Println("Message sent ", time.Now())
+			checkErr(uiProducer.Publish(message.Value))
 		}
 	})
+
+	quit := make(chan os.Signal, 2)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-quit
+		fmt.Println("Cleanup...")
+		uiProducer.Publish([]byte("quit"))
+		time.Sleep(time.Second * 2)
+		Kafka.DeleteTopic(UiTopic)
+		uiProducer.Close()
+		aggregatorConsumer.Close()
+		fmt.Println("Cleanup Done")
+		os.Exit(1)
+	}()
 
 	log.Fatal(http.ListenAndServe("localhost:8081", nil))
 }

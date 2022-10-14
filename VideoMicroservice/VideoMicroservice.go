@@ -1,18 +1,19 @@
 package main
 
 import (
-	. "Licenta/SocketFunctions"
+	"Licenta/Kafka"
 	"fmt"
 	"log"
-	"net"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 )
 
 const (
-	videoSize          = time.Second
-	syncSocketName     = "/tmp/sync.sock"
-	composerSocketName = "/tmp/composer.sock"
+	VideoDuration = time.Second
+	VideoTopic    = "video"
 )
 
 func checkErr(err error) {
@@ -21,19 +22,8 @@ func checkErr(err error) {
 	}
 }
 
-func synchronise() (time.Time, error) {
-	conn, err := net.Dial("unix", syncSocketName)
-	if err != nil {
-		return time.Time{}, err
-	}
-	defer conn.Close()
-
-	message, err := ReceiveMessage(conn)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	timestamp, err := strconv.ParseInt(string(message), 10, 64)
+func stringToTimestamp(s string) (time.Time, error) {
+	timestamp, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -42,21 +32,41 @@ func synchronise() (time.Time, error) {
 }
 
 func main() {
-	log.Println("Starting...")
-	composerConnection, err := net.Dial("unix", composerSocketName)
+	if len(os.Args) < 2 {
+		log.Fatal("No timestamp given")
+	}
+
+	quit := make(chan os.Signal)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	timestamp, err := stringToTimestamp(os.Args[1])
 	checkErr(err)
 
 	videoRecorder, err := NewRecorder(24)
 	checkErr(err)
+	videoRecorder.Start(timestamp, VideoDuration)
 
-	startTime, err := synchronise()
-	checkErr(err)
-	log.Println("SYNC: ", startTime.UnixMilli())
+	checkErr(Kafka.CreateTopic(VideoTopic))
+	defer func() {
+		Kafka.DeleteTopic(VideoTopic)
+		fmt.Println("Topic Deleted")
+	}()
 
-	videoRecorder.Start(startTime, videoSize)
+	composer := Kafka.NewProducerAsync(VideoTopic)
+	defer func() {
+		composer.Close()
+		fmt.Println("Producer closed")
+	}()
+
+mainFor:
 	for {
-		videoName := <-videoRecorder.VideoBuffer
-		checkErr(SendMessage(composerConnection, []byte(videoName)))
-		fmt.Println(videoName, "sent at ", time.Now().UnixMilli())
+		select {
+		case videoName := <-videoRecorder.VideoBuffer:
+			checkErr(composer.Publish([]byte(videoName)))
+			fmt.Println(videoName, "sent at ", time.Now().Unix())
+		case <-quit:
+			fmt.Println("Quit signal")
+			break mainFor
+		}
 	}
 }

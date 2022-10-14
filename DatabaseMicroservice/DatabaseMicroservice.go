@@ -1,22 +1,25 @@
 package main
 
 import (
-	. "Licenta/SocketFunctions"
+	"Licenta/Kafka"
 	"database/sql"
-	"errors"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
 	"log"
-	"net"
-	"os"
 	"strings"
 )
 
 const (
-	tableName  = "videos"
-	dbNamePath = "./videos.db"
-	socketName = "/tmp/database.sock"
+	tableName   = "videos"
+	dbNamePath  = "./videos.db"
+	MergerTopic = "Merger"
 )
+
+func checkErr(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
 
 type Database struct {
 	database *sql.DB
@@ -29,15 +32,6 @@ func OpenNewDatabase() (*Database, error) {
 	}
 
 	return &Database{db}, err
-}
-
-func cleanSocket(socketPath string) error {
-	if _, err := os.Stat(socketName); !errors.Is(err, os.ErrNotExist) {
-		if err := os.Remove(socketName); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (db *Database) createTable() error {
@@ -82,45 +76,7 @@ func (db *Database) GetAllRows() ([][2]string, error) {
 	return result, nil
 }
 
-func handleConnection(database *Database, conn net.Conn) {
-	for {
-		message, err := ReceiveMessage(conn)
-		if err != nil {
-			return
-		}
-		result := ""
-
-		if string(message) == "query;all" {
-			rows, err := database.GetAllRows()
-			if err != nil {
-				return
-			}
-
-			for _, row := range rows {
-				result += row[0] + "," + row[1] + ";"
-			}
-			result = result[:len(result)-1]
-		} else if strings.HasPrefix(string(message), "insert") {
-			insertParts := strings.Split(string(message), ";")
-			pathAndTimestamp := strings.Split(insertParts[1], ",")
-			if err := database.Insert(pathAndTimestamp[0], pathAndTimestamp[1]); err != nil {
-				result = err.Error()
-			} else {
-				result = "success"
-			}
-		}
-
-		if err = SendMessage(conn, []byte(result)); err != nil {
-			return
-		}
-	}
-}
-
 func main() {
-	if err := cleanSocket(socketName); err != nil {
-		log.Fatal("Cleanign socket ", err)
-	}
-
 	db, err := OpenNewDatabase()
 	if err != nil {
 		log.Fatal("Deschidere", err)
@@ -130,17 +86,18 @@ func main() {
 		log.Fatal(err)
 	}
 
-	listener, err := net.Listen("unix", socketName)
-	if err != nil {
-		log.Fatal("Deschidere socket", err)
-	}
+	mergerConsumer := Kafka.NewConsumer(MergerTopic)
+	defer mergerConsumer.Close()
 
 	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Fatal("Eroare la accept ", err)
-		}
+		message, err := mergerConsumer.Consume()
+		checkErr(err)
 
-		go handleConnection(db, conn)
+		if strings.HasPrefix(string(message.Value), "insert") {
+			insertParts := strings.Split(string(message.Value), ";")
+			pathAndTimestamp := strings.Split(insertParts[1], ",")
+			checkErr(db.Insert(pathAndTimestamp[0], pathAndTimestamp[1]))
+			fmt.Println(pathAndTimestamp[0], pathAndTimestamp[1])
+		}
 	}
 }

@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# shellcheck disable=SC2006
+./build
+timestamp=`expr $(date +"%s") + 2`
+xterm -hold -T "Aggregator" -e ./AggregatorMicroservice/AggregatorMicroservice &
+xterm -hold -T "Video" -e ./VideoMicroservice/VideoMicroservice "$timestamp" &
+xterm -hold -T "Audio" -e venv/bin/python3 AudioMicroservice/AudioMicroservice.py "$timestamp" &
+xterm -hold -T "InputListener" -e venv/bin/python3 InputExecutorMicroservice/InputExecutorMicroservice.py
+#xterm -hold -T "UI" -e go run UI/UI.go

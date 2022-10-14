@@ -16,6 +16,7 @@ const (
 	VideoTopic    = "video"
 	AudioTopic    = "audio"
 	ComposerTopic = "aggregator"
+	StreamerTopic = "StreamerPing"
 )
 
 func checkErr(err error) {
@@ -59,10 +60,10 @@ func getSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer) (strin
 }
 
 func main() {
-	checkErr(Kafka.CreateTopic(ComposerTopic))
 	videoConsumer := Kafka.NewConsumer(VideoTopic)
 	audioConsumer := Kafka.NewConsumer(AudioTopic)
 	composerProducer := Kafka.NewProducerAsync(ComposerTopic)
+	streamerProducer := Kafka.NewProducerAsync(StreamerTopic)
 
 	quit := make(chan os.Signal, 2)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -89,10 +90,13 @@ func main() {
 			s := time.Now()
 
 			checkErr(exec.Command("./CombineAndCompress", videoFile, audioFile, outputFile, "20").Run())
+
 			fileBytes, err := os.ReadFile(outputFile)
 			checkErr(err)
 			checkErr(composerProducer.Publish(fileBytes))
-			fmt.Println(" video: ", outputFile, ", timestamp: ", videoFile[len(videoFile)-14:len(videoFile)-4], " at", time.Now().Unix(), " (", time.Since(s), " )")
+
+			checkErr(streamerProducer.Publish([]byte(fmt.Sprint(time.Now().UnixMilli()))))
+			fmt.Println(" video: ", outputFile, ", timestamp: ", videoFile[len(videoFile)-14:len(videoFile)-4], " at", time.Now().UnixMilli(), " (", time.Since(s), " )")
 
 			checkErr(os.Remove(videoFile))
 			checkErr(os.Remove(audioFile))

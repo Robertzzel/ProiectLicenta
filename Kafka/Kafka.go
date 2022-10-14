@@ -22,10 +22,11 @@ type Consumer struct {
 func NewProducer(topic string) *Producer {
 	return &Producer{
 		Writer: &kafkago.Writer{
-			Addr:      kafkago.TCP(brokerAddress),
-			Topic:     topic,
-			Balancer:  &kafkago.LeastBytes{},
-			BatchSize: 1,
+			Addr:                   kafkago.TCP(brokerAddress),
+			Topic:                  topic,
+			Balancer:               &kafkago.LeastBytes{},
+			BatchSize:              1,
+			AllowAutoTopicCreation: true,
 		},
 	}
 }
@@ -33,11 +34,12 @@ func NewProducer(topic string) *Producer {
 func NewProducerAsync(topic string) *Producer {
 	return &Producer{
 		Writer: &kafkago.Writer{
-			Addr:      kafkago.TCP(brokerAddress),
-			Topic:     topic,
-			Async:     true,
-			Balancer:  &kafkago.LeastBytes{},
-			BatchSize: 1,
+			Addr:                   kafkago.TCP(brokerAddress),
+			Topic:                  topic,
+			Async:                  true,
+			Balancer:               &kafkago.LeastBytes{},
+			BatchSize:              1,
+			AllowAutoTopicCreation: true,
 		},
 	}
 }

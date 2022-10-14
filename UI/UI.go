@@ -124,6 +124,7 @@ const (
 	HtmlFileName    = "UI.html"
 	UiTopic         = "UI"
 	AggregatorTopic = "aggregator"
+	ReceiverTopic   = "ReceiverPing"
 )
 
 func checkErr(err error) {
@@ -146,6 +147,7 @@ func main() {
 
 	uiProducer := Kafka.NewProducerAsync(UiTopic)
 	aggregatorConsumer := Kafka.NewConsumer(AggregatorTopic)
+	receiverProducer := Kafka.NewProducerAsync(ReceiverTopic)
 
 	checkErr(openUiInBrowser())
 
@@ -166,7 +168,9 @@ func main() {
 			checkErr(err)
 
 			checkErr(ws.WriteMessage(websocket.BinaryMessage, message.Value))
+			checkErr(receiverProducer.Publish([]byte(fmt.Sprint(time.Now().UnixMilli()))))
 			fmt.Println("Message sent ", time.Now())
+
 			checkErr(uiProducer.Publish(message.Value))
 		}
 	})

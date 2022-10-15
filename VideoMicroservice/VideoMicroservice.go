@@ -63,7 +63,7 @@ mainFor:
 		select {
 		case videoName := <-videoRecorder.VideoBuffer:
 			checkErr(composer.Publish([]byte(videoName)))
-			fmt.Println(videoName, "sent at ", time.Now().Unix())
+			fmt.Println(videoName, "sent at ", time.Now().UnixMilli())
 		case <-quit:
 			fmt.Println("Quit signal")
 			break mainFor

@@ -91,7 +91,9 @@ func main() {
 		go func(videoFile, audioFile, outputFile string) {
 			s := time.Now()
 
-			checkErr(exec.Command("./CombineAndCompress", videoFile, audioFile, outputFile, "20").Run())
+			if _, err := exec.Command("./CombineAndCompress", videoFile, audioFile, outputFile, "1m").Output(); err != nil {
+				panic(err)
+			}
 
 			fileBytes, err := os.ReadFile(outputFile)
 			checkErr(err)

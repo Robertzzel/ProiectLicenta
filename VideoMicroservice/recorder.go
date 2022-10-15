@@ -79,8 +79,8 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 
 		video, err := mjpeg.New(
 			videoFileName,
-			1920,
-			1080,
+			1280,
+			720,
 			int32(r.fps),
 		)
 		checkErr(err)

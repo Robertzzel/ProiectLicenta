@@ -71,7 +71,6 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-quit
-		fmt.Println("Starting cleanup")
 		Kafka.DeleteTopic(ComposerTopic)
 		fmt.Println("Cleanup done")
 		os.Exit(1)
@@ -81,30 +80,22 @@ func main() {
 	checkErr(audioConsumer.SetOffsetToNow())
 
 	for {
-		outputFile, err := os.CreateTemp("", "video*.mp4")
-		checkErr(err)
-		checkErr(outputFile.Close())
-
 		videoFile, audioFile, err := getSyncedAudioAndVideo(videoConsumer, audioConsumer)
 		checkErr(err)
 
-		go func(videoFile, audioFile, outputFile string) {
+		go func(videoFile, audioFile string) {
 			s := time.Now()
 
-			if _, err := exec.Command("./CombineAndCompress", videoFile, audioFile, outputFile, "1m").Output(); err != nil {
-				panic(err)
-			}
-
-			fileBytes, err := os.ReadFile(outputFile)
+			video, err := exec.Command("./CombineAndCompress", videoFile, audioFile, "1023k").Output()
 			checkErr(err)
-			checkErr(composerProducer.Publish(fileBytes))
+
+			checkErr(composerProducer.Publish(video))
 
 			checkErr(streamerProducer.Publish([]byte(fmt.Sprint(time.Now().UnixMilli()))))
-			fmt.Println(" video: ", outputFile, ", timestamp: ", videoFile[len(videoFile)-14:len(videoFile)-4], " at", time.Now().UnixMilli(), " (", time.Since(s), " )")
+			fmt.Println("timestamp: ", videoFile[len(videoFile)-17:len(videoFile)-4], " at", time.Now().UnixMilli(), " (", time.Since(s), " )")
 
 			checkErr(os.Remove(videoFile))
 			checkErr(os.Remove(audioFile))
-			checkErr(os.Remove(outputFile))
-		}(videoFile, audioFile, outputFile.Name())
+		}(videoFile, audioFile)
 	}
 }

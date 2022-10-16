@@ -53,6 +53,7 @@ func NewConsumer(topic string) *Consumer {
 				Brokers:     []string{brokerAddress},
 				Topic:       topic,
 				StartOffset: kafkago.LastOffset,
+				MaxBytes:    10e6,
 			},
 		),
 	}

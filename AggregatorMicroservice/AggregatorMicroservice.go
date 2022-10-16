@@ -93,7 +93,7 @@ func main() {
 		case files := <-filesChannel:
 			s := time.Now()
 
-			video, err := exec.Command("./CombineAndCompress", files.Video, files.Audio, "1023k").Output()
+			video, err := exec.Command("./CombineAndCompress", files.Video, files.Audio, "5m").Output()
 			checkErr(err)
 
 			checkErr(composerProducer.Publish(video))

@@ -30,6 +30,7 @@ const (
 
 let queue = []
 let video = document.querySelector('video');
+video.onpause = () => { video.play(); }
 let webSocket = null;
 let sourceBuffer = null;
 let ms = new MediaSource();

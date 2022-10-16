@@ -19,83 +19,93 @@ const (
 	StreamerTopic = "StreamerPing"
 )
 
+type AudioVideoPair struct {
+	Video string
+	Audio string
+}
+
 func checkErr(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
 
-func getSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer) (string, string, error) {
-	videoMessage, err := videoConsumer.Consume()
-	checkErr(err)
-	audioMessage, err := audioConsumer.Consume()
-	checkErr(err)
+func getSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer, outputChannel chan AudioVideoPair) {
+	for {
+		videoMessage, err := videoConsumer.Consume()
+		checkErr(err)
+		audioMessage, err := audioConsumer.Consume()
+		checkErr(err)
 
-	videoFile := string(videoMessage.Value)
-	audioFile := string(audioMessage.Value)
+		videoFile := string(videoMessage.Value)
+		audioFile := string(audioMessage.Value)
 
-	videoTimestamp, err := strconv.Atoi(videoFile[len(videoFile)-14 : len(videoFile)-4])
-	checkErr(err)
-	audioTimestamp, err := strconv.Atoi(audioFile[len(audioFile)-14 : len(audioFile)-4])
-	checkErr(err)
+		videoTimestamp, err := strconv.Atoi(videoFile[len(videoFile)-14 : len(videoFile)-4])
+		checkErr(err)
+		audioTimestamp, err := strconv.Atoi(audioFile[len(audioFile)-14 : len(audioFile)-4])
+		checkErr(err)
 
-	timestampDifference := videoTimestamp - audioTimestamp
-	if timestampDifference > 0 {
-		log.Println("Desync ", "audio by ", timestampDifference)
-		for i := 0; i < timestampDifference; i++ {
-			audioMessage, err = audioConsumer.Consume()
-			checkErr(err)
+		timestampDifference := videoTimestamp - audioTimestamp
+		if timestampDifference > 0 {
+			log.Println("Desync ", "audio by ", timestampDifference)
+			for i := 0; i < timestampDifference; i++ {
+				audioMessage, err = audioConsumer.Consume()
+				checkErr(err)
+			}
+			audioFile = string(audioMessage.Value)
+		} else if timestampDifference < 0 {
+			log.Println("Desync ", "video by ", timestampDifference)
+			for i := 0; i < -timestampDifference; i++ {
+				videoMessage, err = videoConsumer.Consume()
+				checkErr(err)
+			}
+			videoFile = string(videoMessage.Value)
 		}
-		audioFile = string(audioMessage.Value)
-	} else if timestampDifference < 0 {
-		log.Println("Desync ", "video by ", timestampDifference)
-		for i := 0; i < -timestampDifference; i++ {
-			videoMessage, err = videoConsumer.Consume()
-			checkErr(err)
-		}
-		videoFile = string(videoMessage.Value)
+
+		outputChannel <- AudioVideoPair{Video: videoFile, Audio: audioFile}
 	}
-
-	return videoFile, audioFile, nil
 }
 
 func main() {
-	checkErr(Kafka.CreateTopic(ComposerTopic))
+	quit := make(chan os.Signal, 2)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+	checkErr(Kafka.CreateTopic(ComposerTopic))
 	videoConsumer := Kafka.NewConsumer(VideoTopic)
 	audioConsumer := Kafka.NewConsumer(AudioTopic)
 	composerProducer := Kafka.NewProducerAsync(ComposerTopic)
 	streamerProducer := Kafka.NewProducerAsync(StreamerTopic)
-
-	quit := make(chan os.Signal, 2)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-quit
+	defer func() {
+		fmt.Println("Starting cleaning")
 		Kafka.DeleteTopic(ComposerTopic)
-		fmt.Println("Cleanup done")
-		os.Exit(1)
+		videoConsumer.Close()
+		audioConsumer.Close()
+		composerProducer.Close()
+		streamerProducer.Close()
+		fmt.Println("Cleaning done")
 	}()
 
-	checkErr(videoConsumer.SetOffsetToNow())
-	checkErr(audioConsumer.SetOffsetToNow())
+	filesChannel := make(chan AudioVideoPair, 5)
+	go getSyncedAudioAndVideo(videoConsumer, audioConsumer, filesChannel)
 
 	for {
-		videoFile, audioFile, err := getSyncedAudioAndVideo(videoConsumer, audioConsumer)
-		checkErr(err)
-
-		go func(videoFile, audioFile string) {
+		select {
+		case files := <-filesChannel:
 			s := time.Now()
 
-			video, err := exec.Command("./CombineAndCompress", videoFile, audioFile, "1023k").Output()
+			video, err := exec.Command("./CombineAndCompress", files.Video, files.Audio, "1023k").Output()
 			checkErr(err)
 
 			checkErr(composerProducer.Publish(video))
+			fmt.Println("Extrast")
 
 			checkErr(streamerProducer.Publish([]byte(fmt.Sprint(time.Now().UnixMilli()))))
-			fmt.Println("timestamp: ", videoFile[len(videoFile)-17:len(videoFile)-4], " at", time.Now().UnixMilli(), " (", time.Since(s), " )")
+			fmt.Println("timestamp: ", files.Video[len(files.Video)-14:len(files.Video)-4], " at", time.Now().UnixMilli(), " (", time.Since(s), " )")
 
-			checkErr(os.Remove(videoFile))
-			checkErr(os.Remove(audioFile))
-		}(videoFile, audioFile)
+			checkErr(os.Remove(files.Video))
+			checkErr(os.Remove(files.Audio))
+		case <-quit:
+			return
+		}
 	}
 }

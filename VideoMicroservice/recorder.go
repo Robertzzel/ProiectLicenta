@@ -89,9 +89,9 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 			checkErr(video.AddFrame(<-r.imageBuffer))
 		}
 
-		checkErr(video.Close())
 		r.VideoBuffer <- videoFileName
 
+		checkErr(video.Close())
 		nextChunkEndTime = nextChunkEndTime.Add(chunkSize)
 	}
 }

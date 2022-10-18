@@ -31,6 +31,7 @@ const (
 let queue = []
 let video = document.querySelector('video');
 video.onpause = () => { video.play(); }
+video.defaultPlaybackRate = 1.05;
 let webSocket = null;
 let sourceBuffer = null;
 let ms = new MediaSource();

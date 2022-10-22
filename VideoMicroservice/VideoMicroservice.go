@@ -16,12 +16,6 @@ const (
 	VideoTopic    = "video"
 )
 
-func checkErr(err error) {
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-}
-
 func stringToTimestamp(s string) (time.Time, error) {
 	timestamp, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
@@ -40,13 +34,19 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	timestamp, err := stringToTimestamp(os.Args[1])
-	checkErr(err)
+	if err != nil {
+		log.Fatal("Timestamp not valid")
+	}
 
-	videoRecorder, err := NewRecorder(24)
-	checkErr(err)
+	videoRecorder, err := NewRecorder(30)
+	if err != nil {
+		log.Fatal("Recorder cannot be initiated: ", err)
+	}
 	videoRecorder.Start(timestamp, VideoDuration)
 
-	checkErr(Kafka.CreateTopic(VideoTopic))
+	if err := Kafka.CreateTopic(VideoTopic); err != nil {
+		log.Println("Cannot create topic ", err)
+	}
 	defer func() {
 		Kafka.DeleteTopic(VideoTopic)
 		fmt.Println("Topic Deleted")
@@ -58,15 +58,17 @@ func main() {
 		fmt.Println("Producer closed")
 	}()
 
-mainFor:
 	for {
 		select {
 		case videoName := <-videoRecorder.VideoBuffer:
-			checkErr(composer.Publish([]byte(videoName)))
-			fmt.Println(videoName, "sent at ", time.Now().UnixMilli())
+			if err := composer.Publish([]byte(videoName)); err != nil {
+				log.Println("Message not sent ", err)
+			} else {
+				fmt.Println(videoName, "sent at ", time.Now().UnixMilli())
+			}
 		case <-quit:
 			fmt.Println("Quit signal")
-			break mainFor
+			return
 		}
 	}
 }

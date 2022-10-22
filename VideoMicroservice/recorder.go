@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/icza/mjpeg"
+	"log"
 	"os"
 	"time"
 )
@@ -12,10 +13,22 @@ import (
 type Recorder struct {
 	screenshotTool *Screenshot
 	fps            int
-	width          int
-	height         int
+	width          int32
+	height         int32
 	imageBuffer    chan []byte
 	VideoBuffer    chan string
+}
+
+func waitUntil(t time.Time) {
+	for time.Now().Before(t) {
+		time.Sleep(t.Sub(time.Now()))
+	}
+}
+
+func emptyChannel(c chan []byte) {
+	for len(c) > 0 {
+		<-c
+	}
 }
 
 func NewRecorder(fps int) (*Recorder, error) {
@@ -36,14 +49,14 @@ func NewRecorder(fps int) (*Recorder, error) {
 	return &Recorder{
 		screenshotTool: screenshot,
 		fps:            fps,
-		width:          int(img.Width),
-		height:         int(img.Height),
+		width:          int32(img.Width),
+		height:         int32(img.Height),
+		imageBuffer:    make(chan []byte, 256),
+		VideoBuffer:    make(chan string, 10),
 	}, nil
 }
 
 func (r *Recorder) Start(startTime time.Time, chunkSize time.Duration) {
-	r.imageBuffer = make(chan []byte, 256)
-	r.VideoBuffer = make(chan string, 10)
 	go func() {
 		for time.Now().Before(startTime) {
 			time.Sleep(time.Now().Sub(startTime))
@@ -60,10 +73,16 @@ func (r *Recorder) startRecording() {
 	for {
 		go func(timeInitiated time.Time) {
 			img, err := r.screenshotTool.Get()
-			checkErr(err)
+			if err != nil {
+				log.Println("Error while getting the screen ", err)
+				return
+			}
 
 			var encodedImageBuffer bytes.Buffer
-			checkErr(img.Compress(&encodedImageBuffer, 100))
+			if err := img.Compress(&encodedImageBuffer, 100); err != nil {
+				log.Println("Error while compression the screen image ", err)
+				return
+			}
 
 			r.imageBuffer <- encodedImageBuffer.Bytes()
 		}(<-ticker.C)
@@ -71,27 +90,35 @@ func (r *Recorder) startRecording() {
 }
 
 func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Duration) {
-	nextChunkEndTime := startTime.Add(chunkSize)
+	nextChunkEndTime := startTime
 	cwd, _ := os.Getwd()
 
+videoProcessingFor:
 	for {
+		nextChunkEndTime = nextChunkEndTime.Add(chunkSize)
+
 		videoFileName := fmt.Sprintf("%s/videos/%s.mkv", cwd, fmt.Sprint(nextChunkEndTime.Add(-chunkSize).Unix()))
 
-		video, err := mjpeg.New(
-			videoFileName,
-			1280,
-			720,
-			int32(r.fps),
-		)
-		checkErr(err)
+		video, err := mjpeg.New(videoFileName, r.width, r.height, int32(r.fps))
+		if err != nil {
+			log.Println("Error initiating new video file", err)
+			continue
+		}
 
 		for time.Now().Before(nextChunkEndTime) {
-			checkErr(video.AddFrame(<-r.imageBuffer))
+			if err := video.AddFrame(<-r.imageBuffer); err != nil {
+				log.Println("Error adding frame to video file ", err)
+				os.Remove(videoFileName)
+				waitUntil(nextChunkEndTime)
+				emptyChannel(r.imageBuffer)
+				continue videoProcessingFor
+			}
 		}
 
 		r.VideoBuffer <- videoFileName
 
-		checkErr(video.Close())
-		nextChunkEndTime = nextChunkEndTime.Add(chunkSize)
+		if err := video.Close(); err != nil {
+			log.Println("Error while closing video file ", err)
+		}
 	}
 }

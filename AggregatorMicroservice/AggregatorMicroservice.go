@@ -2,6 +2,7 @@ package main
 
 import (
 	"Licenta/Kafka"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -24,40 +25,53 @@ type AudioVideoPair struct {
 	Audio string
 }
 
-func checkErr(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
 func getSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer, outputChannel chan AudioVideoPair) {
 	for {
-		videoMessage, err := videoConsumer.Consume()
-		checkErr(err)
 		audioMessage, err := audioConsumer.Consume()
-		checkErr(err)
+		if err != nil {
+			log.Println("Error while receiving audio file: ", err)
+			continue
+		}
+
+		videoMessage, err := videoConsumer.Consume()
+		if err != nil {
+			log.Println("Error while receiving video file: ", err)
+			continue
+		}
 
 		videoFile := string(videoMessage.Value)
 		audioFile := string(audioMessage.Value)
 
 		videoTimestamp, err := strconv.Atoi(videoFile[len(videoFile)-14 : len(videoFile)-4])
-		checkErr(err)
+		if err != nil {
+			log.Println("Error, video timestamp not valid")
+			continue
+		}
 		audioTimestamp, err := strconv.Atoi(audioFile[len(audioFile)-14 : len(audioFile)-4])
-		checkErr(err)
+		if err != nil {
+			log.Println("Error, audio timestamp not valid")
+			continue
+		}
 
 		timestampDifference := videoTimestamp - audioTimestamp
 		if timestampDifference > 0 {
 			log.Println("Desync ", "audio by ", timestampDifference)
 			for i := 0; i < timestampDifference; i++ {
 				audioMessage, err = audioConsumer.Consume()
-				checkErr(err)
+				if err != nil {
+					log.Println("Error while receiving audio file: ", err)
+					continue
+				}
 			}
 			audioFile = string(audioMessage.Value)
 		} else if timestampDifference < 0 {
 			log.Println("Desync ", "video by ", timestampDifference)
 			for i := 0; i < -timestampDifference; i++ {
 				videoMessage, err = videoConsumer.Consume()
-				checkErr(err)
+				if err != nil {
+					log.Println("Error while receiving video file: ", err)
+					continue
+				}
 			}
 			videoFile = string(videoMessage.Value)
 		}
@@ -70,7 +84,10 @@ func main() {
 	quit := make(chan os.Signal, 2)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	checkErr(Kafka.CreateTopic(ComposerTopic))
+	if err := Kafka.CreateTopic(ComposerTopic); err != nil {
+		log.Fatal("Cannot create aggregator topic ", err)
+	}
+
 	videoConsumer := Kafka.NewConsumer(VideoTopic)
 	audioConsumer := Kafka.NewConsumer(AudioTopic)
 	composerProducer := Kafka.NewProducerAsync(ComposerTopic)
@@ -91,19 +108,30 @@ func main() {
 	for {
 		select {
 		case files := <-filesChannel:
-			s := time.Now()
+			video, err := exec.Command("./CombineAndCompress", files.Video, files.Audio, "6m").Output()
+			if err != nil {
+				var exitError *exec.ExitError
+				if errors.As(err, &exitError) {
+					panic("Error from ffmpeg: " + string(exitError.Stderr))
+				}
+			}
 
-			video, err := exec.Command("./CombineAndCompress", files.Video, files.Audio, "5m").Output()
-			checkErr(err)
+			fmt.Println("Sending video of size ", len(video))
+			if err := composerProducer.Publish(video); err != nil {
+				panic("Error on video sending: " + err.Error())
+			}
+			fmt.Println("video ", files.Video[len(files.Video)-14:len(files.Video)-4], "sent at ", time.Now().UnixMilli())
 
-			checkErr(composerProducer.Publish(video))
-			fmt.Println("Extrast")
+			if err := streamerProducer.Publish([]byte(fmt.Sprint(time.Now().UnixMilli()))); err != nil {
+				log.Println("Error while sending ping signal ", err)
+			}
 
-			checkErr(streamerProducer.Publish([]byte(fmt.Sprint(time.Now().UnixMilli()))))
-			fmt.Println("timestamp: ", files.Video[len(files.Video)-14:len(files.Video)-4], " at", time.Now().UnixMilli(), " (", time.Since(s), " )")
-
-			checkErr(os.Remove(files.Video))
-			checkErr(os.Remove(files.Audio))
+			if err := os.Remove(files.Video); err != nil {
+				panic("Error on deleting video file " + err.Error())
+			}
+			if err := os.Remove(files.Audio); err != nil {
+				panic("Error on deleting audio file " + err.Error())
+			}
 		case <-quit:
 			return
 		}

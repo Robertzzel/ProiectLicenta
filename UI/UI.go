@@ -31,7 +31,7 @@ const (
 let queue = []
 let video = document.querySelector('video');
 video.onpause = () => { video.play(); }
-video.defaultPlaybackRate = 1.05;
+video.defaultPlaybackRate = 1.03;
 let webSocket = null;
 let sourceBuffer = null;
 let ms = new MediaSource();
@@ -78,7 +78,7 @@ function openWSConnection() {
         console.log("WebSocket closed");
     };
     webSocket.onerror = function(errorEvent) {
-        console.log("WebSocket ERROR: " + error);
+        console.log("WebSocket ERROR: " + errorEvent);
     };
     webSocket.onmessage = async function(messageEvent) {
         sourceBuffer.appendBuffer(await messageEvent.data.arrayBuffer());
@@ -106,7 +106,7 @@ openWSConnection();
 
 func checkErr(err error) {
 	if err != nil {
-		log.Fatal("ERROR!! ", err)
+		panic(err)
 	}
 }
 

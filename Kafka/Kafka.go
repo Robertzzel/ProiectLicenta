@@ -1,87 +1,74 @@
 package Kafka
 
 import (
-	"context"
-	kafkago "github.com/segmentio/kafka-go"
-	"time"
+	kafka "github.com/Shopify/sarama"
 )
 
 const (
 	brokerAddress = "localhost:9092"
-	brokerNetwork = "tcp"
 )
 
 type Producer struct {
-	*kafkago.Writer
+	kafkaProducer kafka.AsyncProducer
 }
 
 type Consumer struct {
-	*kafkago.Reader
+	kafkaConsumer kafka.PartitionConsumer
 }
 
-func NewProducer(topic string) *Producer {
-	return &Producer{
-		Writer: &kafkago.Writer{
-			Addr:      kafkago.TCP(brokerAddress),
-			Topic:     topic,
-			Balancer:  &kafkago.LeastBytes{},
-			BatchSize: 1,
-		},
-	}
-}
+func NewProducer() (*Producer, error) {
+	config := kafka.NewConfig()
+	config.Producer.RequiredAcks = kafka.WaitForLocal
+	config.Producer.Partitioner = kafka.NewRandomPartitioner
 
-func NewProducerAsync(topic string) *Producer {
-	return &Producer{
-		Writer: &kafkago.Writer{
-			Addr:      kafkago.TCP(brokerAddress),
-			Topic:     topic,
-			Async:     true,
-			Balancer:  &kafkago.LeastBytes{},
-			BatchSize: 1,
-		},
-	}
-}
-
-func (kp *Producer) Publish(message []byte) error {
-	return kp.WriteMessages(context.Background(), kafkago.Message{Value: message})
-}
-
-func NewConsumer(topic string) *Consumer {
-	return &Consumer{
-		Reader: kafkago.NewReader(
-			kafkago.ReaderConfig{
-				Brokers:     []string{brokerAddress},
-				Topic:       topic,
-				StartOffset: kafkago.LastOffset,
-				MaxBytes:    10e6,
-			},
-		),
-	}
-}
-
-func (kc *Consumer) Consume() (kafkago.Message, error) {
-	message, err := kc.ReadMessage(context.Background())
+	p, err := kafka.NewAsyncProducer([]string{brokerAddress}, config)
 	if err != nil {
-		return kafkago.Message{}, err
+		return nil, err
 	}
 
-	return message, nil
+	return &Producer{p}, nil
 }
 
-func (kc *Consumer) SetOffsetToNow() error {
-	return kc.Reader.SetOffsetAt(context.Background(), time.Now())
+func (producer *Producer) Publish(message []byte, topic string) {
+	producer.kafkaProducer.Input() <- &kafka.ProducerMessage{
+		Topic:     topic,
+		Partition: 0,
+		Value:     kafka.ByteEncoder(message),
+	}
 }
 
-func CreateTopic(name string) error {
-	_, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, name, 0)
-	return err
+func (producer *Producer) Close() error {
+	return producer.kafkaProducer.Close()
 }
 
-func DeleteTopic(names ...string) error {
-	conn, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, names[0], 0)
+func NewConsumer(topic string) (*Consumer, error) {
+	c, err := kafka.NewConsumer([]string{brokerAddress}, nil)
+	if err != nil {
+		return nil, err
+	}
+	partitions, err := c.Partitions(topic)
+
+	pc, err := c.ConsumePartition(topic, partitions[0], kafka.OffsetOldest)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Consumer{pc}, nil
+}
+
+func (consumer *Consumer) Consume() []byte {
+	return (<-consumer.kafkaConsumer.Messages()).Value
+}
+
+func (consumer *Consumer) Close() error {
+	return consumer.kafkaConsumer.Close()
+}
+
+func DeleteTopic(topic string) error {
+	clusterAdmin, err := kafka.NewClusterAdmin([]string{brokerAddress}, nil)
 	if err != nil {
 		return err
 	}
 
-	return conn.DeleteTopics(names...)
+	return clusterAdmin.DeleteTopic(topic)
 }

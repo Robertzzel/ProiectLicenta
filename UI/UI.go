@@ -23,7 +23,7 @@ const (
 </head>
 <body>
   <div class="col align-self-center">
-    <video playsinline muted controls preload="none" width="100%"></video>
+    <video playsinline muted controls preload="none" width="100%" style="pointer-events: none;"></video>
   </div>
   
   <script>
@@ -99,13 +99,13 @@ openWSConnection();
 </body>
 </html>`
 	HtmlFileName    = "UI.html"
-	UiTopic         = "UI"
 	AggregatorTopic = "aggregator"
 	ReceiverTopic   = "ReceiverPing"
 )
 
-func checkErr(err error) {
+func checkErr(err error, msg string) {
 	if err != nil {
+		log.Println(msg)
 		panic(err)
 	}
 }
@@ -120,13 +120,12 @@ func openUiInBrowser() error {
 }
 
 func main() {
-	checkErr(Kafka.CreateTopic(UiTopic))
+	aggregatorConsumer, err := Kafka.NewConsumer(AggregatorTopic)
+	checkErr(err, "Error creating aggregator consumer")
+	producer, err := Kafka.NewProducer()
+	checkErr(err, "Error while creating producer")
 
-	uiProducer := Kafka.NewProducerAsync(UiTopic)
-	aggregatorConsumer := Kafka.NewConsumer(AggregatorTopic)
-	receiverProducer := Kafka.NewProducerAsync(ReceiverTopic)
-
-	checkErr(openUiInBrowser())
+	checkErr(openUiInBrowser(), "Error while opening web browser")
 
 	var upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -138,17 +137,13 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ws, err := upgrader.Upgrade(w, r, nil)
-		checkErr(err)
+		checkErr(err, "Error while upgrading connection")
 
 		for {
-			message, err := aggregatorConsumer.Consume()
-			checkErr(err)
+			checkErr(ws.WriteMessage(websocket.BinaryMessage, aggregatorConsumer.Consume()), "Error while sending message to web")
 
-			checkErr(ws.WriteMessage(websocket.BinaryMessage, message.Value))
-			checkErr(receiverProducer.Publish([]byte(fmt.Sprint(time.Now().UnixMilli()))))
+			producer.Publish([]byte(fmt.Sprint(time.Now().UnixMilli())), ReceiverTopic)
 			fmt.Println("Message sent ", time.Now().UnixMilli())
-
-			checkErr(uiProducer.Publish(message.Value))
 		}
 	})
 
@@ -157,13 +152,9 @@ func main() {
 	go func() {
 		<-quit
 		fmt.Println("Cleanup...")
-		uiProducer.Publish([]byte("quit"))
-		time.Sleep(time.Second * 2)
-		Kafka.DeleteTopic(UiTopic)
-		uiProducer.Close()
 		aggregatorConsumer.Close()
+		producer.Close()
 		fmt.Println("Cleanup Done")
-		os.Exit(1)
 	}()
 
 	log.Fatal(http.ListenAndServe("localhost:8081", nil))

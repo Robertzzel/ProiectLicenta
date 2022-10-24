@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	VideoDuration = time.Second
+	VideoDuration = time.Second / 2
 	VideoTopic    = "video"
 )
 
@@ -30,13 +30,13 @@ func main() {
 		log.Fatal("No timestamp given")
 	}
 
-	quit := make(chan os.Signal)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
 	timestamp, err := stringToTimestamp(os.Args[1])
 	if err != nil {
 		log.Fatal("Timestamp not valid")
 	}
+
+	quit := make(chan os.Signal)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	videoRecorder, err := NewRecorder(30)
 	if err != nil {
@@ -44,28 +44,22 @@ func main() {
 	}
 	videoRecorder.Start(timestamp, VideoDuration)
 
-	if err := Kafka.CreateTopic(VideoTopic); err != nil {
-		log.Println("Cannot create topic ", err)
+	composer, err := Kafka.NewProducer()
+	if err != nil {
+		log.Println("Error while creating video topic")
+		panic(err)
 	}
 	defer func() {
-		Kafka.DeleteTopic(VideoTopic)
-		fmt.Println("Topic Deleted")
-	}()
-
-	composer := Kafka.NewProducerAsync(VideoTopic)
-	defer func() {
 		composer.Close()
+		Kafka.DeleteTopic(VideoTopic)
 		fmt.Println("Producer closed")
 	}()
 
 	for {
 		select {
 		case videoName := <-videoRecorder.VideoBuffer:
-			if err := composer.Publish([]byte(videoName)); err != nil {
-				log.Println("Message not sent ", err)
-			} else {
-				fmt.Println(videoName, "sent at ", time.Now().UnixMilli())
-			}
+			composer.Publish([]byte(videoName), VideoTopic)
+			log.Println(videoName, time.Now().UnixMilli())
 		case <-quit:
 			fmt.Println("Quit signal")
 			return

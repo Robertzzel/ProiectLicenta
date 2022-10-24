@@ -7,7 +7,7 @@ from recorder import Recorder
 import kafka
 
 AUDIO_TOPIC = "audio"
-VIDE_SIZE = 1
+VIDE_SIZE = 1/2
 SAMPLERATE = 44100
 MESSAGE_SIZE_LENGTH = 10
 BROKER_ADDRESS = "localhost:9092"

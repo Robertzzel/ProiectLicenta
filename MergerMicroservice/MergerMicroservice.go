@@ -52,26 +52,25 @@ func createFileWithVideoNames(videos []string) (string, error) {
 func main() {
 	log.Println("Started...")
 
-	checkErr(Kafka.CreateTopic(MergerTopic))
-	defer Kafka.DeleteTopic(MergerTopic)
-
-	uiConsumer := Kafka.NewConsumer(UiTopic)
+	uiConsumer, err := Kafka.NewConsumer(UiTopic)
+	checkErr(err)
 	defer uiConsumer.Close()
 
-	mergerPublisher := Kafka.NewProducer(MergerTopic)
+	mergerPublisher, err := Kafka.NewProducer()
+	checkErr(err)
 	defer mergerPublisher.Close()
 
 	os.Mkdir(receivedVideosDir, os.ModePerm)
 
 	receivedVideos := make([]string, 0, 16)
 	for {
-		video, err := uiConsumer.Consume()
+		video := uiConsumer.Consume()
 		if err != nil {
 			log.Println("Error while receiving videos ", err)
 			break
 		}
 
-		if string(video.Value) == "quit" {
+		if string(video) == "quit" {
 			break
 		}
 
@@ -81,7 +80,7 @@ func main() {
 			break
 		}
 
-		_, err = file.Write(video.Value)
+		_, err = file.Write(video)
 		if err != nil {
 			log.Println("Cannot write received video in a file", err)
 			break
@@ -99,7 +98,7 @@ func main() {
 	log.Println("Created", finalVideoFile)
 
 	databaseMessage := fmt.Sprintf("insert;%s,%d", finalVideoFile, time.Now().Unix())
-	checkErr(mergerPublisher.Publish([]byte(databaseMessage)))
+	mergerPublisher.Publish([]byte(databaseMessage), MergerTopic)
 
 	// Cleaning
 	log.Println("Cleaning ", len(receivedVideos), " files..")

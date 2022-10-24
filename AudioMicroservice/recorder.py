@@ -65,7 +65,7 @@ class Recorder:
             if len(audio_chunk) > SAMPLERATE:
                 audio_chunk = audio_chunk[len(audio_chunk) - SAMPLERATE:]
 
-            audio_file_name = cwd + "/audio/" + str(int(next_chunk_end - chunk_size_seconds)) + ".wav"
+            audio_file_name = cwd + "/audio/" + str(int((next_chunk_end - chunk_size_seconds) * 1000)) + ".wav"
             create_audio_file(audio_file_name, audio_chunk, SAMPLERATE)
             self.audio_queue.put_nowait(audio_file_name)
 

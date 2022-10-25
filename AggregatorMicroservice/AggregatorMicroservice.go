@@ -20,45 +20,69 @@ const (
 	StreamerTopic = "StreamerPing"
 )
 
+var quit = make(chan os.Signal, 2)
+
 type AudioVideoPair struct {
 	Video string
 	Audio string
 }
 
-func checkErr(err error, message string) {
-	if err != nil {
-		log.Println(message)
-		panic(err)
-	}
-}
-
 func getSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer, outputChannel chan AudioVideoPair) {
 	for {
-		videoFile := string(videoConsumer.Consume())
-		audioFile := string(audioConsumer.Consume())
+		var videoMessage, audioMessage []byte
+		var err error
 
-		videoTimestamp, err := strconv.Atoi(videoFile[len(videoFile)-17 : len(videoFile)-4])
+		videoMessage, err = videoConsumer.Consume()
+		if err != nil {
+			log.Println(err)
+			quit <- syscall.SIGINT
+			return
+		}
+
+		audioMessage, err = audioConsumer.Consume()
+		if err != nil {
+			log.Println(err)
+			quit <- syscall.SIGINT
+			return
+		}
+
+		videoFile := string(videoMessage)
+		audioFile := string(audioMessage)
+
+		videoTimestamp, err := strconv.Atoi(videoFile[len(videoFile)-14 : len(videoFile)-4])
 		if err != nil {
 			log.Println("Error, video timestamp not valid")
 			continue
 		}
-		audioTimestamp, err := strconv.Atoi(audioFile[len(audioFile)-17 : len(audioFile)-4])
+		audioTimestamp, err := strconv.Atoi(audioFile[len(audioFile)-14 : len(audioFile)-4])
 		if err != nil {
 			log.Println("Error, audio timestamp not valid")
 			continue
 		}
 
-		timestampDifference := (videoTimestamp - audioTimestamp) / 500
+		timestampDifference := videoTimestamp - audioTimestamp
 		if timestampDifference > 0 {
 			log.Println("Desync ", "audio by ", timestampDifference)
 			for i := 0; i < timestampDifference; i++ {
-				audioFile = string(audioConsumer.Consume())
+				audioMessage, err = audioConsumer.Consume()
+				if err != nil {
+					log.Println(err)
+					quit <- syscall.SIGINT
+					return
+				}
 			}
+			audioFile = string(audioMessage)
 		} else if timestampDifference < 0 {
 			log.Println("Desync ", "video by ", timestampDifference)
 			for i := 0; i < -timestampDifference; i++ {
-				videoFile = string(videoConsumer.Consume())
+				videoMessage, err = videoConsumer.Consume()
+				if err != nil {
+					log.Println(err)
+					quit <- syscall.SIGINT
+					return
+				}
 			}
+			videoFile = string(videoMessage)
 		}
 
 		outputChannel <- AudioVideoPair{Video: videoFile, Audio: audioFile}
@@ -66,18 +90,21 @@ func getSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer, output
 }
 
 func main() {
-	quit := make(chan os.Signal, 2)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	videoConsumer, err := Kafka.NewConsumer(VideoTopic)
-	checkErr(err, "Error while crating video consumer")
+	if err != nil {
+		panic(err)
+	}
 	defer func() {
 		videoConsumer.Close()
 		log.Println("video consumer closed")
 	}()
 
 	audioConsumer, err := Kafka.NewConsumer(AudioTopic)
-	checkErr(err, "Error while crating audio consumer")
+	if err != nil {
+		panic(err)
+	}
 	defer func() {
 		audioConsumer.Close()
 		log.Println("video consumer closed")
@@ -96,7 +123,7 @@ func main() {
 	for {
 		select {
 		case files := <-filesChannel:
-			video, err := exec.Command("./CombineAndCompress", files.Video, files.Audio, "2046k").Output()
+			video, err := exec.Command("./CombineAndCompress", files.Video, files.Audio, "1023k").Output()
 			if err != nil {
 				var exitError *exec.ExitError
 				if errors.As(err, &exitError) {

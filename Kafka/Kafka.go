@@ -1,6 +1,7 @@
 package Kafka
 
 import (
+	"errors"
 	kafka "github.com/Shopify/sarama"
 )
 
@@ -19,7 +20,7 @@ type Consumer struct {
 func NewProducer() (*Producer, error) {
 	config := kafka.NewConfig()
 	config.Producer.RequiredAcks = kafka.WaitForLocal
-	config.Producer.Partitioner = kafka.NewRandomPartitioner
+	config.Producer.Partitioner = kafka.NewRoundRobinPartitioner
 
 	p, err := kafka.NewAsyncProducer([]string{brokerAddress}, config)
 	if err != nil {
@@ -56,8 +57,12 @@ func NewConsumer(topic string) (*Consumer, error) {
 	return &Consumer{pc}, nil
 }
 
-func (consumer *Consumer) Consume() []byte {
-	return (<-consumer.kafkaConsumer.Messages()).Value
+func (consumer *Consumer) Consume() ([]byte, error) {
+	message := <-consumer.kafkaConsumer.Messages()
+	if message == nil {
+		return nil, errors.New("message is nil")
+	}
+	return message.Value, nil
 }
 
 func (consumer *Consumer) Close() error {

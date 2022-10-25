@@ -64,7 +64,7 @@ func main() {
 
 	receivedVideos := make([]string, 0, 16)
 	for {
-		video := uiConsumer.Consume()
+		video, err := uiConsumer.Consume()
 		if err != nil {
 			log.Println("Error while receiving videos ", err)
 			break

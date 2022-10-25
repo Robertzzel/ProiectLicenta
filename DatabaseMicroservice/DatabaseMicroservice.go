@@ -91,7 +91,10 @@ func main() {
 	defer mergerConsumer.Close()
 
 	for {
-		message := mergerConsumer.Consume()
+		message, err := mergerConsumer.Consume()
+		if err != nil {
+			panic(err)
+		}
 
 		if strings.HasPrefix(string(message), "insert") {
 			insertParts := strings.Split(string(message), ";")

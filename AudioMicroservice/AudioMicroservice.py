@@ -7,7 +7,7 @@ from recorder import Recorder
 import kafka
 
 AUDIO_TOPIC = "audio"
-VIDE_SIZE = 1/2
+VIDE_SIZE = 1
 SAMPLERATE = 44100
 MESSAGE_SIZE_LENGTH = 10
 BROKER_ADDRESS = "localhost:9092"
@@ -43,4 +43,5 @@ if __name__ == "__main__":
     producer.close()
     kafka.KafkaAdminClient(bootstrap_servers=BROKER_ADDRESS).delete_topics([AUDIO_TOPIC])
     print("Cleanup done")
+    sys.exit(1)
 

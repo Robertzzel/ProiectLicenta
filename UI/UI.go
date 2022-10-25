@@ -27,11 +27,11 @@ const (
   </div>
   
   <script>
-
-let queue = []
+let lastMessageTime = 0;
+let totalPing = 0
 let video = document.querySelector('video');
 video.onpause = () => { video.play(); }
-video.defaultPlaybackRate = 1.03;
+video.defaultPlaybackRate = 1;
 let webSocket = null;
 let sourceBuffer = null;
 let ms = new MediaSource();
@@ -81,7 +81,21 @@ function openWSConnection() {
         console.log("WebSocket ERROR: " + errorEvent);
     };
     webSocket.onmessage = async function(messageEvent) {
-        sourceBuffer.appendBuffer(await messageEvent.data.arrayBuffer());
+      now = new Date().getTime()
+      if(lastMessageTime !== 0){
+        let diff = now - lastMessageTime - 1000
+        totalPing += diff > 0 ? diff : 0
+        console.log(totalPing)
+      }
+      lastMessageTime = now
+
+      sourceBuffer.appendBuffer(await messageEvent.data.arrayBuffer());
+      if(totalPing > 200){
+       totalPing -= 200
+       video.playbackRate += 0.1
+       setTimeout(() => {video.playbackRate -= 0.1}, 10000)
+      }
+      console.log(video.playbackRate)
     }
 }
 
@@ -103,12 +117,7 @@ openWSConnection();
 	ReceiverTopic   = "ReceiverPing"
 )
 
-func checkErr(err error, msg string) {
-	if err != nil {
-		log.Println(msg)
-		panic(err)
-	}
-}
+var quit = make(chan os.Signal, 2)
 
 func openUiInBrowser() error {
 	err := os.WriteFile(HtmlFileName, []byte(HtmlFileContents), 0777)
@@ -121,11 +130,20 @@ func openUiInBrowser() error {
 
 func main() {
 	aggregatorConsumer, err := Kafka.NewConsumer(AggregatorTopic)
-	checkErr(err, "Error creating aggregator consumer")
-	producer, err := Kafka.NewProducer()
-	checkErr(err, "Error while creating producer")
+	if err != nil {
+		panic(err)
+	}
+	defer aggregatorConsumer.Close()
 
-	checkErr(openUiInBrowser(), "Error while opening web browser")
+	producer, err := Kafka.NewProducer()
+	if err != nil {
+		panic(err)
+	}
+	defer producer.Close()
+
+	if err := openUiInBrowser(); err != nil {
+		log.Println("Error while opening web browser", err)
+	}
 
 	var upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -137,17 +155,32 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ws, err := upgrader.Upgrade(w, r, nil)
-		checkErr(err, "Error while upgrading connection")
+		if err != nil {
+			log.Println(err)
+			ws.Close()
+			quit <- syscall.SIGINT
+		}
 
 		for {
-			checkErr(ws.WriteMessage(websocket.BinaryMessage, aggregatorConsumer.Consume()), "Error while sending message to web")
+			aggregatorMessage, err := aggregatorConsumer.Consume()
+			if err != nil {
+				log.Println(err)
+				ws.Close()
+				quit <- syscall.SIGINT
+				return
+			}
+
+			if err := ws.WriteMessage(websocket.BinaryMessage, aggregatorMessage); err != nil {
+				log.Println("Error while sending message to web")
+				quit <- syscall.SIGINT
+				return
+			}
 
 			producer.Publish([]byte(fmt.Sprint(time.Now().UnixMilli())), ReceiverTopic)
 			fmt.Println("Message sent ", time.Now().UnixMilli())
 		}
 	})
 
-	quit := make(chan os.Signal, 2)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-quit
@@ -155,6 +188,7 @@ func main() {
 		aggregatorConsumer.Close()
 		producer.Close()
 		fmt.Println("Cleanup Done")
+		os.Exit(1)
 	}()
 
 	log.Fatal(http.ListenAndServe("localhost:8081", nil))

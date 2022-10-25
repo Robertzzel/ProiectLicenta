@@ -3,7 +3,6 @@ package main
 import (
 	"Licenta/Kafka"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"strconv"
@@ -15,10 +14,11 @@ const (
 	ReceiverTopic = "ReceiverPing"
 )
 
-func checkErr(err error, msg string) {
+var quit = make(chan os.Signal, 2)
+
+func checkErr(err error) {
 	if err != nil {
-		log.Println(msg)
-		panic(err)
+		quit <- syscall.SIGINT
 	}
 }
 
@@ -31,12 +31,11 @@ func Abs(nr int) int {
 
 func main() {
 	receiverConsumer, err := Kafka.NewConsumer(ReceiverTopic)
-	checkErr(err, "Error while creating receiver consumer")
+	checkErr(err)
 
 	streamerConsumer, err := Kafka.NewConsumer(StreamerTopic)
-	checkErr(err, "Error while creating streamer consumer")
+	checkErr(err)
 
-	quit := make(chan os.Signal, 2)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-quit
@@ -50,11 +49,16 @@ func main() {
 	}()
 
 	for {
-		tsReceiver, err := strconv.Atoi(string(receiverConsumer.Consume()))
-		checkErr(err, "Error while parsing timestamp from receiver")
+		receiverMessage, err := receiverConsumer.Consume()
+		checkErr(err)
+		streamerMessage, err := streamerConsumer.Consume()
+		checkErr(err)
 
-		tsStreamer, err := strconv.Atoi(string(streamerConsumer.Consume()))
-		checkErr(err, "Error while parsing timestamp from streamer")
+		tsReceiver, err := strconv.Atoi(string(receiverMessage))
+		checkErr(err)
+
+		tsStreamer, err := strconv.Atoi(string(streamerMessage))
+		checkErr(err)
 
 		fmt.Println(Abs(tsReceiver - tsStreamer))
 	}

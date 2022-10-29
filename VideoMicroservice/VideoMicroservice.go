@@ -44,11 +44,11 @@ func main() {
 	}
 	videoRecorder.Start(timestamp, VideoDuration)
 
-	composer, err := Kafka.NewProducer()
-	if err != nil {
-		log.Println("Error while creating video topic")
+	if err := Kafka.CreateTopic(VideoTopic); err != nil {
 		panic(err)
 	}
+
+	composer := Kafka.NewProducer()
 	defer func() {
 		composer.Close()
 		Kafka.DeleteTopic(VideoTopic)
@@ -58,7 +58,9 @@ func main() {
 	for {
 		select {
 		case videoName := <-videoRecorder.VideoBuffer:
-			composer.Publish([]byte(videoName), VideoTopic)
+			if err := composer.Publish(&Kafka.ProducerMessage{Message: []byte(videoName), Topic: VideoTopic}); err != nil {
+				panic(err)
+			}
 			log.Println(videoName, time.Now().UnixMilli())
 		case <-quit:
 			fmt.Println("Quit signal")

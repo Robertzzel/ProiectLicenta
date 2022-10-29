@@ -32,7 +32,13 @@ if __name__ == "__main__":
 
         while True:
             audio_file: str = recorder_queue.get(block=True)
-            producer.send(AUDIO_TOPIC, audio_file.encode())
+
+            producer.send(
+                topic=AUDIO_TOPIC,
+                value=audio_file.encode(),
+                headers=[("number-of-messages", str(1).zfill(5).encode()), ("message-number", str(0).zfill(5).encode())]
+            )
+
             print(f"message {audio_file} sent at {time.time()}")
     except KeyboardInterrupt:
         print("Keyboard interrupt")

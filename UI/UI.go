@@ -27,16 +27,20 @@ const (
   </div>
   
   <script>
-let lastMessageTime = 0;
-let totalPing = 0
+let streamingStarted = false;
+let queue = [];
 let video = document.querySelector('video');
 video.onpause = () => { video.play(); }
-video.defaultPlaybackRate = 1;
+video.defaultPlaybackRate = 0;
 let webSocket = null;
 let sourceBuffer = null;
 let ms = new MediaSource();
 video.src = window.URL.createObjectURL(ms);
-const VIDEO_TYPE = 'video/mp4;codecs="avc1.64001e, mp4a.40.2"'
+const VIDEO_TYPE = 'video/mp4; codecs=avc1.42E01E,mp4a.40.2'
+//const mimeCodec = 'video/mp4; codecs="avc1.4D0033, mp4a.40.2"';
+//const mimeCodec = 'video/mp4; codecs=avc1.42E01E,mp4a.40.2'; baseline
+//const mimeCodec = 'video/mp4; codecs=avc1.4d002a,mp4a.40.2'; main
+//const mimeCodec = 'video/mp4; codecs="avc1.64001E, mp4a.40.2"'; high
 const SOCKET_URL = "ws://localhost:8081"
 
 function initMediaSource() {
@@ -58,18 +62,27 @@ function initMediaSource() {
     ms.addEventListener('sourceopen', onMediaSourceOpen);
 
     function onMediaSourceOpen() {
-        sourceBuffer = ms.addSourceBuffer(VIDEO_TYPE);
-        sourceBuffer.mode = 'sequence';
-        sourceBuffer.addEventListener("onerror", () => {
-            console.log("Media source error");
-        });
+      sourceBuffer = ms.addSourceBuffer(VIDEO_TYPE);
+      sourceBuffer.mode = 'sequence';
+      sourceBuffer.addEventListener("onerror", () => {console.log("Media source error");});
+      sourceBuffer.addEventListener("updateend", () => {
+        if (sourceBuffer.updating) {
+          return;
+        }
+
+        if (queue.length>0) {
+          sourceBuffer.appendBuffer(queue.shift())
+        } else {
+          streamingStarted = false;
+        }
+      });
     }
 }
 function openWSConnection() {
     console.log("openWSConnection::Connecting to: " + SOCKET_URL);
 
     webSocket = new WebSocket(SOCKET_URL);
-    webSocket.debug = false;
+    webSocket.debug = true;
     webSocket.timeoutInterval = 3000;
     webSocket.onopen = function(openEvent) {
         console.log("WebSocket open");
@@ -81,21 +94,17 @@ function openWSConnection() {
         console.log("WebSocket ERROR: " + errorEvent);
     };
     webSocket.onmessage = async function(messageEvent) {
-      now = new Date().getTime()
-      if(lastMessageTime !== 0){
-        let diff = now - lastMessageTime - 1000
-        totalPing += diff > 0 ? diff : 0
-        console.log(totalPing)
+      if(typeof messageEvent.data === 'string'){
+		video.playbackRate = parseFloat(messageEvent.data)
+        console.log(video.playbackRate)
+      } else {
+        if(!streamingStarted) {
+          sourceBuffer.appendBuffer(await messageEvent.data.arrayBuffer());
+          streamingStarted = true;
+          return
+        }
+        queue.push(await messageEvent.data.arrayBuffer())
       }
-      lastMessageTime = now
-
-      sourceBuffer.appendBuffer(await messageEvent.data.arrayBuffer());
-      if(totalPing > 200){
-       totalPing -= 200
-       video.playbackRate += 0.1
-       setTimeout(() => {video.playbackRate -= 0.1}, 10000)
-      }
-      console.log(video.playbackRate)
     }
 }
 
@@ -129,16 +138,10 @@ func openUiInBrowser() error {
 }
 
 func main() {
-	aggregatorConsumer, err := Kafka.NewConsumer(AggregatorTopic)
-	if err != nil {
-		panic(err)
-	}
+	aggregatorConsumer := Kafka.NewConsumer(AggregatorTopic)
 	defer aggregatorConsumer.Close()
 
-	producer, err := Kafka.NewProducer()
-	if err != nil {
-		panic(err)
-	}
+	producer := Kafka.NewProducer()
 	defer producer.Close()
 
 	if err := openUiInBrowser(); err != nil {
@@ -159,10 +162,25 @@ func main() {
 			log.Println(err)
 			ws.Close()
 			quit <- syscall.SIGINT
+			return
+		}
+
+		aggregatorMessage, err := aggregatorConsumer.Consume()
+		if err != nil {
+			log.Println(err)
+			ws.Close()
+			quit <- syscall.SIGINT
+			return
+		}
+
+		if err := ws.WriteMessage(websocket.TextMessage, aggregatorMessage.Message); err != nil {
+			log.Println("Error while sending message to web")
+			quit <- syscall.SIGINT
+			return
 		}
 
 		for {
-			aggregatorMessage, err := aggregatorConsumer.Consume()
+			aggregatorMessage, err = aggregatorConsumer.Consume()
 			if err != nil {
 				log.Println(err)
 				ws.Close()
@@ -170,13 +188,17 @@ func main() {
 				return
 			}
 
-			if err := ws.WriteMessage(websocket.BinaryMessage, aggregatorMessage); err != nil {
+			if err := ws.WriteMessage(websocket.BinaryMessage, aggregatorMessage.Message); err != nil {
 				log.Println("Error while sending message to web")
 				quit <- syscall.SIGINT
 				return
 			}
 
-			producer.Publish([]byte(fmt.Sprint(time.Now().UnixMilli())), ReceiverTopic)
+			if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(fmt.Sprint(time.Now().UnixMilli())), Topic: ReceiverTopic}); err != nil {
+				log.Println("Error while sending message to ping")
+				quit <- syscall.SIGINT
+				return
+			}
 			fmt.Println("Message sent ", time.Now().UnixMilli())
 		}
 	})
@@ -191,5 +213,7 @@ func main() {
 		os.Exit(1)
 	}()
 
-	log.Fatal(http.ListenAndServe("localhost:8081", nil))
+	if err := http.ListenAndServe("localhost:8081", nil); err != nil {
+		log.Println(err)
+	}
 }

@@ -97,7 +97,7 @@ videoProcessingFor:
 	for {
 		nextChunkEndTime = nextChunkEndTime.Add(chunkSize)
 
-		videoFileName := fmt.Sprintf("%s/videos/%s.mkv", cwd, fmt.Sprint(nextChunkEndTime.Add(-chunkSize).Unix()))
+		videoFileName := fmt.Sprintf("%s/videos/%s.mkv", cwd, fmt.Sprint(nextChunkEndTime.Add(-chunkSize).UnixMilli()))
 
 		video, err := mjpeg.New(videoFileName, r.width, r.height, int32(r.fps))
 		if err != nil {

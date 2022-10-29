@@ -30,20 +30,25 @@ func Abs(nr int) int {
 }
 
 func main() {
-	receiverConsumer, err := Kafka.NewConsumer(ReceiverTopic)
-	checkErr(err)
+	if err := Kafka.CreateTopic(ReceiverTopic); err != nil {
+		panic(err)
+	}
 
-	streamerConsumer, err := Kafka.NewConsumer(StreamerTopic)
-	checkErr(err)
+	if err := Kafka.CreateTopic(StreamerTopic); err != nil {
+		panic(err)
+	}
+
+	receiverConsumer := Kafka.NewConsumer(ReceiverTopic)
+	streamerConsumer := Kafka.NewConsumer(StreamerTopic)
 
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-quit
 		fmt.Println("Starting cleanup")
-		streamerConsumer.Close()
-		receiverConsumer.Close()
 		Kafka.DeleteTopic(ReceiverTopic)
 		Kafka.DeleteTopic(StreamerTopic)
+		streamerConsumer.Close()
+		receiverConsumer.Close()
 		fmt.Println("Cleanup done")
 		os.Exit(1)
 	}()
@@ -54,10 +59,10 @@ func main() {
 		streamerMessage, err := streamerConsumer.Consume()
 		checkErr(err)
 
-		tsReceiver, err := strconv.Atoi(string(receiverMessage))
+		tsReceiver, err := strconv.Atoi(string(receiverMessage.Message))
 		checkErr(err)
 
-		tsStreamer, err := strconv.Atoi(string(streamerMessage))
+		tsStreamer, err := strconv.Atoi(string(streamerMessage.Message))
 		checkErr(err)
 
 		fmt.Println(Abs(tsReceiver - tsStreamer))

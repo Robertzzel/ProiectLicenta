@@ -28,6 +28,8 @@ const (
   
   <script>
 let streamingStarted = false;
+let lastMessageTimestamp = 0;
+let accumulatedPing = 0;
 let queue = [];
 let video = document.querySelector('video');
 video.onpause = () => { video.play(); }
@@ -97,14 +99,31 @@ function openWSConnection() {
       if(typeof messageEvent.data === 'string'){
 		video.playbackRate = parseFloat(messageEvent.data)
         console.log(video.playbackRate)
+        return
+      }
+
+      if(!streamingStarted) {
+        sourceBuffer.appendBuffer(await messageEvent.data.arrayBuffer());
+        streamingStarted = true;
       } else {
-        if(!streamingStarted) {
-          sourceBuffer.appendBuffer(await messageEvent.data.arrayBuffer());
-          streamingStarted = true;
-          return
-        }
         queue.push(await messageEvent.data.arrayBuffer())
       }
+
+      if(lastMessageTimestamp !== 0){
+        let now = new Date().getTime();
+        let diff = now - lastMessageTimestamp - 1000
+        accumulatedPing += diff > 0 ? diff : 0
+        lastMessageTimestamp += now
+      } else {
+        lastMessageTimestamp = new Date().getTime()
+      }
+
+      if(accumulatedPing > 100) {
+        video.playbackRate += 0.11111
+        setTimeout(() => {video.playbackRate -= 0.11111}, 1000)
+      }
+
+      console.log(accumulatedPing, video.playbackRate)
     }
 }
 

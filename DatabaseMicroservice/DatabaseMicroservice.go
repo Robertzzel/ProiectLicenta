@@ -86,8 +86,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	mergerConsumer, err := Kafka.NewConsumer(MergerTopic)
-	checkErr(err)
+	mergerConsumer := Kafka.NewConsumer(MergerTopic)
 	defer mergerConsumer.Close()
 
 	for {
@@ -96,8 +95,8 @@ func main() {
 			panic(err)
 		}
 
-		if strings.HasPrefix(string(message), "insert") {
-			insertParts := strings.Split(string(message), ";")
+		if strings.HasPrefix(string(message.Message), "insert") {
+			insertParts := strings.Split(string(message.Message), ";")
 			pathAndTimestamp := strings.Split(insertParts[1], ",")
 			checkErr(db.Insert(pathAndTimestamp[0], pathAndTimestamp[1]))
 			fmt.Println(pathAndTimestamp[0], pathAndTimestamp[1])

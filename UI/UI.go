@@ -140,6 +140,30 @@ func openUiInBrowser() error {
 	return exec.Command("xdg-open", HtmlFileName).Run()
 }
 
+func CollectAndSendNextVideoFile(producer *Kafka.Producer, consumer *Kafka.Consumer, webSocket *websocket.Conn) error {
+	if err := consumer.SetOffsetToNow(); err != nil {
+		return err
+	}
+
+	for {
+		aggregatorMessage, err := consumer.Consume()
+		if err != nil {
+			return err
+		}
+
+		if err := webSocket.WriteMessage(websocket.BinaryMessage, aggregatorMessage.Message); err != nil {
+			return err
+		}
+
+		if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(fmt.Sprint(time.Now().UnixMilli())), Topic: ReceiverTopic}); err != nil {
+			return err
+		}
+		fmt.Println("Message sent ", time.Now().UnixMilli())
+
+		return nil
+	}
+}
+
 func main() {
 	aggregatorConsumer := Kafka.NewConsumer(AggregatorTopic)
 	defer aggregatorConsumer.Close()
@@ -163,38 +187,16 @@ func main() {
 		ws, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Println(err)
-			ws.Close()
-			quit <- syscall.SIGINT
-			return
-		}
-
-		if err := aggregatorConsumer.SetOffsetToNow(); err != nil {
-			log.Println("Error while setting offset")
 			quit <- syscall.SIGINT
 			return
 		}
 
 		for {
-			aggregatorMessage, err := aggregatorConsumer.Consume()
-			if err != nil {
+			if err := CollectAndSendNextVideoFile(producer, aggregatorConsumer, ws); err != nil {
 				log.Println(err)
-				ws.Close()
 				quit <- syscall.SIGINT
 				return
 			}
-
-			if err := ws.WriteMessage(websocket.BinaryMessage, aggregatorMessage.Message); err != nil {
-				log.Println("Error while sending message to web")
-				quit <- syscall.SIGINT
-				return
-			}
-
-			if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(fmt.Sprint(time.Now().UnixMilli())), Topic: ReceiverTopic}); err != nil {
-				log.Println("Error while sending message to ping")
-				quit <- syscall.SIGINT
-				return
-			}
-			fmt.Println("Message sent ", time.Now().UnixMilli())
 		}
 	})
 

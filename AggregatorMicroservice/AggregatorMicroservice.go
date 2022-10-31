@@ -67,77 +67,89 @@ func SendVideo(producer *Kafka.Producer, video []byte) error {
 	return nil
 }
 
-func GetSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer, outputChannel chan AudioVideoPair) {
+func GetNextSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer) (AudioVideoPair, error) {
+	files := AudioVideoPair{}
+
+	videoMessage, err := videoConsumer.Consume()
+	if err != nil {
+		return AudioVideoPair{}, err
+	}
+
+	audioMessage, err := audioConsumer.Consume()
+	if err != nil {
+		return AudioVideoPair{}, err
+	}
+
+	files.Video = string(videoMessage.Message)
+	files.Audio = string(audioMessage.Message)
+
+	videoTimestamp, err := GetFileTimestamp(files.Video)
+	if err != nil {
+		return AudioVideoPair{}, err
+	}
+
+	audioTimestamp, err := GetFileTimestamp(files.Audio)
+	if err != nil {
+		return AudioVideoPair{}, err
+	}
+
+	for videoTimestamp > audioTimestamp {
+		audioMessage, err = audioConsumer.Consume()
+		if err != nil {
+			return AudioVideoPair{}, err
+		}
+
+		audioTimestamp, err = GetFileTimestamp(files.Audio)
+		if err != nil {
+			return AudioVideoPair{}, err
+		}
+	}
+	files.Audio = string(audioMessage.Message)
+
+	for videoTimestamp < audioTimestamp {
+		videoMessage, err = videoConsumer.Consume()
+		if err != nil {
+			return AudioVideoPair{}, err
+		}
+
+		videoTimestamp, err = GetFileTimestamp(files.Video)
+		if err != nil {
+			return AudioVideoPair{}, err
+		}
+	}
+	files.Video = string(videoMessage.Message)
+
+	return files, nil
+}
+
+func CollectAudioAndVideoFiles(videoConsumer, audioConsumer *Kafka.Consumer, outputChannel chan AudioVideoPair) {
 	for {
-		files := AudioVideoPair{}
-
-		videoMessage, err := videoConsumer.Consume()
+		files, err := GetNextSyncedAudioAndVideo(videoConsumer, audioConsumer)
 		if err != nil {
 			log.Println(err)
 			quit <- syscall.SIGINT
 			return
 		}
-
-		audioMessage, err := audioConsumer.Consume()
-		if err != nil {
-			log.Println(err)
-			quit <- syscall.SIGINT
-			return
-		}
-
-		files.Video = string(videoMessage.Message)
-		files.Audio = string(audioMessage.Message)
-
-		videoTimestamp, err := GetFileTimestamp(files.Video)
-		if err != nil {
-			log.Println(err)
-			quit <- syscall.SIGINT
-			return
-		}
-
-		audioTimestamp, err := GetFileTimestamp(files.Audio)
-		if err != nil {
-			log.Println(err)
-			quit <- syscall.SIGINT
-			return
-		}
-
-		for videoTimestamp > audioTimestamp {
-			audioMessage, err = audioConsumer.Consume()
-			if err != nil {
-				log.Println(err)
-				quit <- syscall.SIGINT
-				return
-			}
-
-			audioTimestamp, err = GetFileTimestamp(files.Audio)
-			if err != nil {
-				log.Println(err)
-				quit <- syscall.SIGINT
-				return
-			}
-		}
-		files.Audio = string(audioMessage.Message)
-
-		for videoTimestamp < audioTimestamp {
-			videoMessage, err = videoConsumer.Consume()
-			if err != nil {
-				log.Println(err)
-				quit <- syscall.SIGINT
-				return
-			}
-
-			videoTimestamp, err = GetFileTimestamp(files.Video)
-			if err != nil {
-				log.Println(err)
-				quit <- syscall.SIGINT
-				return
-			}
-		}
-		files.Video = string(videoMessage.Message)
 
 		outputChannel <- files
 	}
+}
+
+func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error {
+	defer files.Delete()
+	s := time.Now()
+
+	video, err := CombineAndCompressFiles(files, "1m", "pipe:1")
+	if err != nil {
+		return err
+	}
+
+	if err = SendVideo(producer, video); err != nil {
+		return err
+	}
+
+	fmt.Println("video ", files.Video[len(files.Video)-14:len(files.Video)-4], "sent at ", time.Now().UnixMilli(), " ( ", time.Since(s), " ) ", len(video))
+	return nil
 }
 
 func main() {
@@ -167,25 +179,17 @@ func main() {
 	}()
 
 	filesChannel := make(chan AudioVideoPair, 5)
-	go GetSyncedAudioAndVideo(videoConsumer, audioConsumer, filesChannel)
+	go CollectAudioAndVideoFiles(videoConsumer, audioConsumer, filesChannel)
 
 	for {
 		select {
 		case filesPair := <-filesChannel:
 			go func(files AudioVideoPair) {
-				defer files.Delete()
-				s := time.Now()
-
-				video, err := CombineAndCompressFiles(files, "1m", "pipe:1")
-				if err != nil {
-					panic(err)
+				if err := CompressAndSendFiles(producer, files); err != nil {
+					fmt.Println(err)
+					quit <- syscall.SIGINT
+					return
 				}
-
-				if err = SendVideo(producer, video); err != nil {
-					panic(err)
-				}
-
-				fmt.Println("video ", files.Video[len(files.Video)-14:len(files.Video)-4], "sent at ", time.Now().UnixMilli(), " ( ", time.Since(s), " ) ", len(video))
 			}(filesPair)
 		case <-quit:
 			return

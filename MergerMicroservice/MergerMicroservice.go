@@ -52,13 +52,10 @@ func createFileWithVideoNames(videos []string) (string, error) {
 func main() {
 	log.Println("Started...")
 
-	checkErr(Kafka.CreateTopic(MergerTopic))
-	defer Kafka.DeleteTopic(MergerTopic)
-
 	uiConsumer := Kafka.NewConsumer(UiTopic)
 	defer uiConsumer.Close()
 
-	mergerPublisher := Kafka.NewProducer(MergerTopic)
+	mergerPublisher := Kafka.NewProducer()
 	defer mergerPublisher.Close()
 
 	os.Mkdir(receivedVideosDir, os.ModePerm)
@@ -71,17 +68,13 @@ func main() {
 			break
 		}
 
-		if string(video.Value) == "quit" {
-			break
-		}
-
 		file, err := os.CreateTemp(receivedVideosDir, "*.mp4")
 		if err != nil {
 			log.Println("Cannot create file for video", err)
 			break
 		}
 
-		_, err = file.Write(video.Value)
+		_, err = file.Write(video.Message)
 		if err != nil {
 			log.Println("Cannot write received video in a file", err)
 			break
@@ -99,7 +92,7 @@ func main() {
 	log.Println("Created", finalVideoFile)
 
 	databaseMessage := fmt.Sprintf("insert;%s,%d", finalVideoFile, time.Now().Unix())
-	checkErr(mergerPublisher.Publish([]byte(databaseMessage)))
+	checkErr(mergerPublisher.Publish(&Kafka.ProducerMessage{Message: []byte(databaseMessage), Topic: MergerTopic}))
 
 	// Cleaning
 	log.Println("Cleaning ", len(receivedVideos), " files..")

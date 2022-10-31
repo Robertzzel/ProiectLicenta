@@ -1,21 +1,14 @@
 import queue
 import sys
 import time
-import numpy as np
-import soundfile as sf
 from recorder import Recorder
 import kafka
 
 AUDIO_TOPIC = "audio"
-VIDE_SIZE = 1
+VIDEO_LENGTH = 1
 SAMPLERATE = 44100
 MESSAGE_SIZE_LENGTH = 10
 BROKER_ADDRESS = "localhost:9092"
-
-
-def create_audio_file(path, audio_buffer):
-    open(path, "w").close()  # create file
-    sf.write(path, np.array(audio_buffer, dtype='float32'), samplerate=SAMPLERATE)
 
 
 if __name__ == "__main__":
@@ -28,11 +21,17 @@ if __name__ == "__main__":
     producer = kafka.KafkaProducer(bootstrap_servers=BROKER_ADDRESS, acks=1)
 
     try:
-        audio_recorder.start(int(sys.argv[1]), VIDE_SIZE)
+        audio_recorder.start(int(sys.argv[1]), VIDEO_LENGTH)
 
         while True:
             audio_file: str = recorder_queue.get(block=True)
-            producer.send(AUDIO_TOPIC, audio_file.encode())
+
+            producer.send(
+                topic=AUDIO_TOPIC,
+                value=audio_file.encode(),
+                headers=[("number-of-messages", b'00001'), ("message-number", b'00000')]
+            )
+
             print(f"message {audio_file} sent at {time.time()}")
     except KeyboardInterrupt:
         print("Keyboard interrupt")
@@ -43,4 +42,5 @@ if __name__ == "__main__":
     producer.close()
     kafka.KafkaAdminClient(bootstrap_servers=BROKER_ADDRESS).delete_topics([AUDIO_TOPIC])
     print("Cleanup done")
+    sys.exit(1)
 

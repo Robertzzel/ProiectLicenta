@@ -2,6 +2,7 @@ package main
 
 import (
 	"Licenta/Kafka"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -16,87 +17,182 @@ const (
 	VideoTopic    = "video"
 	AudioTopic    = "audio"
 	ComposerTopic = "aggregator"
+	StreamerTopic = "StreamerPing"
 )
 
-func checkErr(err error) {
+var quit = make(chan os.Signal, 2)
+
+type AudioVideoPair struct {
+	Video string
+	Audio string
+}
+
+func (avp *AudioVideoPair) Delete() error {
+	if err := os.Remove(avp.Video); err != nil {
+		return err
+	}
+
+	if err := os.Remove(avp.Audio); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func GetFileTimestamp(file string) (int, error) {
+	return strconv.Atoi(file[len(file)-17 : len(file)-4])
+}
+
+func CombineAndCompressFiles(files AudioVideoPair, bitrate string, output string) ([]byte, error) {
+	result, err := exec.Command("./CombineAndCompress", files.Video, files.Audio, bitrate, output).Output()
 	if err != nil {
-		panic(err)
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			return nil, errors.New(string(exitError.Stderr))
+		}
+	}
+
+	return result, nil
+}
+
+func SendVideo(producer *Kafka.Producer, video []byte) error {
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: ComposerTopic}); err != nil {
+		return err
+	}
+
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(fmt.Sprint(time.Now().UnixMilli())), Topic: StreamerTopic}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func GetNextSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer) (AudioVideoPair, error) {
+	files := AudioVideoPair{}
+
+	videoMessage, err := videoConsumer.Consume()
+	if err != nil {
+		return AudioVideoPair{}, err
+	}
+
+	audioMessage, err := audioConsumer.Consume()
+	if err != nil {
+		return AudioVideoPair{}, err
+	}
+
+	files.Video = string(videoMessage.Message)
+	files.Audio = string(audioMessage.Message)
+
+	videoTimestamp, err := GetFileTimestamp(files.Video)
+	if err != nil {
+		return AudioVideoPair{}, err
+	}
+
+	audioTimestamp, err := GetFileTimestamp(files.Audio)
+	if err != nil {
+		return AudioVideoPair{}, err
+	}
+
+	for videoTimestamp > audioTimestamp {
+		audioMessage, err = audioConsumer.Consume()
+		if err != nil {
+			return AudioVideoPair{}, err
+		}
+
+		audioTimestamp, err = GetFileTimestamp(files.Audio)
+		if err != nil {
+			return AudioVideoPair{}, err
+		}
+	}
+	files.Audio = string(audioMessage.Message)
+
+	for videoTimestamp < audioTimestamp {
+		videoMessage, err = videoConsumer.Consume()
+		if err != nil {
+			return AudioVideoPair{}, err
+		}
+
+		videoTimestamp, err = GetFileTimestamp(files.Video)
+		if err != nil {
+			return AudioVideoPair{}, err
+		}
+	}
+	files.Video = string(videoMessage.Message)
+
+	return files, nil
+}
+
+func CollectAudioAndVideoFiles(videoConsumer, audioConsumer *Kafka.Consumer, outputChannel chan AudioVideoPair) {
+	for {
+		files, err := GetNextSyncedAudioAndVideo(videoConsumer, audioConsumer)
+		if err != nil {
+			log.Println(err)
+			quit <- syscall.SIGINT
+			return
+		}
+
+		outputChannel <- files
 	}
 }
 
-func getSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer) (string, string, error) {
-	videoMessage, err := videoConsumer.Consume()
-	checkErr(err)
-	audioMessage, err := audioConsumer.Consume()
-	checkErr(err)
+func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error {
+	defer files.Delete()
+	s := time.Now()
 
-	videoFile := string(videoMessage.Value)
-	audioFile := string(audioMessage.Value)
-
-	videoTimestamp, err := strconv.Atoi(videoFile[len(videoFile)-14 : len(videoFile)-4])
-	checkErr(err)
-	audioTimestamp, err := strconv.Atoi(audioFile[len(audioFile)-14 : len(audioFile)-4])
-	checkErr(err)
-
-	timestampDifference := videoTimestamp - audioTimestamp
-	if timestampDifference > 0 {
-		log.Println("Desync ", "audio by ", timestampDifference)
-		for i := 0; i < timestampDifference; i++ {
-			audioMessage, err = audioConsumer.Consume()
-			checkErr(err)
-		}
-		audioFile = string(audioMessage.Value)
-	} else if timestampDifference < 0 {
-		log.Println("Desync ", "video by ", timestampDifference)
-		for i := 0; i < -timestampDifference; i++ {
-			videoMessage, err = videoConsumer.Consume()
-			checkErr(err)
-		}
-		videoFile = string(videoMessage.Value)
+	video, err := CombineAndCompressFiles(files, "1m", "pipe:1")
+	if err != nil {
+		return err
 	}
 
-	return videoFile, audioFile, nil
+	if err = SendVideo(producer, video); err != nil {
+		return err
+	}
+
+	fmt.Println("video ", files.Video[len(files.Video)-14:len(files.Video)-4], "sent at ", time.Now().UnixMilli(), " ( ", time.Since(s), " ) ", len(video))
+	return nil
 }
 
 func main() {
-	checkErr(Kafka.CreateTopic(ComposerTopic))
-	videoConsumer := Kafka.NewConsumer(VideoTopic)
-	audioConsumer := Kafka.NewConsumer(AudioTopic)
-	composerProducer := Kafka.NewProducerAsync(ComposerTopic)
-
-	quit := make(chan os.Signal, 2)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-quit
-		fmt.Println("Starting cleanup")
-		Kafka.DeleteTopic(ComposerTopic)
-		fmt.Println("Cleanup done")
-		os.Exit(1)
+
+	videoConsumer := Kafka.NewConsumer(VideoTopic)
+	defer func() {
+		videoConsumer.Close()
+		log.Println("video consumer closed")
 	}()
 
-	checkErr(videoConsumer.SetOffsetToNow())
-	checkErr(audioConsumer.SetOffsetToNow())
+	audioConsumer := Kafka.NewConsumer(AudioTopic)
+	defer func() {
+		audioConsumer.Close()
+		log.Println("video consumer closed")
+	}()
+
+	if err := Kafka.CreateTopic(ComposerTopic); err != nil {
+		panic(err)
+	}
+
+	producer := Kafka.NewProducer()
+	defer func() {
+		producer.Close()
+		Kafka.DeleteTopic(ComposerTopic)
+		log.Println("producer and topic closed")
+	}()
+
+	filesChannel := make(chan AudioVideoPair, 5)
+	go CollectAudioAndVideoFiles(videoConsumer, audioConsumer, filesChannel)
 
 	for {
-		outputFile, err := os.CreateTemp("", "video*.mp4")
-		checkErr(err)
-		checkErr(outputFile.Close())
-
-		videoFile, audioFile, err := getSyncedAudioAndVideo(videoConsumer, audioConsumer)
-		checkErr(err)
-
-		go func(videoFile, audioFile, outputFile string) {
-			s := time.Now()
-
-			checkErr(exec.Command("./CombineAndCompress", videoFile, audioFile, outputFile, "20").Run())
-			fileBytes, err := os.ReadFile(outputFile)
-			checkErr(err)
-			checkErr(composerProducer.Publish(fileBytes))
-			fmt.Println(" video: ", outputFile, ", timestamp: ", videoFile[len(videoFile)-14:len(videoFile)-4], " at", time.Now().Unix(), " (", time.Since(s), " )")
-
-			checkErr(os.Remove(videoFile))
-			checkErr(os.Remove(audioFile))
-			checkErr(os.Remove(outputFile))
-		}(videoFile, audioFile, outputFile.Name())
+		select {
+		case filesPair := <-filesChannel:
+			go func(files AudioVideoPair) {
+				if err := CompressAndSendFiles(producer, files); err != nil {
+					fmt.Println(err)
+					quit <- syscall.SIGINT
+					return
+				}
+			}(filesPair)
+		case <-quit:
+			return
+		}
 	}
 }

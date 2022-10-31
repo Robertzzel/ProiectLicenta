@@ -2,53 +2,90 @@ package Kafka
 
 import (
 	"context"
+	"fmt"
 	kafkago "github.com/segmentio/kafka-go"
+	"strconv"
 	"time"
 )
 
 const (
-	brokerAddress = "localhost:9092"
-	brokerNetwork = "tcp"
+	brokerAddress   = "localhost:9092"
+	brokerNetwork   = "tcp"
+	MaxMessageBytes = 1000000
 )
 
+func min(a, b int) int {
+	if a > b {
+		return b
+	}
+	return a
+}
+
+type Header = kafkago.Header
+
+type ConsumerMessage struct {
+	Message []byte
+	Headers []Header
+}
+
+type ProducerMessage struct {
+	Message []byte
+	Topic   string
+	Headers []Header
+}
+
 type Producer struct {
-	*kafkago.Writer
+	kafkaWriter *kafkago.Writer
 }
 
 type Consumer struct {
-	*kafkago.Reader
+	kafkaReader *kafkago.Reader
 }
 
-func NewProducer(topic string) *Producer {
+func NewProducer() *Producer {
 	return &Producer{
-		Writer: &kafkago.Writer{
-			Addr:      kafkago.TCP(brokerAddress),
-			Topic:     topic,
-			Balancer:  &kafkago.LeastBytes{},
-			BatchSize: 1,
+		kafkaWriter: &kafkago.Writer{
+			Addr:         kafkago.TCP(brokerAddress),
+			Async:        true,
+			Balancer:     &kafkago.LeastBytes{},
+			BatchSize:    1,
+			RequiredAcks: kafkago.RequireAll,
 		},
 	}
 }
+func (producer *Producer) Publish(producerMessage *ProducerMessage) error {
+	numberOfMessages := 0
 
-func NewProducerAsync(topic string) *Producer {
-	return &Producer{
-		Writer: &kafkago.Writer{
-			Addr:      kafkago.TCP(brokerAddress),
-			Topic:     topic,
-			Async:     true,
-			Balancer:  &kafkago.LeastBytes{},
-			BatchSize: 1,
-		},
+	if len(producerMessage.Message) < MaxMessageBytes {
+		numberOfMessages = 1
+	} else if len(producerMessage.Message)%MaxMessageBytes == 0 {
+		numberOfMessages = len(producerMessage.Message) / MaxMessageBytes
+	} else {
+		numberOfMessages = len(producerMessage.Message)/MaxMessageBytes + 1
 	}
+
+	messages := make([]kafkago.Message, numberOfMessages)
+	for i := 0; i < numberOfMessages; i++ {
+		messages[i] = kafkago.Message{
+			Value: producerMessage.Message[i*MaxMessageBytes : min(len(producerMessage.Message), (i+1)*MaxMessageBytes)],
+			Topic: producerMessage.Topic,
+			Headers: append([]kafkago.Header{
+				{Key: "number-of-messages", Value: []byte(fmt.Sprintf("%05d", numberOfMessages))},
+				{Key: "message-number", Value: []byte(fmt.Sprintf("%05d", i))},
+			}, producerMessage.Headers...),
+		}
+	}
+
+	return producer.kafkaWriter.WriteMessages(context.Background(), messages...)
 }
 
-func (kp *Producer) Publish(message []byte) error {
-	return kp.WriteMessages(context.Background(), kafkago.Message{Value: message})
+func (producer *Producer) Close() error {
+	return producer.kafkaWriter.Close()
 }
 
 func NewConsumer(topic string) *Consumer {
 	return &Consumer{
-		Reader: kafkago.NewReader(
+		kafkaReader: kafkago.NewReader(
 			kafkago.ReaderConfig{
 				Brokers:     []string{brokerAddress},
 				Topic:       topic,
@@ -58,17 +95,62 @@ func NewConsumer(topic string) *Consumer {
 	}
 }
 
-func (kc *Consumer) Consume() (kafkago.Message, error) {
-	message, err := kc.ReadMessage(context.Background())
+func (kc *Consumer) Consume() (*ConsumerMessage, error) {
+	message, err := kc.kafkaReader.ReadMessage(context.Background())
 	if err != nil {
-		return kafkago.Message{}, err
+		return nil, err
 	}
 
-	return message, nil
+	var numberOfMessages, messageNumber int
+	for _, header := range message.Headers {
+		if header.Key == "number-of-messages" {
+			numberOfMessages, err = strconv.Atoi(string(header.Value))
+			if err != nil {
+				return nil, err
+			}
+		} else if header.Key == "message-number" {
+			messageNumber, err = strconv.Atoi(string(header.Value))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	messages := make([][]byte, numberOfMessages)
+	messages[messageNumber] = message.Value
+
+	for i := 0; i < numberOfMessages-1; i++ {
+		message, err = kc.kafkaReader.ReadMessage(context.Background())
+		if err != nil {
+			return nil, err
+		}
+
+		for _, header := range message.Headers {
+			if header.Key == "message-number" {
+				messageNumber, err = strconv.Atoi(string(header.Value))
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		messages[messageNumber] = message.Value
+	}
+
+	fullMessage := make([]byte, 0)
+	for _, messageValues := range messages {
+		fullMessage = append(fullMessage, messageValues...)
+	}
+
+	return &ConsumerMessage{Message: fullMessage, Headers: message.Headers}, nil
+}
+
+func (kc *Consumer) Close() error {
+	return kc.kafkaReader.Close()
 }
 
 func (kc *Consumer) SetOffsetToNow() error {
-	return kc.Reader.SetOffsetAt(context.Background(), time.Now())
+	return kc.kafkaReader.SetOffsetAt(context.Background(), time.Now())
 }
 
 func CreateTopic(name string) error {

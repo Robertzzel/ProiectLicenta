@@ -91,10 +91,12 @@ func main() {
 
 	for {
 		message, err := mergerConsumer.Consume()
-		checkErr(err)
+		if err != nil {
+			panic(err)
+		}
 
-		if strings.HasPrefix(string(message.Value), "insert") {
-			insertParts := strings.Split(string(message.Value), ";")
+		if strings.HasPrefix(string(message.Message), "insert") {
+			insertParts := strings.Split(string(message.Message), ";")
 			pathAndTimestamp := strings.Split(insertParts[1], ",")
 			checkErr(db.Insert(pathAndTimestamp[0], pathAndTimestamp[1]))
 			fmt.Println(pathAndTimestamp[0], pathAndTimestamp[1])

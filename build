@@ -19,3 +19,6 @@ cd ..
 cd DatabaseMicroservice
 go build DatabaseMicroservice.go
 cd ..
+
+cd PingMicroservice
+go build PingMicroservice.go

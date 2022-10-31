@@ -140,38 +140,6 @@ func GetSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer, output
 	}
 }
 
-func sendVideoWithLength(producer *Kafka.Producer, files AudioVideoPair) error {
-	f, err := os.CreateTemp("", "sizeVid*.mp4")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	f.Close()
-
-	if _, err = CombineAndCompressFiles(files, "1m", f.Name()); err != nil {
-		return err
-	}
-
-	videoLengthResponse, err := exec.Command("./GetFileSize", f.Name()).Output()
-	if err != nil {
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
-			return errors.New(string(exitError.Stderr))
-		}
-	}
-
-	if err := producer.Publish(&Kafka.ProducerMessage{Message: videoLengthResponse, Topic: ComposerTopic}); err != nil {
-		return err
-	}
-
-	video, err := os.ReadFile(f.Name())
-	if err != nil {
-		return err
-	}
-
-	return SendVideo(producer, video)
-}
-
 func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -200,10 +168,6 @@ func main() {
 
 	filesChannel := make(chan AudioVideoPair, 5)
 	go GetSyncedAudioAndVideo(videoConsumer, audioConsumer, filesChannel)
-
-	if err := sendVideoWithLength(producer, <-filesChannel); err != nil {
-		panic(err)
-	}
 
 	for {
 		select {

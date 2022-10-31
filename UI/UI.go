@@ -14,51 +14,51 @@ import (
 )
 
 const (
-	HtmlFileContents = `
-<!DOCTYPE html>
+	HtmlFileContents = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy"  content="connect-src * 'unsafe-inline';">
 </head>
 <body>
-  <div class="col align-self-center">
-    <video playsinline muted controls preload="none" width="100%" style="pointer-events: none;"></video>
-  </div>
-  
-  <script>
-let streamingStarted = false;
-let lastMessageTimestamp = 0;
-let accumulatedPing = 0;
-let queue = [];
-let video = document.querySelector('video');
-video.onpause = () => { video.play(); }
-video.defaultPlaybackRate = 0;
-let webSocket = null;
-let sourceBuffer = null;
-let ms = new MediaSource();
-video.src = window.URL.createObjectURL(ms);
-const VIDEO_TYPE = 'video/mp4; codecs=avc1.42E01E,mp4a.40.2'
-//const mimeCodec = 'video/mp4; codecs="avc1.4D0033, mp4a.40.2"';
-//const mimeCodec = 'video/mp4; codecs=avc1.42E01E,mp4a.40.2'; baseline
-//const mimeCodec = 'video/mp4; codecs=avc1.4d002a,mp4a.40.2'; main
-//const mimeCodec = 'video/mp4; codecs="avc1.64001E, mp4a.40.2"'; high
-const SOCKET_URL = "ws://localhost:8081"
+<div class="col align-self-center">
+  <video playsinline muted controls preload="none" width="100%" style="pointer-events: none;"></video>
+</div>
 
-function initMediaSource() {
+<script>
+  let streamingStarted = false;
+  let lastMessageTimestamp = 0;
+  let accumulatedPing = 0;
+  let queue = [];
+  let video = document.querySelector('video');
+  let webSocket = null;
+  let sourceBuffer = null;
+  let ms = new MediaSource();
+  video.src = window.URL.createObjectURL(ms);
+  const VIDEO_TYPE = 'video/mp4; codecs=avc1.42E01E,mp4a.40.2'
+  //const mimeCodec = 'video/mp4; codecs="avc1.4D0033, mp4a.40.2"';
+  //const mimeCodec = 'video/mp4; codecs=avc1.42E01E,mp4a.40.2'; baseline
+  //const mimeCodec = 'video/mp4; codecs=avc1.4d002a,mp4a.40.2'; main
+  //const mimeCodec = 'video/mp4; codecs="avc1.64001E, mp4a.40.2"'; high
+  const SOCKET_URL = "ws://localhost:8081"
+  let getBufferedLength = () => {
+    return sourceBuffer.buffered.end(0) - video.currentTime;
+  }
+
+  function initMediaSource() {
     video.onerror = () => {
-        console.log("Media element error");
+      console.log("Media element error");
     }
     video.loop = false;
     video.addEventListener('canplay', (event) => {
-        console.log('Video can start, but not sure it will play through.');
-        video.play();
+      console.log('Video can start, but not sure it will play through.');
+      video.play();
     });
     video.addEventListener('paused', (event) => {
-        console.log('Video paused for buffering...');
-        setTimeout(function() {
-            video.play();
-        }, 1);
+      console.log('Video paused for buffering...');
+      setTimeout(function() {
+        video.play();
+      }, 1);
     });
 
     ms.addEventListener('sourceopen', onMediaSourceOpen);
@@ -79,64 +79,48 @@ function initMediaSource() {
         }
       });
     }
-}
-function openWSConnection() {
+  }
+  function openWSConnection() {
     console.log("openWSConnection::Connecting to: " + SOCKET_URL);
 
     webSocket = new WebSocket(SOCKET_URL);
     webSocket.debug = true;
     webSocket.timeoutInterval = 3000;
     webSocket.onopen = function(openEvent) {
-        console.log("WebSocket open");
+      console.log("WebSocket open");
     };
     webSocket.onclose = function(closeEvent) {
-        console.log("WebSocket closed");
+      console.log("WebSocket closed");
     };
     webSocket.onerror = function(errorEvent) {
-        console.log("WebSocket ERROR: " + errorEvent);
+      console.log("WebSocket ERROR: " + errorEvent);
     };
     webSocket.onmessage = async function(messageEvent) {
-      if(typeof messageEvent.data === 'string'){
-		video.playbackRate = parseFloat(messageEvent.data)
-        console.log(video.playbackRate)
-        return
-      }
-
       if(!streamingStarted) {
         sourceBuffer.appendBuffer(await messageEvent.data.arrayBuffer());
         streamingStarted = true;
       } else {
         queue.push(await messageEvent.data.arrayBuffer())
       }
-
-      if(lastMessageTimestamp !== 0){
-        let now = new Date().getTime();
-        let diff = now - lastMessageTimestamp - 1000
-        accumulatedPing += diff > 0 ? diff : 0
-        lastMessageTimestamp += now
-      } else {
-        lastMessageTimestamp = new Date().getTime()
-      }
-
-      if(accumulatedPing > 100) {
+      
+      if(getBufferedLength() > 0.100) {
         video.playbackRate += 0.11111
-        setTimeout(() => {video.playbackRate -= 0.11111}, 1000)
+        setTimeout(()=> {video.playbackRate -= 0.11111}, 1000)
       }
-
-      console.log(accumulatedPing, video.playbackRate)
+      
     }
-}
+  }
 
-if (!window.MediaSource) {
+  if (!window.MediaSource) {
     console.error("No Media Source API available");
-}
+  }
 
-if (!MediaSource.isTypeSupported(VIDEO_TYPE)) {
+  if (!MediaSource.isTypeSupported(VIDEO_TYPE)) {
     console.error("Unsupported MIME type or codec: " + VIDEO_TYPE);
-}
+  }
 
-initMediaSource();
-openWSConnection();
+  initMediaSource();
+  openWSConnection();
 </script>
 </body>
 </html>`
@@ -184,22 +168,14 @@ func main() {
 			return
 		}
 
-		aggregatorMessage, err := aggregatorConsumer.Consume()
-		if err != nil {
-			log.Println(err)
-			ws.Close()
-			quit <- syscall.SIGINT
-			return
-		}
-
-		if err := ws.WriteMessage(websocket.TextMessage, aggregatorMessage.Message); err != nil {
-			log.Println("Error while sending message to web")
+		if err := aggregatorConsumer.SetOffsetToNow(); err != nil {
+			log.Println("Error while setting offset")
 			quit <- syscall.SIGINT
 			return
 		}
 
 		for {
-			aggregatorMessage, err = aggregatorConsumer.Consume()
+			aggregatorMessage, err := aggregatorConsumer.Consume()
 			if err != nil {
 				log.Println(err)
 				ws.Close()

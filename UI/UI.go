@@ -24,11 +24,10 @@ const (
 <div class="col align-self-center">
   <video playsinline muted controls preload="none" width="100%" style="pointer-events: none;"></video>
 </div>
+<button id="fullscreen-button">Fullscreen</button>
 
 <script>
   let streamingStarted = false;
-  let lastMessageTimestamp = 0;
-  let accumulatedPing = 0;
   let queue = [];
   let video = document.querySelector('video');
   let webSocket = null;
@@ -121,6 +120,10 @@ const (
 
   initMediaSource();
   openWSConnection();
+  document.getElementById("fullscreen-button").addEventListener("click", () => {
+    video.requestFullscreen()
+    video.muted = false
+  })
 </script>
 </body>
 </html>`
@@ -130,6 +133,14 @@ const (
 )
 
 var quit = make(chan os.Signal, 2)
+
+var webSocketUpgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
 
 func openUiInBrowser() error {
 	err := os.WriteFile(HtmlFileName, []byte(HtmlFileContents), 0777)
@@ -175,16 +186,8 @@ func main() {
 		log.Println("Error while opening web browser", err)
 	}
 
-	var upgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
-	}
-
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		ws, err := upgrader.Upgrade(w, r, nil)
+		ws, err := webSocketUpgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Println(err)
 			quit <- syscall.SIGINT

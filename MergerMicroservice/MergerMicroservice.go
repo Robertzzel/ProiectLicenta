@@ -67,6 +67,11 @@ func main() {
 			log.Println("Error while receiving videos ", err)
 			break
 		}
+		fmt.Println("Received")
+
+		if string(video.Message) == "quit" {
+			break
+		}
 
 		file, err := os.CreateTemp(receivedVideosDir, "*.mp4")
 		if err != nil {

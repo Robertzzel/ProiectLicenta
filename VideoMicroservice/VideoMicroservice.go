@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	VideoDuration = time.Second / 2
+	VideoDuration = time.Second
 	VideoTopic    = "video"
 )
 

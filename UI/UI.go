@@ -19,94 +19,95 @@ const (
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy"  content="connect-src * 'unsafe-inline';">
+  <style>
+    video {
+      background-color: black;
+    }
+  </style>
 </head>
-<body>
-<div class="col align-self-center">
-  <video playsinline muted controls preload="none" width="100%" style="pointer-events: none;"></video>
-</div>
-<button id="fullscreen-button">Fullscreen</button>
+<body style="height: 100vh; width: 100vw">
+  <video playsinline autoplay width="100%" height="95%"></video>
+  <button id="fullscreen-button">Fullscreen</button>
+  <button id="play-button">PLAY</button>
 
 <script>
-  let streamingStarted = false;
-  let queue = [];
-  let video = document.querySelector('video');
-  let webSocket = null;
-  let sourceBuffer = null;
-  let ms = new MediaSource();
-  video.src = window.URL.createObjectURL(ms);
-  const VIDEO_TYPE = 'video/mp4; codecs=avc1.42E01E,mp4a.40.2'
+  const SOCKET_URL = "ws://localhost:8081"
+  const VIDEO_TYPE = 'video/mp4; codecs="avc1.4D0033, mp4a.40.2'
   //const mimeCodec = 'video/mp4; codecs="avc1.4D0033, mp4a.40.2"';
   //const mimeCodec = 'video/mp4; codecs=avc1.42E01E,mp4a.40.2'; baseline
   //const mimeCodec = 'video/mp4; codecs=avc1.4d002a,mp4a.40.2'; main
   //const mimeCodec = 'video/mp4; codecs="avc1.64001E, mp4a.40.2"'; high
-  const SOCKET_URL = "ws://localhost:8081"
-  let getBufferedLength = () => {
-    return sourceBuffer.buffered.end(0) - video.currentTime;
-  }
+
+  let isContentDisplayed = false;
+  let videoBuffer = [];
+  let videoElement = document.querySelector('video');
+  let webSocket = null;
+  let videoSourceBuffer = null;
+  let mediaSource = new MediaSource();
+
+  videoElement.src = window.URL.createObjectURL(mediaSource);
+  let getBufferedLength = () => videoSourceBuffer.buffered.end(0) - videoElement.currentTime;
 
   function initMediaSource() {
-    video.onerror = () => {
-      console.log("Media element error");
+    videoElement.loop = false;
+
+    videoElement.onerror = (err) => {
+      console.log("Media element error", err);
     }
-    video.loop = false;
-    video.addEventListener('canplay', (event) => {
+    videoElement.addEventListener('canplay', (event) => {
       console.log('Video can start, but not sure it will play through.');
-      video.play();
+      videoElement.play();
     });
-    video.addEventListener('paused', (event) => {
+    videoElement.addEventListener('paused', (event) => {
       console.log('Video paused for buffering...');
-      setTimeout(function() {
-        video.play();
-      }, 1);
+      setTimeout(() => {videoElement.play()}, 1000);
     });
 
-    ms.addEventListener('sourceopen', onMediaSourceOpen);
-
-    function onMediaSourceOpen() {
-      sourceBuffer = ms.addSourceBuffer(VIDEO_TYPE);
-      sourceBuffer.mode = 'sequence';
-      sourceBuffer.addEventListener("onerror", () => {console.log("Media source error");});
-      sourceBuffer.addEventListener("updateend", () => {
-        if (sourceBuffer.updating) {
+    mediaSource.addEventListener('sourceopen', () => {
+      videoSourceBuffer = mediaSource.addSourceBuffer(VIDEO_TYPE);
+      videoSourceBuffer.mode = 'sequence';
+      videoSourceBuffer.addEventListener("onerror", () => {console.log("Media source error");});
+      videoSourceBuffer.addEventListener("updateend", () => {
+        if (videoSourceBuffer.updating) {
           return;
         }
 
-        if (queue.length>0) {
-          sourceBuffer.appendBuffer(queue.shift())
+        if (videoBuffer.length>0) {
+          videoSourceBuffer.appendBuffer(videoBuffer.shift())
         } else {
-          streamingStarted = false;
+          isContentDisplayed = false;
         }
       });
-    }
+    });
   }
   function openWSConnection() {
     console.log("openWSConnection::Connecting to: " + SOCKET_URL);
 
     webSocket = new WebSocket(SOCKET_URL);
     webSocket.debug = true;
-    webSocket.timeoutInterval = 3000;
-    webSocket.onopen = function(openEvent) {
-      console.log("WebSocket open");
-    };
-    webSocket.onclose = function(closeEvent) {
-      console.log("WebSocket closed");
-    };
-    webSocket.onerror = function(errorEvent) {
-      console.log("WebSocket ERROR: " + errorEvent);
-    };
-    webSocket.onmessage = async function(messageEvent) {
-      if(!streamingStarted) {
-        sourceBuffer.appendBuffer(await messageEvent.data.arrayBuffer());
-        streamingStarted = true;
+    webSocket.onopen = () => { console.log("WebSocket open") };
+    webSocket.onclose = () => { console.log("WebSocket closed") };
+    webSocket.onerror = (errorEvent) => { console.log("WebSocket ERROR: " + errorEvent) };
+    webSocket.onmessage = async (messageEvent) => {
+      if(!isContentDisplayed) {
+        videoSourceBuffer.appendBuffer(await messageEvent.data.arrayBuffer());
+        isContentDisplayed = true;
       } else {
-        queue.push(await messageEvent.data.arrayBuffer())
+        videoBuffer.push(await messageEvent.data.arrayBuffer())
       }
-      
-      if(getBufferedLength() > 0.100) {
-        video.playbackRate += 0.11111
-        setTimeout(()=> {video.playbackRate -= 0.11111}, 1000)
+
+      if(getBufferedLength() > 1) {
+        videoElement.playbackRate += 0.11111
+        setTimeout(()=> {videoElement.playbackRate -= 0.11111}, 10_000)
       }
-      
+
+      if(!videoElement.muted) {
+        try {
+          videoElement.muted = false
+        } catch (err) {
+          console.log("Unmute error, ", err)
+        }
+      }
     }
   }
 
@@ -121,8 +122,10 @@ const (
   initMediaSource();
   openWSConnection();
   document.getElementById("fullscreen-button").addEventListener("click", () => {
-    video.requestFullscreen()
-    video.muted = false
+    videoElement.requestFullscreen()
+  })
+  document.getElementById("play-button").addEventListener("click", () => {
+    videoElement.play()
   })
 </script>
 </body>

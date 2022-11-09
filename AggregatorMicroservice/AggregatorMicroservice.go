@@ -139,7 +139,7 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error 
 	defer files.Delete()
 	s := time.Now()
 
-	video, err := CombineAndCompressFiles(files, "1m", "pipe:1")
+	video, err := CombineAndCompressFiles(files, "2M", "pipe:1")
 	if err != nil {
 		return err
 	}
@@ -147,6 +147,9 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error 
 	if err = SendVideo(producer, video); err != nil {
 		return err
 	}
+	//if err := os.WriteFile(fmt.Sprintf("./audioVideos/%d.mp4", time.Now().UnixMilli()), video, 0777); err != nil {
+	//	return err
+	//}
 
 	fmt.Println("video ", files.Video[len(files.Video)-14:len(files.Video)-4], "sent at ", time.Now().UnixMilli(), " ( ", time.Since(s), " ) ", len(video))
 	return nil
@@ -192,6 +195,10 @@ func main() {
 				}
 			}(filesPair)
 		case <-quit:
+			if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte("quit"), Topic: ComposerTopic}); err != nil {
+				log.Println(err)
+			}
+			fmt.Println("Sent")
 			return
 		}
 	}

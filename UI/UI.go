@@ -96,8 +96,8 @@ const (
         videoBuffer.push(await messageEvent.data.arrayBuffer())
       }
 
-      if(getBufferedLength() > 1) {
-        videoElement.playbackRate += 0.11111
+      if(getBufferedLength() > 2) {
+        videoElement.playbackRate += 0.22222
         setTimeout(()=> {videoElement.playbackRate -= 0.11111}, 10_000)
       }
 

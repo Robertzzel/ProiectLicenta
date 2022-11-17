@@ -7,7 +7,10 @@ import tkinter as tk
 from PIL import ImageTk, Image, ImageOps
 from typing import Tuple, Dict
 import sounddevice as sd
+import kafka
+from io import BytesIO
 
+TOPIC = "aggregator"
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
 
 
@@ -141,18 +144,9 @@ class TkinterVideo(tk.Label):
         self._output_audio_stream.start()
 
     def _receive_videos(self):
-        videos = ["/home/robert/Desktop/Licenta/audioVideos/1.mp4",
-                  "/home/robert/Desktop/Licenta/audioVideos/2.mp4",
-                  "/home/robert/Desktop/Licenta/audioVideos/3.mp4",
-                  "/home/robert/Desktop/Licenta/audioVideos/4.mp4",
-                  "/home/robert/Desktop/Licenta/audioVideos/5.mp4",
-                  "/home/robert/Desktop/Licenta/audioVideos/6.mp4",
-                  "/home/robert/Desktop/Licenta/audioVideos/7.mp4",
-                  "/home/robert/Desktop/Licenta/audioVideos/8.mp4",
-                  "/home/robert/Desktop/Licenta/audioVideos/9.mp4"]
-
-        for video in videos:
-            with av.open(video) as container:
+        consumer = kafka.KafkaConsumer(TOPIC)
+        for video_file in consumer:
+            with av.open(BytesIO(video_file.value)) as container:
                 if not self._stream_initialized:
                     self._init_stream(container.streams.video[0])
 
@@ -165,7 +159,6 @@ class TkinterVideo(tk.Label):
                             self._audio_queue.put(item=frame.to_ndarray()[0], block=True)
                         else:
                             self._frame_queue.put(item=frame, block=True)
-
 
     def video_info(self) -> Dict:
         """ returns dict containing duration, frame_rate, file"""

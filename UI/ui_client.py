@@ -1,3 +1,5 @@
+import pickle
+
 import av
 import time
 import threading
@@ -32,7 +34,7 @@ class TkinterVideo(tk.Label):
         self._video_info = {
             "framerate": 0,  # frame rate of the video
             "framesize": (0, 0),  # tuple containing frame height and width of the video
-            "audio_frames": 0,
+            "audio_samplerate": 0,
         }
 
         self.set_scaled(scaled)
@@ -79,22 +81,20 @@ class TkinterVideo(tk.Label):
             self.unbind("<Configure>")
             self._current_frame_size = self.video_info()["framesize"]
 
-    def _init_stream(self, video_stream, audio_stream):
+    def _init_video_stream(self, stream, audio_sample_rate):
         # frame rate
-        self._video_info["framerate"] = video_stream.guessed_rate
-        print(self._video_info["framerate"])
-
-        self._video_info["audio_rate"] = audio_stream.sample_rate
-        print(self._video_info["audio_rate"])
+        self._video_info["framerate"] = stream.guessed_rate
+        self._video_info["audio_samplerate"] = audio_sample_rate
 
         # frame size
-        self._video_info["framesize"] = (video_stream.width, video_stream.height)
+        self._video_info["framesize"] = (stream.width, stream.height)
 
         self.current_imgtk = ImageTk.PhotoImage(Image.new("RGB", self._video_info["framesize"], (255, 0, 0)))
         self.config(width=1280, height=720, image=self.current_imgtk)
 
-        self._output_audio_stream = sd.OutputStream(channels=1, samplerate=self._video_info["audio_rate"],
-                                                    dtype="float32", callback=self.audio_callback, blocksize=1024)
+        self._output_audio_stream = sd.OutputStream(channels=1, samplerate=self._video_info["audio_samplerate"],
+                                                    dtype="float32", callback=self.audio_callback, blocksize=self._video_info["audio_samplerate"]//self._video_info["framerate"])
+
         self._stream_initialized = True
 
     def _display_video(self):
@@ -108,7 +108,7 @@ class TkinterVideo(tk.Label):
         while True:
             start = time.time()
 
-            self._current_img = self._frame_queue.get(timeout=2).to_image()
+            self._current_img = self._frame_queue.get().to_image()
             self.event_generate("<<FrameGenerated>>")
 
             time.sleep(max(rate - (time.time() - start) % rate, 0))
@@ -132,10 +132,10 @@ class TkinterVideo(tk.Label):
     def audio_callback(self, outdata: np.ndarray, frames: int, timet, status):
         try:
             data: np.ndarray = self._audio_queue.get_nowait()
-            data.shape = (1024, 1)
+            data.shape = (self._video_info["audio_samplerate"]//self._video_info["framerate"], 1)
             outdata[:] = data
         except Exception as ex:
-            pass
+            print(ex)
 
     def play(self):
         if self._receive_thread is not None:
@@ -149,32 +149,41 @@ class TkinterVideo(tk.Label):
 
     def _receive_videos(self):
         consumer = kafka.KafkaConsumer(TOPIC)
-        last_received = None
-        total_ping = 0
-
-        for video_file in consumer:
-            # if last_received is None:
-            #     last_received = time.time()
-            # else:
-            #     now = time.time()
-            #     diff = now - last_received - 1
-            #     last_received = now
-            #     print("diff = ", diff)
-            #     total_ping += diff if diff > 0 else 0
-            #
-            # print("Ping: ", total_ping)
+        for message in consumer:
             print(self._frame_queue.qsize(), self._audio_queue.qsize())
 
-            with av.open(BytesIO(video_file.value)) as container:
-                if not self._stream_initialized:
-                    self._init_stream(container.streams.video[0], container.streams.audio[0])
+            video, audio, audio_sample_rate = self.get_audio_video_from_message(message)
+            audio = pickle.loads(audio)
 
-                for packet in container.demux():
-                    for frame in packet.decode():
-                        if isinstance(frame, av.AudioFrame):
-                            self._audio_queue.put(item=frame.to_ndarray()[0], block=True)
-                        else:
-                            self._frame_queue.put(item=frame, block=True)
+            with av.open(BytesIO(video)) as container:
+                if not self._stream_initialized:
+                    self._init_video_stream(container.streams.video[0], audio_sample_rate)
+
+                container.fast_seek = True
+                container.discard_corrupt = True
+                audio_frames_per_video_frame = audio_sample_rate // container.streams.video[0].guessed_rate
+                frame_number = 0
+                for frame in container.decode(video=0):
+                    self._frame_queue.put(item=frame, block=True)
+                    self._audio_queue.put(item=audio[frame_number*audio_frames_per_video_frame: (frame_number+1) * audio_frames_per_video_frame], block=True)
+                    frame_number += 1
+
+    def get_audio_video_from_message(self, kafka_message):
+        audio_start_index = None
+        video_start_index = None
+        audio_sample_rate = None
+
+        for header in kafka_message.headers:
+            if header[0] == "audio-start-index":
+                audio_start_index = int(header[1].decode())
+            elif header[0] == "video-start-index":
+                video_start_index = int(header[1].decode())
+            elif header[0] == "audio-sample-rate":
+                audio_sample_rate = int(header[1].decode())
+
+        if audio_start_index > video_start_index:
+            return kafka_message.value[video_start_index:audio_start_index], kafka_message.value[audio_start_index:], audio_sample_rate
+        return kafka_message.value[video_start_index:], kafka_message.value[audio_start_index:video_start_index], audio_sample_rate
 
     def video_info(self) -> Dict:
         """ returns dict containing frame_rate, file"""

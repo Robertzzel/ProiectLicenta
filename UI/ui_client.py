@@ -9,6 +9,7 @@ from typing import Tuple, Dict
 import sounddevice as sd
 import kafka
 from io import BytesIO
+import numpy as np
 
 TOPIC = "aggregator"
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
@@ -25,14 +26,13 @@ class TkinterVideo(tk.Label):
         self._frame_queue = Queue()
         self._audio_queue = Queue()
         self._current_img = None
-        self._output_audio_stream = sd.OutputStream(channels=1, samplerate=44100, dtype="float32")
-
+        self._output_audio_stream = None
         self._current_frame_size = (0, 0)
 
         self._video_info = {
-            "duration": 0,  # duration of the video
             "framerate": 0,  # frame rate of the video
-            "framesize": (0, 0)  # tuple containing frame height and width of the video
+            "framesize": (0, 0),  # tuple containing frame height and width of the video
+            "audio_frames": 0,
         }
 
         self.set_scaled(scaled)
@@ -79,38 +79,44 @@ class TkinterVideo(tk.Label):
             self.unbind("<Configure>")
             self._current_frame_size = self.video_info()["framesize"]
 
-    def _init_stream(self, stream):
+    def _init_stream(self, video_stream, audio_stream):
         # frame rate
-        self._video_info["framerate"] = stream.average_rate
+        self._video_info["framerate"] = video_stream.guessed_rate
+        print(self._video_info["framerate"])
 
-        # duration
-        self._video_info["duration"] = float(stream.duration * stream.time_base)
-        self.event_generate("<<Duration>>")
+        self._video_info["audio_rate"] = audio_stream.sample_rate
+        print(self._video_info["audio_rate"])
 
         # frame size
-        self._video_info["framesize"] = (stream.width, stream.height)
+        self._video_info["framesize"] = (video_stream.width, video_stream.height)
 
-        self.current_imgtk = ImageTk.PhotoImage(Image.new("RGBA", self._video_info["framesize"], (255, 0, 0, 0)))
+        self.current_imgtk = ImageTk.PhotoImage(Image.new("RGB", self._video_info["framesize"], (255, 0, 0)))
         self.config(width=1280, height=720, image=self.current_imgtk)
 
+        self._output_audio_stream = sd.OutputStream(channels=1, samplerate=self._video_info["audio_rate"],
+                                                    dtype="float32", callback=self.audio_callback, blocksize=1024)
         self._stream_initialized = True
 
     def _display_video(self):
         while not self._stream_initialized:
             time.sleep(0.1)
 
-        while not self._frame_queue.empty():
+        while self._frame_queue.empty():
+            time.sleep(0.01)
+
+        rate = 1 / self._video_info["framerate"]
+        while True:
             start = time.time()
 
-            self._current_img = self._frame_queue.get(timeout=1).to_image()
+            self._current_img = self._frame_queue.get(timeout=2).to_image()
             self.event_generate("<<FrameGenerated>>")
 
-            time.sleep(max(1/self._video_info["framerate"] - time.time() + start, 0))
+            time.sleep(max(rate - (time.time() - start) % rate, 0))
 
         self._display_video_thread = None
 
         try:
-            self.event_generate("<<Ended>>")  # this is generated when the video ends
+            self.event_generate("<<Ended>>")
         except tk.TclError:
             pass
 
@@ -123,13 +129,13 @@ class TkinterVideo(tk.Label):
 
         self._output_audio_stream.start()
 
-        while self._audio_queue.empty():
-            time.sleep(0.1)
-
-        while not self._audio_queue.empty():
-            self._output_audio_stream.write(self._audio_queue.get(block=True))
-
-        self._output_audio_stream.stop()
+    def audio_callback(self, outdata: np.ndarray, frames: int, timet, status):
+        try:
+            data: np.ndarray = self._audio_queue.get_nowait()
+            data.shape = (1024, 1)
+            outdata[:] = data
+        except Exception as ex:
+            pass
 
     def play(self):
         if self._receive_thread is not None:
@@ -141,17 +147,27 @@ class TkinterVideo(tk.Label):
         if self._play_audio_thread is not None:
             self._play_audio_thread.start()
 
-        self._output_audio_stream.start()
-
     def _receive_videos(self):
         consumer = kafka.KafkaConsumer(TOPIC)
+        last_received = None
+        total_ping = 0
+
         for video_file in consumer:
+            # if last_received is None:
+            #     last_received = time.time()
+            # else:
+            #     now = time.time()
+            #     diff = now - last_received - 1
+            #     last_received = now
+            #     print("diff = ", diff)
+            #     total_ping += diff if diff > 0 else 0
+            #
+            # print("Ping: ", total_ping)
+            print(self._frame_queue.qsize(), self._audio_queue.qsize())
+
             with av.open(BytesIO(video_file.value)) as container:
                 if not self._stream_initialized:
-                    self._init_stream(container.streams.video[0])
-
-                container.streams.video[0].thread_type = "AUTO"
-                container.discard_corrupt = True
+                    self._init_stream(container.streams.video[0], container.streams.audio[0])
 
                 for packet in container.demux():
                     for frame in packet.decode():
@@ -161,7 +177,7 @@ class TkinterVideo(tk.Label):
                             self._frame_queue.put(item=frame, block=True)
 
     def video_info(self) -> Dict:
-        """ returns dict containing duration, frame_rate, file"""
+        """ returns dict containing frame_rate, file"""
         return self._video_info
 
     def current_img(self) -> Image:
@@ -181,8 +197,6 @@ class TkinterVideo(tk.Label):
                 self._current_img = self._current_img.resize(self._current_frame_size, self._resampling_method)
 
         else:
-            self._current_frame_size = self.video_info()["framesize"] if all(self.video_info()["framesize"]) else (1, 1)
-
             if self._keep_aspect_ratio:
                 self._current_img = ImageOps.contain(self._current_img, self._current_frame_size,
                                                      self._resampling_method)
@@ -190,9 +204,8 @@ class TkinterVideo(tk.Label):
             else:
                 self._current_img = self._current_img.resize(self._current_frame_size, self._resampling_method)
 
-        self.current_imgtk = ImageTk.PhotoImage(self._current_img)
+        self.current_imgtk.paste(self._current_img)
         self.config(image=self.current_imgtk)
-        self._current_img = None
 
 
 if __name__ == "__main__":
@@ -203,8 +216,3 @@ if __name__ == "__main__":
     videoplayer.play()
 
     root.mainloop()
-
-
-
-
-

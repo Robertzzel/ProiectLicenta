@@ -52,7 +52,7 @@ func main() {
 
 	errGroup, ctx := errgroup.WithContext(NewCtx())
 
-	videoRecorder, err := NewRecorder(ctx, 30)
+	videoRecorder, err := NewRecorder(ctx, 10)
 	if err != nil {
 		log.Fatal("Recorder cannot be initiated: ", err)
 	}

@@ -69,16 +69,13 @@ func CombineAndCompressFiles(files AudioVideoPair, bitrate string, output string
 }
 
 func SendVideo(producer *Kafka.Producer, video []byte) error {
-	//if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: ComposerTopic}); err != nil {
-	//	return err
-	//}
-	//
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: ComposerTopic}); err != nil {
+		return err
+	}
+
 	//if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(fmt.Sprint(time.Now().UnixMilli())), Topic: StreamerTopic}); err != nil {
 	//	return err
 	//}
-	if err := os.WriteFile("./audioVideos/"+fmt.Sprint(time.Now().UnixMilli())+".mp4", video, 0777); err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -155,7 +152,7 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error 
 	defer files.Delete()
 	s := time.Now()
 
-	video, err := CombineAndCompressFiles(files, "2M", "pipe:1")
+	video, err := CombineAndCompressFiles(files, "1M", "pipe:1")
 	if err != nil {
 		return err
 	}

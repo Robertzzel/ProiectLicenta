@@ -19,7 +19,7 @@ def create_audio_file(path, audio_buffer: np.ndarray, samplerate):
 
 class Recorder:
     def __init__(self, audio_queue: queue.Queue):
-        self.buffer: np.ndarray = np.array([])
+        self.buffer: np.ndarray = np.array([], dtype=np.int16)
         self.lock = threading.Lock()
         self.audio_queue = audio_queue
         self.input_stream = sd.InputStream(
@@ -27,7 +27,7 @@ class Recorder:
             channels=CHANNELS,
             device=self.get_device('pulse'),
             callback=self.stream_callback,
-            latency='low', dtype='float32',
+            latency='low', dtype='int16',
         )
         self.process_thread: Optional[threading.Thread] = None
         self.running = True
@@ -60,7 +60,7 @@ class Recorder:
 
             self.lock.acquire()
             audio_chunk = self.buffer.tolist()[:]
-            self.buffer = np.array([])
+            self.buffer = np.array([], dtype=np.int16)
             self.lock.release()
 
             number_of_bytes_needed = int(SAMPLERATE * chunk_size_seconds)
@@ -72,7 +72,7 @@ class Recorder:
             audio_file_name = cwd + "/audio/" + str(int((next_chunk_end - chunk_size_seconds) * 1000)) + ".wav"
             #create_audio_file(audio_file_name, audio_chunk, SAMPLERATE)
             with open(audio_file_name, "wb") as f:
-                f.write(pickle.dumps(np.array(audio_chunk)))
+                f.write(pickle.dumps(np.array(audio_chunk, dtype=np.int16)))
 
             self.audio_queue.put_nowait(audio_file_name)
 

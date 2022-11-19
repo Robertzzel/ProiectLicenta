@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	VideoDuration = time.Second
+	VideoDuration = time.Second / 5
 	VideoTopic    = "video"
 )
 
@@ -52,7 +52,7 @@ func main() {
 
 	errGroup, ctx := errgroup.WithContext(NewCtx())
 
-	videoRecorder, err := NewRecorder(ctx, 10)
+	videoRecorder, err := NewRecorder(ctx, 20)
 	if err != nil {
 		log.Fatal("Recorder cannot be initiated: ", err)
 	}

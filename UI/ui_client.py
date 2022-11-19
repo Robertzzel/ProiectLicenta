@@ -1,5 +1,5 @@
 import pickle
-
+import queue
 import av
 import time
 import threading
@@ -7,7 +7,6 @@ import logging
 from queue import Queue
 import tkinter as tk
 from PIL import ImageTk, Image, ImageOps
-from typing import Tuple, Dict
 import sounddevice as sd
 import kafka
 from io import BytesIO
@@ -25,42 +24,38 @@ class TkinterVideo(tk.Label):
         self._display_video_thread = threading.Thread(target=self._display_video, daemon=True)
         self._receive_thread = threading.Thread(target=self._receive_videos, daemon=True)
         self._play_audio_thread = threading.Thread(target=self._play_audio, daemon=True)
-        self._frame_queue = Queue()
-        self._audio_queue = Queue()
+        self._frame_queue = Queue(10)
+        self._audio_queue = Queue(10)
         self._current_img = None
         self._output_audio_stream = None
         self._current_frame_size = (0, 0)
-
-        self._video_info = {
-            "framerate": 0,  # frame rate of the video
-            "framesize": (0, 0),  # tuple containing frame height and width of the video
-            "audio_samplerate": 0,
-        }
+        self._video_fps = 0
+        self._video_sizes = (0, 0)
+        self._audio_samplerate = 0
+        self._audio_buffer_per_video_frame = 0
+        self._scaled = scaled
+        self._keep_aspect_ratio = keep_aspect
 
         self.set_scaled(scaled)
         self._keep_aspect_ratio = keep_aspect
-        self._resampling_method: int = Image.NEAREST
+        self._resampling_method: int = Image.BOX
 
         self.bind("<<FrameGenerated>>", self._display_frame)
 
-    def keep_aspect(self, keep_aspect: bool):
-        """ keeps the aspect ratio when resizing the image """
-        self._keep_aspect_ratio = keep_aspect
+    def play(self):
+        if self._receive_thread is not None:
+            self._receive_thread.start()
 
-    def set_resampling_method(self, method: int):
-        """ sets the resampling method when resizing """
-        self._resampling_method = method
+        if self._display_video_thread is not None:
+            self._display_video_thread.start()
 
-    def set_size(self, size: Tuple[int, int], keep_aspect: bool = False):
-        """ sets the size of the video """
-        self.set_scaled(False, self._keep_aspect_ratio)
-        self._current_frame_size = size
-        self._keep_aspect_ratio = keep_aspect
+        if self._play_audio_thread is not None:
+            self._play_audio_thread.start()
 
     def _resize_event(self, event):
         self._current_frame_size = event.width, event.height
 
-        if self._current_img and self.scaled:
+        if self._current_img and self._scaled:
             if self._keep_aspect_ratio:
                 proxy_img = ImageOps.contain(self._current_img.copy(), self._current_frame_size)
 
@@ -71,47 +66,44 @@ class TkinterVideo(tk.Label):
             self.config(image=self._current_imgtk)
 
     def set_scaled(self, scaled: bool, keep_aspect: bool = False):
-        self.scaled = scaled
-        self._keep_aspect_ratio = keep_aspect
-
-        if scaled:
+        if self._scaled:
             self.bind("<Configure>", self._resize_event)
-
         else:
             self.unbind("<Configure>")
-            self._current_frame_size = self.video_info()["framesize"]
+            self._current_frame_size = self._video_sizes
 
     def _init_video_stream(self, stream, audio_sample_rate):
-        # frame rate
-        self._video_info["framerate"] = stream.guessed_rate
-        self._video_info["audio_samplerate"] = audio_sample_rate
+        self._video_fps = stream.guessed_rate
+        self._audio_samplerate = audio_sample_rate
+        self._video_sizes = (stream.width, stream.height)
+        self._audio_buffer_per_video_frame = self._audio_samplerate//self._video_fps
 
-        # frame size
-        self._video_info["framesize"] = (stream.width, stream.height)
-
-        self.current_imgtk = ImageTk.PhotoImage(Image.new("RGB", self._video_info["framesize"], (255, 0, 0)))
+        self.current_imgtk = ImageTk.PhotoImage(Image.new("RGB", self._video_sizes, (255, 255, 255)))
         self.config(width=1280, height=720, image=self.current_imgtk)
 
-        self._output_audio_stream = sd.OutputStream(channels=1, samplerate=self._video_info["audio_samplerate"],
-                                                    dtype="float32", callback=self.audio_callback, blocksize=self._video_info["audio_samplerate"]//self._video_info["framerate"])
+        self._output_audio_stream = sd.OutputStream(channels=1, samplerate=self._audio_samplerate, dtype="int16",
+                                                    callback=self.audio_callback,
+                                                    blocksize=self._audio_buffer_per_video_frame)
 
         self._stream_initialized = True
 
     def _display_video(self):
-        while not self._stream_initialized:
-            time.sleep(0.1)
+        self._current_img = self._frame_queue.get(block=True)
+        rate = 1 / self._video_fps
+        try:
+            while True:
+                start = time.time()
 
-        while self._frame_queue.empty():
-            time.sleep(0.01)
+                self._current_img = self._frame_queue.get(timeout=3).to_image()
+                self.event_generate("<<FrameGenerated>>")
 
-        rate = 1 / self._video_info["framerate"]
-        while True:
-            start = time.time()
-
-            self._current_img = self._frame_queue.get().to_image()
-            self.event_generate("<<FrameGenerated>>")
-
-            time.sleep(max(rate - (time.time() - start) % rate, 0))
+                t = max(rate - (time.time() - start) % rate, 0)
+                print(t)
+                time.sleep(t)
+        except queue.Empty as ex:
+            print("Queue empty", ex)
+        except Exception as ex:
+            print(ex)
 
         self._display_video_thread = None
 
@@ -124,49 +116,41 @@ class TkinterVideo(tk.Label):
         print("Done")
 
     def _play_audio(self):
-        while not self._stream_initialized:
-            time.sleep(0.1)
-
+        self._audio_queue.get()
+        time.sleep(0.1)
         self._output_audio_stream.start()
 
     def audio_callback(self, outdata: np.ndarray, frames: int, timet, status):
         try:
             data: np.ndarray = self._audio_queue.get_nowait()
-            data.shape = (self._video_info["audio_samplerate"]//self._video_info["framerate"], 1)
+            data.shape = (self._audio_buffer_per_video_frame, 1)
             outdata[:] = data
+        except queue.Empty as ex:
+            print("Queue empty", ex)
         except Exception as ex:
-            print(ex)
-
-    def play(self):
-        if self._receive_thread is not None:
-            self._receive_thread.start()
-
-        if self._display_video_thread is not None:
-            self._display_video_thread.start()
-
-        if self._play_audio_thread is not None:
-            self._play_audio_thread.start()
+            print("Eroare", ex)
 
     def _receive_videos(self):
         consumer = kafka.KafkaConsumer(TOPIC)
         for message in consumer:
-            print(self._frame_queue.qsize(), self._audio_queue.qsize())
-
             video, audio, audio_sample_rate = self.get_audio_video_from_message(message)
-            audio = pickle.loads(audio)
 
             with av.open(BytesIO(video)) as container:
                 if not self._stream_initialized:
                     self._init_video_stream(container.streams.video[0], audio_sample_rate)
 
-                container.fast_seek = True
-                container.discard_corrupt = True
-                audio_frames_per_video_frame = audio_sample_rate // container.streams.video[0].guessed_rate
-                frame_number = 0
+                container.fast_seek, container.discard_corrupt, empty_queue = True, True, True
+
                 for frame in container.decode(video=0):
                     self._frame_queue.put(item=frame, block=True)
-                    self._audio_queue.put(item=audio[frame_number*audio_frames_per_video_frame: (frame_number+1) * audio_frames_per_video_frame], block=True)
-                    frame_number += 1
+                    self._audio_queue.put(item=audio[frame.index*self._audio_buffer_per_video_frame: (frame.index+1) * self._audio_buffer_per_video_frame], block=True)
+
+                    if empty_queue:
+                        for i in range(self._frame_queue.qsize()-1):
+                            self._frame_queue.get_nowait()
+                        for i in range(self._audio_queue.qsize()-1):
+                            self._audio_queue.get_nowait()
+                        empty_queue = False
 
     def get_audio_video_from_message(self, kafka_message):
         audio_start_index = None
@@ -182,28 +166,18 @@ class TkinterVideo(tk.Label):
                 audio_sample_rate = int(header[1].decode())
 
         if audio_start_index > video_start_index:
-            return kafka_message.value[video_start_index:audio_start_index], kafka_message.value[audio_start_index:], audio_sample_rate
-        return kafka_message.value[video_start_index:], kafka_message.value[audio_start_index:video_start_index], audio_sample_rate
-
-    def video_info(self) -> Dict:
-        """ returns dict containing frame_rate, file"""
-        return self._video_info
-
-    def current_img(self) -> Image:
-        """ returns current frame image """
-        return self._current_img
+            return kafka_message.value[video_start_index:audio_start_index], pickle.loads(kafka_message.value[audio_start_index:]), audio_sample_rate
+        return kafka_message.value[video_start_index:], pickle.loads(kafka_message.value[audio_start_index:video_start_index]), audio_sample_rate
 
     def _display_frame(self, event):
-        """ displays the frame on the label """
-
-        if self.scaled or (len(self._current_frame_size) == 2 and all(self._current_frame_size)):
+        if self._scaled or (len(self._current_frame_size) == 2 and all(self._current_frame_size)):
 
             if self._keep_aspect_ratio:
                 self._current_img = ImageOps.contain(self._current_img, self._current_frame_size,
                                                      self._resampling_method)
 
             else:
-                self._current_img = self._current_img.resize(self._current_frame_size, self._resampling_method)
+                self._current_img = self._current_img.resize(self._current_frame_size, self._resampling_method, reducing_gap=3.0)
 
         else:
             if self._keep_aspect_ratio:

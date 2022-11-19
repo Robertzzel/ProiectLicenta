@@ -13,6 +13,7 @@ from io import BytesIO
 import numpy as np
 
 TOPIC = "aggregator"
+KAFKA_ADDRESS = "localhost:9092"
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
 
 
@@ -131,7 +132,7 @@ class TkinterVideo(tk.Label):
             print("Eroare", ex)
 
     def _receive_videos(self):
-        consumer = kafka.KafkaConsumer(TOPIC)
+        consumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=KAFKA_ADDRESS)
         for message in consumer:
             video, audio, audio_sample_rate = self.get_audio_video_from_message(message)
 

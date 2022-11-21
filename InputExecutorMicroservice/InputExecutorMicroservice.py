@@ -8,6 +8,11 @@ CLICK = 2
 SCROLL = 3
 PRESS = 4
 RELEASE = 5
+LEFT = 1
+MIDDLE = 2
+RIGHT = 3
+SCROLL_UP = 4
+SCROLL_DOWN = 5
 
 
 def get_screen_sizes():
@@ -45,12 +50,18 @@ def main():
                 time.sleep(float(components[-1]))
                 mouse_controller.position = (x, y)
             elif action == CLICK:
-                button, pressed = components[1], int(components[2])
+                button, pressed = int(components[1]), int(components[2])
                 time.sleep(float(components[-1]))
+
+                if button == SCROLL_UP:
+                    mouse_controller.scroll(0, -2)
+                elif button == SCROLL_DOWN:
+                    mouse_controller.scroll(0, 2)
+
                 if pressed:
-                    mouse_controller.press(pynput.mouse.Button[button])
+                    mouse_controller.press(pynput.mouse.Button(button))
                 else:
-                    mouse_controller.release(pynput.mouse.Button[button])
+                    mouse_controller.release(pynput.mouse.Button(button))
             elif action == PRESS:
                 time.sleep(float(components[-1]))
                 if components[1].isnumeric():
@@ -63,10 +74,10 @@ def main():
                     keyboard_controller.release(chr(int(components[1])))
                 else:
                     keyboard_controller.release(pynput.keyboard.Key[components[1]])
-            elif action == SCROLL:
-                dx, dy = int(components[1]), int(components[1])
-                time.sleep(float(components[-1]))
-                mouse_controller.scroll(dx, -dy)
+            # elif action == SCROLL:
+            #     dx, dy = int(components[1]), int(components[1])
+            #     time.sleep(float(components[-1]))
+            #     mouse_controller.scroll(dx, -dy)
 
 
 if __name__ == "__main__":

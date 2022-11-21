@@ -17,7 +17,6 @@ KAFKA_ADDRESS = "localhost:9092"
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
 MOVE = 1
 CLICK = 2
-SCROLL = 3
 PRESS = 4
 RELEASE = 5
 INPUTS_TOPIC = "inputs"
@@ -92,6 +91,8 @@ class TkinterVideo(tk.Label):
             inputs = self._inputs.get()
             if inputs != "":
                 producer.send(INPUTS_TOPIC, inputs.encode())
+
+        kafka.KafkaAdminClient(bootstrap_servers=KAFKA_ADDRESS).delete_topics([INPUTS_TOPIC])
 
     def _focused_in(self, event):
         self._focused = True

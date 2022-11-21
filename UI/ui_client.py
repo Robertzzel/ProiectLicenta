@@ -15,6 +15,33 @@ import numpy as np
 TOPIC = "aggregator"
 KAFKA_ADDRESS = "localhost:9092"
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
+MOVE = 1
+CLICK = 2
+SCROLL = 3
+PRESS = 4
+RELEASE = 5
+INPUTS_TOPIC = "inputs"
+
+class SafeString:
+    def __init__(self, txt: str = ""):
+        self.text = txt
+        self.lock = threading.Lock()
+        self.last_update: time.time = None
+
+    def add(self, text: str):
+        with self.lock:
+            current_time = time.time()
+            self.text += text + "," + str(
+                round(current_time - self.last_update, 4) if self.last_update is not None else 0) + ";"
+            self.last_update = current_time
+
+    def get(self) -> str:
+        with self.lock:
+            returned = self.text[:-1]
+            self.text = ""
+            self.last_update = None
+
+        return returned
 
 
 class TkinterVideo(tk.Label):
@@ -25,6 +52,8 @@ class TkinterVideo(tk.Label):
         self._display_video_thread = threading.Thread(target=self._display_video, daemon=True)
         self._receive_thread = threading.Thread(target=self._receive_videos, daemon=True)
         self._play_audio_thread = threading.Thread(target=self._play_audio, daemon=True)
+        self._send_inputs_thread = threading.Thread(target=self._send_inputs, daemon=True)
+        self._inputs_listener_thread = threading.Thread
         self._frame_queue = Queue(10)
         self._audio_queue = Queue(10)
         self._current_img = None
@@ -36,12 +65,39 @@ class TkinterVideo(tk.Label):
         self._audio_buffer_per_video_frame = 0
         self._scaled = scaled
         self._keep_aspect_ratio = keep_aspect
+        self._running = True
+        self._focused = False
+        self._inputs = SafeString()
 
-        self.set_scaled(scaled)
+        self.set_scaled()
         self._keep_aspect_ratio = keep_aspect
-        self._resampling_method: int = Image.BOX
+        self._resampling_method: int = Image.NEAREST
+
+        master.bind("<FocusIn>", self._focused_in)
+        master.bind("<FocusOut>", self._focused_out)
+
+        self.bind('<Motion>', lambda ev: self._inputs.add(f"{MOVE},{round(ev.x/self._current_frame_size[0], 2)},{round(ev.y/self._current_frame_size[1], 2)}"))
+        self.bind("<Button>", lambda ev: self._inputs.add(f"{CLICK},{ev.num},1"))
+        self.bind("<ButtonRelease>", lambda ev: self._inputs.add(f"{CLICK},{ev.num},0"))
+
+        master.bind('<KeyPress>', lambda ev: self._inputs.add(f"{PRESS},{ev.keysym_num}"))
+        master.bind('<KeyRelease>', lambda ev: self._inputs.add(f"{RELEASE},{ev.keysym_num}"))
 
         self.bind("<<FrameGenerated>>", self._display_frame)
+
+    def _send_inputs(self):
+        producer = kafka.KafkaProducer(bootstrap_servers=KAFKA_ADDRESS, acks=1)
+        while self._running:
+            time.sleep(0.1)
+            inputs = self._inputs.get()
+            if inputs != "":
+                producer.send(INPUTS_TOPIC, inputs.encode())
+
+    def _focused_in(self, event):
+        self._focused = True
+
+    def _focused_out(self, event):
+        self._focused = False
 
     def play(self):
         if self._receive_thread is not None:
@@ -53,20 +109,22 @@ class TkinterVideo(tk.Label):
         if self._play_audio_thread is not None:
             self._play_audio_thread.start()
 
+        if self._send_inputs_thread is not None:
+            self._send_inputs_thread.start()
+
     def _resize_event(self, event):
         self._current_frame_size = event.width, event.height
 
-        if self._current_img and self._scaled:
+        if self._current_img:
             if self._keep_aspect_ratio:
                 proxy_img = ImageOps.contain(self._current_img.copy(), self._current_frame_size)
-
             else:
                 proxy_img = self._current_img.copy().resize(self._current_frame_size)
 
             self._current_imgtk = ImageTk.PhotoImage(proxy_img)
             self.config(image=self._current_imgtk)
 
-    def set_scaled(self, scaled: bool, keep_aspect: bool = False):
+    def set_scaled(self):
         if self._scaled:
             self.bind("<Configure>", self._resize_event)
         else:
@@ -77,10 +135,10 @@ class TkinterVideo(tk.Label):
         self._video_fps = stream.guessed_rate
         self._audio_samplerate = audio_sample_rate
         self._video_sizes = (stream.width, stream.height)
-        self._audio_buffer_per_video_frame = self._audio_samplerate//self._video_fps
+        self._audio_buffer_per_video_frame = self._audio_samplerate // self._video_fps
 
         self.current_imgtk = ImageTk.PhotoImage(Image.new("RGB", self._video_sizes, (255, 255, 255)))
-        self.config(width=1280, height=720, image=self.current_imgtk)
+        self.config(width=800, height=600, image=self.current_imgtk)
 
         self._output_audio_stream = sd.OutputStream(channels=1, samplerate=self._audio_samplerate, dtype="int16",
                                                     callback=self.audio_callback,
@@ -92,15 +150,13 @@ class TkinterVideo(tk.Label):
         self._current_img = self._frame_queue.get(block=True)
         rate = 1 / self._video_fps
         try:
-            while True:
+            while self._running:
                 start = time.time()
 
                 self._current_img = self._frame_queue.get(timeout=3).to_image()
                 self.event_generate("<<FrameGenerated>>")
 
-                t = max(rate - (time.time() - start) % rate, 0)
-                print(t)
-                time.sleep(t)
+                time.sleep(max(rate - (time.time() - start) % rate, 0))
         except queue.Empty as ex:
             print("Queue empty", ex)
         except Exception as ex:
@@ -113,7 +169,6 @@ class TkinterVideo(tk.Label):
         except tk.TclError:
             pass
 
-        self._receive_thread.join()
         print("Done")
 
     def _play_audio(self):
@@ -133,8 +188,8 @@ class TkinterVideo(tk.Label):
 
     def _receive_videos(self):
         consumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=KAFKA_ADDRESS)
-        for message in consumer:
-            video, audio, audio_sample_rate = self.get_audio_video_from_message(message)
+        while self._running:
+            video, audio, audio_sample_rate = self.get_audio_video_from_message(next(consumer))
 
             with av.open(BytesIO(video)) as container:
                 if not self._stream_initialized:
@@ -144,13 +199,14 @@ class TkinterVideo(tk.Label):
 
                 for frame in container.decode(video=0):
                     self._frame_queue.put(item=frame, block=True)
-                    self._audio_queue.put(item=audio[frame.index*self._audio_buffer_per_video_frame: (frame.index+1) * self._audio_buffer_per_video_frame], block=True)
+                    self._audio_queue.put(item=audio[frame.index * self._audio_buffer_per_video_frame: (frame.index + 1) * self._audio_buffer_per_video_frame], block=True)
 
                     if empty_queue:
-                        for i in range(self._frame_queue.qsize()-1):
+                        while self._frame_queue.qsize() > 1:
                             self._frame_queue.get_nowait()
-                        for i in range(self._audio_queue.qsize()-1):
+                        while self._audio_queue.qsize() > 1:
                             self._audio_queue.get_nowait()
+
                         empty_queue = False
 
     def get_audio_video_from_message(self, kafka_message):
@@ -167,29 +223,37 @@ class TkinterVideo(tk.Label):
                 audio_sample_rate = int(header[1].decode())
 
         if audio_start_index > video_start_index:
-            return kafka_message.value[video_start_index:audio_start_index], pickle.loads(kafka_message.value[audio_start_index:]), audio_sample_rate
-        return kafka_message.value[video_start_index:], pickle.loads(kafka_message.value[audio_start_index:video_start_index]), audio_sample_rate
+            return kafka_message.value[video_start_index:audio_start_index], pickle.loads(
+                kafka_message.value[audio_start_index:]), audio_sample_rate
+        return kafka_message.value[video_start_index:], pickle.loads(
+            kafka_message.value[audio_start_index:video_start_index]), audio_sample_rate
 
     def _display_frame(self, event):
-        if self._scaled or (len(self._current_frame_size) == 2 and all(self._current_frame_size)):
-
-            if self._keep_aspect_ratio:
-                self._current_img = ImageOps.contain(self._current_img, self._current_frame_size,
-                                                     self._resampling_method)
-
-            else:
-                self._current_img = self._current_img.resize(self._current_frame_size, self._resampling_method, reducing_gap=3.0)
-
+        if self._keep_aspect_ratio:
+            self._current_img = ImageOps.contain(self._current_img, self._current_frame_size, self._resampling_method)
         else:
-            if self._keep_aspect_ratio:
-                self._current_img = ImageOps.contain(self._current_img, self._current_frame_size,
-                                                     self._resampling_method)
-
-            else:
-                self._current_img = self._current_img.resize(self._current_frame_size, self._resampling_method)
+            self._current_img = self._current_img.resize(self._current_frame_size, self._resampling_method)
 
         self.current_imgtk.paste(self._current_img)
         self.config(image=self.current_imgtk)
+
+    def stop(self):
+        self._running = False
+
+        if self._receive_thread:
+            self._receive_thread.join()
+
+        if self._display_video_thread:
+            self._display_video_thread.join()
+
+        if self._play_audio_thread:
+            self._play_audio_thread.join()
+
+        if self._send_inputs_thread:
+            self._send_inputs_thread.join()
+
+        if self._output_audio_stream:
+            self._output_audio_stream.stop()
 
 
 if __name__ == "__main__":
@@ -198,5 +262,8 @@ if __name__ == "__main__":
     videoplayer.pack(expand=True, fill="both")
 
     videoplayer.play()
-
     root.mainloop()
+
+    print("Oprim")
+    videoplayer.stop()
+    print("Gata")

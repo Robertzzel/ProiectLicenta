@@ -79,8 +79,8 @@ class TkinterVideo(tk.Label):
         self.bind("<Button>", lambda ev: self._inputs.add(f"{CLICK},{ev.num},1"))
         self.bind("<ButtonRelease>", lambda ev: self._inputs.add(f"{CLICK},{ev.num},0"))
 
-        master.bind('<KeyPress>', lambda ev: self._inputs.add(f"{PRESS},{ev.keycode}"))
-        master.bind('<KeyRelease>', lambda ev: self._inputs.add(f"{RELEASE},{ev.keycode}"))
+        master.bind('<KeyPress>', lambda ev: self._inputs.add(f"{PRESS},{ev.keysym}"))
+        master.bind('<KeyRelease>', lambda ev: self._inputs.add(f"{RELEASE},{ev.keysym}"))
 
         self.bind("<<FrameGenerated>>", self._display_frame)
 

@@ -1,6 +1,7 @@
 import kafka
 import pynput
 import time
+from TkCodes import TkCodes
 
 INPUTS_TOPIC = "inputs"
 MOVE = 1
@@ -65,9 +66,9 @@ def main():
             elif action == PRESS:
                 time.sleep(float(components[-1]))
                 if components[1].isnumeric():
-                    keyboard_controller.press(chr(int(components[1])))
+                    keyboard_controller.press(chr(TkCodes[components[1]].value))
                 else:
-                    keyboard_controller.press(pynput.keyboard.Key[components[1]])
+                    keyboard_controller.press(chr(TkCodes[components[1]].value))
             elif action == RELEASE:
                 time.sleep(float(components[-1]))
                 if components[1].isnumeric():

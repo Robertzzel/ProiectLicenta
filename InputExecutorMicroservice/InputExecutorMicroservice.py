@@ -1,7 +1,7 @@
 import kafka
 import pynput
 import time
-from TkCodes import TkCodes
+from TkPynputKeyCodes import KeyTranslator
 
 INPUTS_TOPIC = "inputs"
 MOVE = 1
@@ -39,9 +39,6 @@ def main():
     consumer = kafka.KafkaConsumer(INPUTS_TOPIC)
 
     for msg in consumer:
-        if msg.value == b"":
-            continue
-
         for command in msg.value.decode().split(";"):
             components = command.split(",")
             action = int(components[0])
@@ -65,20 +62,10 @@ def main():
                     mouse_controller.release(pynput.mouse.Button(button))
             elif action == PRESS:
                 time.sleep(float(components[-1]))
-                if components[1].isnumeric():
-                    keyboard_controller.press(chr(TkCodes[components[1]].value))
-                else:
-                    keyboard_controller.press(chr(TkCodes[components[1]].value))
+                keyboard_controller.press(KeyTranslator.translate(components[1]))
             elif action == RELEASE:
                 time.sleep(float(components[-1]))
-                if components[1].isnumeric():
-                    keyboard_controller.release(chr(int(components[1])))
-                else:
-                    keyboard_controller.release(pynput.keyboard.Key[components[1]])
-            # elif action == SCROLL:
-            #     dx, dy = int(components[1]), int(components[1])
-            #     time.sleep(float(components[-1]))
-            #     mouse_controller.scroll(dx, -dy)
+                keyboard_controller.release(KeyTranslator.translate(components[1]))
 
 
 if __name__ == "__main__":

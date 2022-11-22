@@ -75,14 +75,29 @@ class TkinterVideo(tk.Label):
         master.bind("<FocusIn>", self._focused_in)
         master.bind("<FocusOut>", self._focused_out)
 
-        self.bind('<Motion>', lambda ev: self._inputs.add(f"{MOVE},{round(ev.x/self._current_frame_size[0], 2)},{round(ev.y/self._current_frame_size[1], 2)}"))
-        self.bind("<Button>", lambda ev: self._inputs.add(f"{CLICK},{ev.num},1"))
-        self.bind("<ButtonRelease>", lambda ev: self._inputs.add(f"{CLICK},{ev.num},0"))
+        self.bind('<Motion>', self._motion_event_handler)
+        self.bind("<Button>", self._mouse_button_press_handler)
+        self.bind("<ButtonRelease>", self._mouse_button_release_handler)
 
-        master.bind('<KeyPress>', lambda ev: self._inputs.add(f"{PRESS},{ev.keysym}"))
-        master.bind('<KeyRelease>', lambda ev: self._inputs.add(f"{RELEASE},{ev.keysym}"))
+        master.bind('<KeyPress>', self._key_press_handler)
+        master.bind('<KeyRelease>', self._key_release_handler)
 
         self.bind("<<FrameGenerated>>", self._display_frame)
+
+    def _motion_event_handler(self, event: tk.Event):
+        self._inputs.add(f"{MOVE},{round(event.x/self._current_frame_size[0], 2)},{round(event.y/self._current_frame_size[1], 2)}")
+
+    def _mouse_button_press_handler(self, event: tk.Event):
+        self._inputs.add(f"{CLICK},{event.num},1")
+
+    def _mouse_button_release_handler(self, event: tk.Event):
+        self._inputs.add(f"{CLICK},{event.num},0")
+
+    def _key_press_handler(self, event: tk.Event):
+        self._inputs.add(f"{PRESS},{event.keysym_num}")
+
+    def _key_release_handler(self, event: tk.Event):
+        self._inputs.add(f"{RELEASE},{event.keysym_num}")
 
     def _send_inputs(self):
         producer = kafka.KafkaProducer(bootstrap_servers=KAFKA_ADDRESS, acks=1)
@@ -90,7 +105,8 @@ class TkinterVideo(tk.Label):
             time.sleep(0.1)
             inputs = self._inputs.get()
             if inputs != "":
-                producer.send(INPUTS_TOPIC, inputs.encode())
+                pass
+                #producer.send(INPUTS_TOPIC, inputs.encode())
 
         kafka.KafkaAdminClient(bootstrap_servers=KAFKA_ADDRESS).delete_topics([INPUTS_TOPIC])
 

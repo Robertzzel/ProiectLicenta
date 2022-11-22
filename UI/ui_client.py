@@ -85,7 +85,7 @@ class TkinterVideo(tk.Label):
         self.bind("<<FrameGenerated>>", self._display_frame)
 
     def _motion_event_handler(self, event: tk.Event):
-        self._inputs.add(f"{MOVE},{round(event.x/self._current_frame_size[0], 2)},{round(event.y/self._current_frame_size[1], 2)}")
+        self._inputs.add(f"{MOVE},{round(event.x/self._current_frame_size[0], 3)},{round(event.y/self._current_frame_size[1], 3)}")
 
     def _mouse_button_press_handler(self, event: tk.Event):
         self._inputs.add(f"{CLICK},{event.num},1")
@@ -105,8 +105,7 @@ class TkinterVideo(tk.Label):
             time.sleep(0.1)
             inputs = self._inputs.get()
             if inputs != "":
-                pass
-                #producer.send(INPUTS_TOPIC, inputs.encode())
+                producer.send(INPUTS_TOPIC, inputs.encode())
 
         kafka.KafkaAdminClient(bootstrap_servers=KAFKA_ADDRESS).delete_topics([INPUTS_TOPIC])
 

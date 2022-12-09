@@ -81,10 +81,6 @@ func SendVideo(producer *Kafka.Producer, video, audio []byte) error {
 		return err
 	}
 
-	//if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(fmt.Sprint(time.Now().UnixMilli())), Topic: StreamerTopic}); err != nil {
-	//	return err
-	//}
-
 	return nil
 }
 

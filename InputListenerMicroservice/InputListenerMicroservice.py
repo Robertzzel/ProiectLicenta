@@ -4,9 +4,7 @@ import sys
 import time
 from pynput import mouse
 from pynput import keyboard
-import kafka
 
-INPUTS_TOPIC = "inputs"
 BROKER_ADDRESS = "localhost:9092"
 
 MOVE = 1
@@ -17,21 +15,21 @@ RELEASE = 5
 
 
 class SafeBytes:
-    def __init__(self, txt: bytes = b""):
+    def __init__(self, txt: str = ""):
         self.text = txt
         self.lock = threading.Lock()
         self.last_update: time.time = None
 
-    def add(self, text: bytes):
+    def add(self, text: str):
         with self.lock:
             current_time = time.time()
-            self.text += text + b"," + str(round(current_time - self.last_update, 4) if self.last_update is not None else 0).encode() + b";"
+            self.text += text + "," + str(round(current_time - self.last_update, 4) if self.last_update is not None else 0) + ";"
             self.last_update = current_time
 
-    def get(self) -> bytes:
+    def get(self) -> str:
         with self.lock:
             returned = self.text[:-1]
-            self.text = b""
+            self.text = ""
             self.last_update = None
 
         return returned
@@ -54,7 +52,6 @@ def get_screen_sizes():
 
 
 screen_width, screen_height = get_screen_sizes()
-producer = kafka.KafkaProducer(bootstrap_servers=BROKER_ADDRESS, acks=1)
 inputs_queue = queue.Queue(100)
 inputs_message = SafeBytes()
 
@@ -62,34 +59,34 @@ inputs_message = SafeBytes()
 def send_inputs():
     while True:
         time.sleep(0.1)
-        producer.send(INPUTS_TOPIC, inputs_message.get())
+        print(inputs_message.get())
 
 
 def on_move(x, y):
-    inputs_message.add(f"{MOVE},{round(x/screen_width, 2)},{round(y/screen_height, 2)}".encode())
+    inputs_message.add(f"{MOVE},{round(x/screen_width, 2)},{round(y/screen_height, 2)}")
 
 
 def on_click(x, y, button, pressed):
-    inputs_message.add(f"{CLICK},{button.name},{int(pressed)}".encode())
+    inputs_message.add(f"{CLICK},{button.name},{int(pressed)}")
 
 
 def on_scroll(x, y, dx, dy):
-    inputs_message.add(f"{SCROLL},{dx},{dy}".encode())
+    inputs_message.add(f"{SCROLL},{dx},{dy}")
 
 
 def on_press(key):
     if type(key) == keyboard.KeyCode:
-        inputs_message.add(f"{PRESS},{ord(key.char)}".encode())
+        inputs_message.add(f"{PRESS},{ord(key.char)}")
         return
-    inputs_message.add(f"{PRESS},{key.name}".encode())
+    inputs_message.add(f"{PRESS},{key.name}")
 
 
 def on_release(key):
     if type(key) == keyboard.KeyCode:
-        inputs_message.add(f"{RELEASE},{ord(key.char)}".encode())
+        inputs_message.add(f"{RELEASE},{ord(key.char)}")
         return
 
-    inputs_message.add(f"{RELEASE},{key.name}".encode())
+    inputs_message.add(f"{RELEASE},{key.name}")
 
 
 def main():
@@ -119,7 +116,6 @@ def main():
     except Exception:
         pass
 
-    kafka.KafkaAdminClient(bootstrap_servers=BROKER_ADDRESS).delete_topics([INPUTS_TOPIC])
     print("Cleanup done.")
     sys.exit(0)
 

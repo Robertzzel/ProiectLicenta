@@ -51,9 +51,9 @@ def main():
                 time.sleep(float(components[-1]))
 
                 if button == SCROLL_UP:
-                    mouse_controller.scroll(0, -2)
-                elif button == SCROLL_DOWN:
                     mouse_controller.scroll(0, 2)
+                elif button == SCROLL_DOWN:
+                    mouse_controller.scroll(0, -2)
 
                 if int(components[2]):
                     mouse_controller.press(pynput.mouse.Button(button))

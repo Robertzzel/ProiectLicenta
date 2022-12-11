@@ -8,10 +8,6 @@ cd AggregatorMicroservice
 go build AggregatorMicroservice.go
 cd ..
 
-cd UI
-go build UI.go
-cd ..
-
 cd MergerMicroservice
 go build MergerMicroservice.go
 cd ..

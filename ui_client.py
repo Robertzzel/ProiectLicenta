@@ -1,5 +1,6 @@
 import pickle
 import queue
+from start import Sender
 import av
 import time
 import threading
@@ -13,7 +14,7 @@ import kafka
 from io import BytesIO
 import numpy as np
 from typing import Optional
-from InputsBuffer import InputsBuffer
+from UI.InputsBuffer import InputsBuffer
 
 TOPIC = "aggregator"
 KAFKA_ADDRESS = "localhost:9092"
@@ -23,9 +24,6 @@ CLICK = 2
 PRESS = 4
 RELEASE = 5
 INPUTS_TOPIC = "inputs"
-
-
-#videoplayer.stop()
 
 
 class MainWindow:
@@ -46,8 +44,12 @@ class MainWindow:
         self.receiverButton: tk.Button = tk.Button(master=self.receiverTab, text="START", command=self.openWindow)
         self.receiverButton.pack()
 
+        self.senderButton: tk.Button = tk.Button(master=self.senderTab, text="START", command=self.startStreaming)
+        self.senderButton.pack()
+
         self.topLevelWindow: Optional[tk.Toplevel] = None
         self.videoPlayer: Optional[TkinterVideo] = None
+        self.sendingProcess: Optional[Sender] = None
 
         self.root.mainloop()
 
@@ -63,6 +65,15 @@ class MainWindow:
         self.receiverButton.config(text="START", command=self.openWindow)
         self.videoPlayer.stop()
         self.topLevelWindow.destroy()
+
+    def startStreaming(self):
+        self.senderButton.config(text="STOP", command=self.stopStreaming)
+        self.sendingProcess = Sender()
+        self.sendingProcess.start()
+
+    def stopStreaming(self):
+        self.senderButton.config(text="START", command=self.startStreaming)
+        self.sendingProcess.stop()
 
 
 class TkinterVideo(tk.Label):
@@ -95,6 +106,7 @@ class TkinterVideo(tk.Label):
         master.bind('<KeyRelease>', self.keyReleaseHandler)
 
         self.bind("<<FrameGenerated>>", self.displayFrame)
+
 
     def motionHandler(self, event: tk.Event):
         self.inputsBuffer.add(f"{MOVE},{round(event.x / self.currentDisplaySize[0], 3)},{round(event.y / self.currentDisplaySize[1], 3)}")

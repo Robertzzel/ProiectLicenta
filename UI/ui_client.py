@@ -11,6 +11,8 @@ import sounddevice as sd
 import kafka
 from io import BytesIO
 import numpy as np
+from typing import Optional
+from InputsBuffer import InputsBuffer
 
 TOPIC = "aggregator"
 KAFKA_ADDRESS = "localhost:9092"
@@ -21,59 +23,29 @@ PRESS = 4
 RELEASE = 5
 INPUTS_TOPIC = "inputs"
 
-class SafeString:
-    def __init__(self, txt: str = ""):
-        self.text = txt
-        self.lock = threading.Lock()
-        self.last_update: time.time = None
-
-    def add(self, text: str):
-        with self.lock:
-            current_time = time.time()
-            self.text += text + "," + str(
-                round(current_time - self.last_update, 4) if self.last_update is not None else 0) + ";"
-            self.last_update = current_time
-
-    def get(self) -> str:
-        with self.lock:
-            returned = self.text[:-1]
-            self.text = ""
-            self.last_update = None
-
-        return returned
-
 
 class TkinterVideo(tk.Label):
-    def __init__(self, master, scaled: bool = True, keep_aspect: bool = False, *args, **kwargs):
+    def __init__(self, master, keep_aspect: bool = False, *args, **kwargs):
         super(TkinterVideo, self).__init__(master, *args, **kwargs)
 
-        self._stream_initialized = False
-        self._display_video_thread = threading.Thread(target=self._display_video, daemon=True)
-        self._receive_thread = threading.Thread(target=self._receive_videos, daemon=True)
-        self._play_audio_thread = threading.Thread(target=self._play_audio, daemon=True)
-        self._send_inputs_thread = threading.Thread(target=self._send_inputs, daemon=True)
-        self._inputs_listener_thread = threading.Thread
-        self._frame_queue = Queue(10)
-        self._audio_queue = Queue(10)
+        self._display_video_thread: threading.Thread = threading.Thread(target=self._display_video, daemon=True)
+        self._receive_thread: threading.Thread = threading.Thread(target=self._receive_videos, daemon=True)
+        self._send_inputs_thread: threading.Thread = threading.Thread(target=self._send_inputs, daemon=True)
+        self._frame_queue: Queue = Queue(10)
+        self._audio_queue: Queue = Queue(10)
         self._current_img = None
-        self._output_audio_stream = None
+        self._output_audio_stream: Optional[sd.OutputStream] = None
         self._current_frame_size = (0, 0)
         self._video_fps = 0
-        self._video_sizes = (0, 0)
         self._audio_samplerate = 0
         self._audio_buffer_per_video_frame = 0
-        self._scaled = scaled
         self._keep_aspect_ratio = keep_aspect
         self._running = True
-        self._focused = False
-        self._inputs = SafeString()
+        self._inputs: InputsBuffer = InputsBuffer()
 
-        self.set_scaled()
+        self.bind("<Configure>", self._resize_event)
         self._keep_aspect_ratio = keep_aspect
         self._resampling_method: int = Image.NEAREST
-
-        master.bind("<FocusIn>", self._focused_in)
-        master.bind("<FocusOut>", self._focused_out)
 
         self.bind('<Motion>', self._motion_event_handler)
         self.bind("<Button>", self._mouse_button_press_handler)
@@ -109,12 +81,6 @@ class TkinterVideo(tk.Label):
 
         kafka.KafkaAdminClient(bootstrap_servers=KAFKA_ADDRESS).delete_topics([INPUTS_TOPIC])
 
-    def _focused_in(self, event):
-        self._focused = True
-
-    def _focused_out(self, event):
-        self._focused = False
-
     def play(self):
         if self._receive_thread is not None:
             self._receive_thread.start()
@@ -122,48 +88,27 @@ class TkinterVideo(tk.Label):
         if self._display_video_thread is not None:
             self._display_video_thread.start()
 
-        if self._play_audio_thread is not None:
-            self._play_audio_thread.start()
-
         if self._send_inputs_thread is not None:
             self._send_inputs_thread.start()
 
     def _resize_event(self, event):
         self._current_frame_size = event.width, event.height
 
-        if self._current_img:
-            if self._keep_aspect_ratio:
-                proxy_img = ImageOps.contain(self._current_img.copy(), self._current_frame_size)
-            else:
-                proxy_img = self._current_img.copy().resize(self._current_frame_size)
-
-            self._current_imgtk = ImageTk.PhotoImage(proxy_img)
-            self.config(image=self._current_imgtk)
-
-    def set_scaled(self):
-        if self._scaled:
-            self.bind("<Configure>", self._resize_event)
-        else:
-            self.unbind("<Configure>")
-            self._current_frame_size = self._video_sizes
-
     def _init_video_stream(self, stream, audio_sample_rate):
         self._video_fps = stream.guessed_rate
         self._audio_samplerate = audio_sample_rate
-        self._video_sizes = (stream.width, stream.height)
         self._audio_buffer_per_video_frame = self._audio_samplerate // self._video_fps
 
-        self.current_imgtk = ImageTk.PhotoImage(Image.new("RGB", self._video_sizes, (255, 255, 255)))
-        self.config(width=800, height=600, image=self.current_imgtk)
+        self.current_imgtk = ImageTk.PhotoImage(Image.new("RGB", (stream.width, stream.height), (255, 255, 255)))
+        self.config(width=10, height=10, image=self.current_imgtk)
 
         self._output_audio_stream = sd.OutputStream(channels=1, samplerate=self._audio_samplerate, dtype="int16",
                                                     callback=self.audio_callback,
                                                     blocksize=self._audio_buffer_per_video_frame)
 
-        self._stream_initialized = True
-
     def _display_video(self):
         self._current_img = self._frame_queue.get(block=True)
+        self._output_audio_stream.start()
         rate = 1 / self._video_fps
         try:
             while self._running:
@@ -187,43 +132,45 @@ class TkinterVideo(tk.Label):
 
         print("Done")
 
-    def _play_audio(self):
-        self._audio_queue.get()
-        time.sleep(0.1)
-        self._output_audio_stream.start()
-
     def audio_callback(self, outdata: np.ndarray, frames: int, timet, status):
         try:
             data: np.ndarray = self._audio_queue.get_nowait()
-            data.shape = (self._audio_buffer_per_video_frame, 1)
-            outdata[:] = data
-        except queue.Empty as ex:
-            print("Queue empty", ex)
+
+            if len(data) < self._audio_buffer_per_video_frame:
+                np.append(data, [0] * (self._audio_buffer_per_video_frame - len(data)))
+
+        except queue.Empty:
+            data = np.zeros(shape=(self._audio_buffer_per_video_frame, 1), dtype=np.int16)
         except Exception as ex:
-            print("Eroare", ex)
+            print("Error:", ex)
+            return
+
+        outdata[:] = data
 
     def _receive_videos(self):
         consumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=KAFKA_ADDRESS)
+
+        # init stream
+        video, audio, audioSamplerate = self.get_audio_video_from_message(next(consumer))
+        with av.open(BytesIO(video)) as container:
+            self._init_video_stream(container.streams.video[0], audioSamplerate)
+
+        # start stream
         while self._running:
             video, audio, audio_sample_rate = self.get_audio_video_from_message(next(consumer))
+            audio.shape = (len(audio), 1)
 
             with av.open(BytesIO(video)) as container:
-                if not self._stream_initialized:
-                    self._init_video_stream(container.streams.video[0], audio_sample_rate)
+                container.fast_seek, container.discard_corrupt = True, True
 
-                container.fast_seek, container.discard_corrupt, empty_queue = True, True, True
+                with self._frame_queue.mutex:
+                    self._frame_queue.queue.clear()
+                with self._audio_queue.mutex:
+                    self._audio_queue.queue.clear()
 
                 for frame in container.decode(video=0):
                     self._frame_queue.put(item=frame, block=True)
                     self._audio_queue.put(item=audio[frame.index * self._audio_buffer_per_video_frame: (frame.index + 1) * self._audio_buffer_per_video_frame], block=True)
-
-                    if empty_queue:
-                        while self._frame_queue.qsize() > 1:
-                            self._frame_queue.get_nowait()
-                        while self._audio_queue.qsize() > 1:
-                            self._audio_queue.get_nowait()
-
-                        empty_queue = False
 
     def get_audio_video_from_message(self, kafka_message):
         audio_start_index = None
@@ -241,6 +188,7 @@ class TkinterVideo(tk.Label):
         if audio_start_index > video_start_index:
             return kafka_message.value[video_start_index:audio_start_index], pickle.loads(
                 kafka_message.value[audio_start_index:]), audio_sample_rate
+
         return kafka_message.value[video_start_index:], pickle.loads(
             kafka_message.value[audio_start_index:video_start_index]), audio_sample_rate
 
@@ -262,9 +210,6 @@ class TkinterVideo(tk.Label):
         if self._display_video_thread:
             self._display_video_thread.join()
 
-        if self._play_audio_thread:
-            self._play_audio_thread.join()
-
         if self._send_inputs_thread:
             self._send_inputs_thread.join()
 
@@ -274,10 +219,10 @@ class TkinterVideo(tk.Label):
 
 if __name__ == "__main__":
     root = tk.Tk()
-    videoplayer = TkinterVideo(master=root, scaled=True)
+    videoplayer = TkinterVideo(master=root)
     videoplayer.pack(expand=True, fill="both")
-
     videoplayer.play()
+
     root.mainloop()
 
     print("Oprim")

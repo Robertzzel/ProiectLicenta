@@ -6,6 +6,7 @@ import threading
 import logging
 from queue import Queue
 import tkinter as tk
+import tkinter.ttk as ttk
 from PIL import ImageTk, Image, ImageOps
 import sounddevice as sd
 import kafka
@@ -24,155 +25,187 @@ RELEASE = 5
 INPUTS_TOPIC = "inputs"
 
 
+#videoplayer.stop()
+
+
+class MainWindow:
+    def __init__(self):
+        self.root = tk.Tk()
+
+        self.tabControl = ttk.Notebook(self.root)
+        self.receiverTab = tk.Frame(self.tabControl)
+        self.senderTab = tk.Frame(self.tabControl)
+        self.tabControl.add(child=self.receiverTab, text="Receive")
+        self.tabControl.add(child=self.senderTab, text="Send")
+        self.tabControl.pack()
+
+        self.receiverLabel = ttk.Label(master=self.receiverTab, text="IP to receive from:")
+        self.receiverLabel.pack()
+        self.receiverInput = ttk.Entry(master=self.receiverTab)
+        self.receiverInput.pack()
+        self.receiverButton: tk.Button = tk.Button(master=self.receiverTab, text="START", command=self.openWindow)
+        self.receiverButton.pack()
+
+        self.topLevelWindow: Optional[tk.Toplevel] = None
+        self.videoPlayer: Optional[TkinterVideo] = None
+
+        self.root.mainloop()
+
+    def openWindow(self):
+        self.receiverButton.config(text="STOP", command=self.closeWindow)
+
+        self.topLevelWindow = tk.Toplevel()
+        self.videoPlayer = TkinterVideo(master=self.topLevelWindow)
+        self.videoPlayer.pack(expand=True, fill="both")
+        self.videoPlayer.play()
+
+    def closeWindow(self):
+        self.receiverButton.config(text="START", command=self.openWindow)
+        self.videoPlayer.stop()
+        self.topLevelWindow.destroy()
+
+
 class TkinterVideo(tk.Label):
-    def __init__(self, master, keep_aspect: bool = False, *args, **kwargs):
+    def __init__(self, master, keepAspect: bool = False, *args, **kwargs):
         super(TkinterVideo, self).__init__(master, *args, **kwargs)
 
-        self._display_video_thread: threading.Thread = threading.Thread(target=self._display_video, daemon=True)
-        self._receive_thread: threading.Thread = threading.Thread(target=self._receive_videos, daemon=True)
-        self._send_inputs_thread: threading.Thread = threading.Thread(target=self._send_inputs, daemon=True)
-        self._frame_queue: Queue = Queue(10)
-        self._audio_queue: Queue = Queue(10)
-        self._current_img = None
-        self._output_audio_stream: Optional[sd.OutputStream] = None
-        self._current_frame_size = (0, 0)
-        self._video_fps = 0
-        self._audio_samplerate = 0
-        self._audio_buffer_per_video_frame = 0
-        self._keep_aspect_ratio = keep_aspect
-        self._running = True
-        self._inputs: InputsBuffer = InputsBuffer()
+        self.displayContentThread: threading.Thread = threading.Thread(target=self.displayContent, daemon=True)
+        self.streamReceiverThread: threading.Thread = threading.Thread(target=self.receiveStream, daemon=True)
+        self.sendInputsThread: threading.Thread = threading.Thread(target=self.sendInputs, daemon=True)
+        self.videoFramesQueue: Queue = Queue(60)
+        self.audioBlocksQueue: Queue = Queue(60)
+        self.currentImage = None
+        self.audioStream: Optional[sd.OutputStream] = None
+        self.currentDisplaySize = (0, 0)
+        self.videoFramerate = 0
+        self.audioSamplerate = 0
+        self.audioBlockSize = 0
+        self.keepAspectRatio = keepAspect
+        self.streamRunning = True
+        self.inputsBuffer: InputsBuffer = InputsBuffer()
 
-        self.bind("<Configure>", self._resize_event)
-        self._keep_aspect_ratio = keep_aspect
+        self.bind("<Configure>", self.resizeEvent)
         self._resampling_method: int = Image.NEAREST
 
-        self.bind('<Motion>', self._motion_event_handler)
-        self.bind("<Button>", self._mouse_button_press_handler)
-        self.bind("<ButtonRelease>", self._mouse_button_release_handler)
+        self.bind('<Motion>', self.motionHandler)
+        self.bind("<Button>", self.mouseButtonPressHandler)
+        self.bind("<ButtonRelease>", self.mouseButtonReleaseHandler)
 
-        master.bind('<KeyPress>', self._key_press_handler)
-        master.bind('<KeyRelease>', self._key_release_handler)
+        master.bind('<KeyPress>', self.keyPressHandler)
+        master.bind('<KeyRelease>', self.keyReleaseHandler)
 
-        self.bind("<<FrameGenerated>>", self._display_frame)
+        self.bind("<<FrameGenerated>>", self.displayFrame)
 
-    def _motion_event_handler(self, event: tk.Event):
-        self._inputs.add(f"{MOVE},{round(event.x/self._current_frame_size[0], 3)},{round(event.y/self._current_frame_size[1], 3)}")
+    def motionHandler(self, event: tk.Event):
+        self.inputsBuffer.add(f"{MOVE},{round(event.x / self.currentDisplaySize[0], 3)},{round(event.y / self.currentDisplaySize[1], 3)}")
 
-    def _mouse_button_press_handler(self, event: tk.Event):
-        self._inputs.add(f"{CLICK},{event.num},1")
+    def mouseButtonPressHandler(self, event: tk.Event):
+        self.inputsBuffer.add(f"{CLICK},{event.num},1")
 
-    def _mouse_button_release_handler(self, event: tk.Event):
-        self._inputs.add(f"{CLICK},{event.num},0")
+    def mouseButtonReleaseHandler(self, event: tk.Event):
+        self.inputsBuffer.add(f"{CLICK},{event.num},0")
 
-    def _key_press_handler(self, event: tk.Event):
-        self._inputs.add(f"{PRESS},{event.keysym_num}")
+    def keyPressHandler(self, event: tk.Event):
+        self.inputsBuffer.add(f"{PRESS},{event.keysym_num}")
 
-    def _key_release_handler(self, event: tk.Event):
-        self._inputs.add(f"{RELEASE},{event.keysym_num}")
+    def keyReleaseHandler(self, event: tk.Event):
+        self.inputsBuffer.add(f"{RELEASE},{event.keysym_num}")
 
-    def _send_inputs(self):
+    def sendInputs(self):
         producer = kafka.KafkaProducer(bootstrap_servers=KAFKA_ADDRESS, acks=1)
-        while self._running:
+        while self.streamRunning:
             time.sleep(0.1)
-            inputs = self._inputs.get()
+            inputs = self.inputsBuffer.get()
             if inputs != "":
                 producer.send(INPUTS_TOPIC, inputs.encode())
 
         kafka.KafkaAdminClient(bootstrap_servers=KAFKA_ADDRESS).delete_topics([INPUTS_TOPIC])
 
     def play(self):
-        if self._receive_thread is not None:
-            self._receive_thread.start()
+        if self.streamReceiverThread is not None:
+            self.streamReceiverThread.start()
 
-        if self._display_video_thread is not None:
-            self._display_video_thread.start()
+        if self.displayContentThread is not None:
+            self.displayContentThread.start()
 
-        if self._send_inputs_thread is not None:
-            self._send_inputs_thread.start()
+        if self.sendInputsThread is not None:
+            self.sendInputsThread.start()
 
-    def _resize_event(self, event):
-        self._current_frame_size = event.width, event.height
+    def resizeEvent(self, event):
+        self.currentDisplaySize = event.width, event.height
 
-    def _init_video_stream(self, stream, audio_sample_rate):
-        self._video_fps = stream.guessed_rate
-        self._audio_samplerate = audio_sample_rate
-        self._audio_buffer_per_video_frame = self._audio_samplerate // self._video_fps
+    def initVideoStream(self, stream, audio_sample_rate):
+        self.videoFramerate = stream.guessed_rate
+        self.audioSamplerate = audio_sample_rate
+        self.audioBlockSize = self.audioSamplerate // self.videoFramerate
 
-        self.current_imgtk = ImageTk.PhotoImage(Image.new("RGB", (stream.width, stream.height), (255, 255, 255)))
-        self.config(width=10, height=10, image=self.current_imgtk)
+        self.currentTkImage = ImageTk.PhotoImage(Image.new("RGB", (stream.width, stream.height), (255, 255, 255)))
+        self.config(width=300, height=300, image=self.currentTkImage)
 
-        self._output_audio_stream = sd.OutputStream(channels=1, samplerate=self._audio_samplerate, dtype="int16",
-                                                    callback=self.audio_callback,
-                                                    blocksize=self._audio_buffer_per_video_frame)
+        self.audioStream = sd.OutputStream(channels=1, samplerate=self.audioSamplerate, dtype="int16",
+                                           callback=self.audioCallback,
+                                           blocksize=self.audioBlockSize)
 
-    def _display_video(self):
-        self._current_img = self._frame_queue.get(block=True)
-        self._output_audio_stream.start()
-        rate = 1 / self._video_fps
+    def displayContent(self):
+        self.currentImage = self.videoFramesQueue.get(block=True)  # wait for the stream to init
+        self.audioStream.start()
+        rate = 1 / self.videoFramerate
+
         try:
-            while self._running:
+            while self.streamRunning:
                 start = time.time()
 
-                self._current_img = self._frame_queue.get(timeout=3).to_image()
+                self.currentImage = self.videoFramesQueue.get(timeout=2).to_image()
                 self.event_generate("<<FrameGenerated>>")
 
                 time.sleep(max(rate - (time.time() - start) % rate, 0))
-        except queue.Empty as ex:
-            print("Queue empty", ex)
         except Exception as ex:
             print(ex)
 
-        self._display_video_thread = None
-
-        try:
-            self.event_generate("<<Ended>>")
-        except tk.TclError:
-            pass
-
         print("Done")
+        return
 
-    def audio_callback(self, outdata: np.ndarray, frames: int, timet, status):
+    def audioCallback(self, outdata: np.ndarray, frames: int, timet, status):
         try:
-            data: np.ndarray = self._audio_queue.get_nowait()
+            data: np.ndarray = self.audioBlocksQueue.get_nowait()
 
-            if len(data) < self._audio_buffer_per_video_frame:
-                np.append(data, [0] * (self._audio_buffer_per_video_frame - len(data)))
+            if len(data) < self.audioBlockSize:
+                np.append(data, [0] * (self.audioBlockSize - len(data)))
 
         except queue.Empty:
-            data = np.zeros(shape=(self._audio_buffer_per_video_frame, 1), dtype=np.int16)
+            data = np.zeros(shape=(self.audioBlockSize, 1), dtype=np.int16)
         except Exception as ex:
             print("Error:", ex)
             return
 
         outdata[:] = data
 
-    def _receive_videos(self):
+    def receiveStream(self):
         consumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=KAFKA_ADDRESS)
 
         # init stream
-        video, audio, audioSamplerate = self.get_audio_video_from_message(next(consumer))
+        video, audio, audioSamplerate = self.getAudioVideoFromMessage(next(consumer))
         with av.open(BytesIO(video)) as container:
-            self._init_video_stream(container.streams.video[0], audioSamplerate)
+            self.initVideoStream(container.streams.video[0], audioSamplerate)
 
         # start stream
-        while self._running:
-            video, audio, audio_sample_rate = self.get_audio_video_from_message(next(consumer))
+        while self.streamRunning:
+            video, audio, audio_sample_rate = self.getAudioVideoFromMessage(next(consumer))
             audio.shape = (len(audio), 1)
 
             with av.open(BytesIO(video)) as container:
                 container.fast_seek, container.discard_corrupt = True, True
 
-                with self._frame_queue.mutex:
-                    self._frame_queue.queue.clear()
-                with self._audio_queue.mutex:
-                    self._audio_queue.queue.clear()
+                with self.videoFramesQueue.mutex:
+                    self.videoFramesQueue.queue.clear()
+                with self.audioBlocksQueue.mutex:
+                    self.audioBlocksQueue.queue.clear()
 
                 for frame in container.decode(video=0):
-                    self._frame_queue.put(item=frame, block=True)
-                    self._audio_queue.put(item=audio[frame.index * self._audio_buffer_per_video_frame: (frame.index + 1) * self._audio_buffer_per_video_frame], block=True)
+                    self.videoFramesQueue.put(item=frame, block=True)
+                    self.audioBlocksQueue.put(item=audio[frame.index * self.audioBlockSize: (frame.index + 1) * self.audioBlockSize], block=True)
 
-    def get_audio_video_from_message(self, kafka_message):
+    def getAudioVideoFromMessage(self, kafka_message):
         audio_start_index = None
         video_start_index = None
         audio_sample_rate = None
@@ -192,39 +225,30 @@ class TkinterVideo(tk.Label):
         return kafka_message.value[video_start_index:], pickle.loads(
             kafka_message.value[audio_start_index:video_start_index]), audio_sample_rate
 
-    def _display_frame(self, event):
-        if self._keep_aspect_ratio:
-            self._current_img = ImageOps.contain(self._current_img, self._current_frame_size, self._resampling_method)
+    def displayFrame(self, event):
+        if self.keepAspectRatio:
+            self.currentImage = ImageOps.contain(self.currentImage, self.currentDisplaySize, self._resampling_method)
         else:
-            self._current_img = self._current_img.resize(self._current_frame_size, self._resampling_method)
+            self.currentImage = self.currentImage.resize(self.currentDisplaySize, self._resampling_method)
 
-        self.current_imgtk.paste(self._current_img)
-        self.config(image=self.current_imgtk)
+        self.currentTkImage.paste(self.currentImage)
+        self.config(image=self.currentTkImage)
 
     def stop(self):
-        self._running = False
+        self.streamRunning = False
 
-        if self._receive_thread:
-            self._receive_thread.join()
+        if self.sendInputsThread:
+            self.sendInputsThread.join()
 
-        if self._display_video_thread:
-            self._display_video_thread.join()
+        if self.displayContentThread:
+            self.displayContentThread.join()
 
-        if self._send_inputs_thread:
-            self._send_inputs_thread.join()
+        if self.streamReceiverThread:
+            self.streamReceiverThread.join()
 
-        if self._output_audio_stream:
-            self._output_audio_stream.stop()
+        if self.audioStream:
+            self.audioStream.stop()
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    videoplayer = TkinterVideo(master=root)
-    videoplayer.pack(expand=True, fill="both")
-    videoplayer.play()
-
-    root.mainloop()
-
-    print("Oprim")
-    videoplayer.stop()
-    print("Gata")
+    MainWindow()

@@ -48,7 +48,7 @@ class Sender:
             self.aggregatorProcess.wait(timeout=5)
             self.videoProcess.wait(timeout=5)
             self.audioProcess.wait(timeout=5)
-        except:
+        finally:
             self.aggregatorProcess.kill()
             self.videoProcess.kill()
             self.audioProcess.kill()

@@ -17,7 +17,6 @@ from typing import Optional
 from UI.InputsBuffer import InputsBuffer
 
 TOPIC = "aggregator"
-KAFKA_ADDRESS = "localhost:9092"
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
 MOVE = 1
 CLICK = 2
@@ -49,7 +48,7 @@ class MainWindow:
 
         self.topLevelWindow: Optional[tk.Toplevel] = None
         self.videoPlayer: Optional[TkinterVideo] = None
-        self.sendingProcess: Optional[Sender] = None
+        self.sendingProcess: Sender = Sender()
 
         self.root.mainloop()
 
@@ -57,7 +56,10 @@ class MainWindow:
         self.receiverButton.config(text="STOP", command=self.closeWindow)
 
         self.topLevelWindow = tk.Toplevel()
-        self.videoPlayer = TkinterVideo(master=self.topLevelWindow)
+        if self.receiverInput.get() != "":
+            self.videoPlayer = TkinterVideo(master=self.topLevelWindow, kafkaAddress=self.receiverInput.get())
+        else:
+            self.videoPlayer = TkinterVideo(master=self.topLevelWindow)
         self.videoPlayer.pack(expand=True, fill="both")
         self.videoPlayer.play()
 
@@ -68,7 +70,6 @@ class MainWindow:
 
     def startStreaming(self):
         self.senderButton.config(text="STOP", command=self.stopStreaming)
-        self.sendingProcess = Sender()
         self.sendingProcess.start()
 
     def stopStreaming(self):
@@ -77,9 +78,11 @@ class MainWindow:
 
 
 class TkinterVideo(tk.Label):
-    def __init__(self, master, keepAspect: bool = False, *args, **kwargs):
+    def __init__(self, master, kafkaAddress: str = "localhost:9092", keepAspect: bool = False, *args, **kwargs):
         super(TkinterVideo, self).__init__(master, *args, **kwargs)
 
+        self.kafkaAddress = kafkaAddress
+        self.streamConsumer: Optional[kafka.KafkaConsumer] = None
         self.displayContentThread: threading.Thread = threading.Thread(target=self.displayContent, daemon=True)
         self.streamReceiverThread: threading.Thread = threading.Thread(target=self.receiveStream, daemon=True)
         self.sendInputsThread: threading.Thread = threading.Thread(target=self.sendInputs, daemon=True)
@@ -107,7 +110,6 @@ class TkinterVideo(tk.Label):
 
         self.bind("<<FrameGenerated>>", self.displayFrame)
 
-
     def motionHandler(self, event: tk.Event):
         self.inputsBuffer.add(f"{MOVE},{round(event.x / self.currentDisplaySize[0], 3)},{round(event.y / self.currentDisplaySize[1], 3)}")
 
@@ -124,14 +126,14 @@ class TkinterVideo(tk.Label):
         self.inputsBuffer.add(f"{RELEASE},{event.keysym_num}")
 
     def sendInputs(self):
-        producer = kafka.KafkaProducer(bootstrap_servers=KAFKA_ADDRESS, acks=1)
+        producer = kafka.KafkaProducer(bootstrap_servers=self.kafkaAddress, acks=1)
         while self.streamRunning:
             time.sleep(0.1)
             inputs = self.inputsBuffer.get()
             if inputs != "":
                 producer.send(INPUTS_TOPIC, inputs.encode())
 
-        kafka.KafkaAdminClient(bootstrap_servers=KAFKA_ADDRESS).delete_topics([INPUTS_TOPIC])
+        kafka.KafkaAdminClient(bootstrap_servers=self.kafkaAddress).delete_topics([INPUTS_TOPIC])
 
     def play(self):
         if self.streamReceiverThread is not None:
@@ -193,16 +195,16 @@ class TkinterVideo(tk.Label):
         outdata[:] = data
 
     def receiveStream(self):
-        consumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=KAFKA_ADDRESS)
+        self.streamConsumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=self.kafkaAddress)
 
         # init stream
-        video, audio, audioSamplerate = self.getAudioVideoFromMessage(next(consumer))
+        video, audio, audioSamplerate = self.getAudioVideoFromMessage(next(self.streamConsumer))
         with av.open(BytesIO(video)) as container:
             self.initVideoStream(container.streams.video[0], audioSamplerate)
 
         # start stream
         while self.streamRunning:
-            video, audio, audio_sample_rate = self.getAudioVideoFromMessage(next(consumer))
+            video, audio, audio_sample_rate = self.getAudioVideoFromMessage(next(self.streamConsumer))
             audio.shape = (len(audio), 1)
 
             with av.open(BytesIO(video)) as container:
@@ -248,6 +250,7 @@ class TkinterVideo(tk.Label):
 
     def stop(self):
         self.streamRunning = False
+        self.streamConsumer.close()
 
         if self.sendInputsThread:
             self.sendInputsThread.join()

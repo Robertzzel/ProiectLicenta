@@ -111,7 +111,8 @@ class TkinterVideo(tk.Label):
         self.bind("<<FrameGenerated>>", self.displayFrame)
 
     def motionHandler(self, event: tk.Event):
-        self.inputsBuffer.add(f"{MOVE},{round(event.x / self.currentDisplaySize[0], 3)},{round(event.y / self.currentDisplaySize[1], 3)}")
+        self.inputsBuffer.add(
+            f"{MOVE},{round(event.x / self.currentDisplaySize[0], 3)},{round(event.y / self.currentDisplaySize[1], 3)}")
 
     def mouseButtonPressHandler(self, event: tk.Event):
         self.inputsBuffer.add(f"{CLICK},{event.num},1")
@@ -176,9 +177,6 @@ class TkinterVideo(tk.Label):
         except Exception as ex:
             print(ex)
 
-        print("Done")
-        return
-
     def audioCallback(self, outdata: np.ndarray, frames: int, timet, status):
         try:
             data: np.ndarray = self.audioBlocksQueue.get_nowait()
@@ -195,49 +193,68 @@ class TkinterVideo(tk.Label):
         outdata[:] = data
 
     def receiveStream(self):
-        self.streamConsumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=self.kafkaAddress)
+        self.streamConsumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=self.kafkaAddress, consumer_timeout_ms=2000)
 
         # init stream
-        video, audio, audioSamplerate = self.getAudioVideoFromMessage(next(self.streamConsumer))
-        with av.open(BytesIO(video)) as container:
-            self.initVideoStream(container.streams.video[0], audioSamplerate)
+        while self.streamRunning:
+            try:
+                message = next(self.streamConsumer)
+            except StopIteration as ex:
+                continue
+
+            video, audio = self.getAudioVideoFromMessage(message)
+            with av.open(BytesIO(video)) as container:
+                self.initVideoStream(container.streams.video[0], self.getAudioSamplerateFromMessage(message))
+            break
 
         # start stream
         while self.streamRunning:
-            video, audio, audio_sample_rate = self.getAudioVideoFromMessage(next(self.streamConsumer))
-            audio.shape = (len(audio), 1)
+            try:
+                video, audio = self.getAudioVideoFromMessage(next(self.streamConsumer))
+            except StopIteration as ex:
+                continue
 
+            audio.shape = (len(audio), 1)
             with av.open(BytesIO(video)) as container:
                 container.fast_seek, container.discard_corrupt = True, True
 
-                with self.videoFramesQueue.mutex:
-                    self.videoFramesQueue.queue.clear()
-                with self.audioBlocksQueue.mutex:
-                    self.audioBlocksQueue.queue.clear()
+                self.clearAudioAndVideoQueues()
 
                 for frame in container.decode(video=0):
                     self.videoFramesQueue.put(item=frame, block=True)
-                    self.audioBlocksQueue.put(item=audio[frame.index * self.audioBlockSize: (frame.index + 1) * self.audioBlockSize], block=True)
+                    self.audioBlocksQueue.put(
+                        item=audio[frame.index * self.audioBlockSize: (frame.index + 1) * self.audioBlockSize],
+                        block=True)
 
-    def getAudioVideoFromMessage(self, kafka_message):
-        audio_start_index = None
-        video_start_index = None
-        audio_sample_rate = None
+    def getAudioVideoFromMessage(self, message):
+        audioStartIndex = None
+        videoStartIndex = None
 
-        for header in kafka_message.headers:
+        for header in message.headers:
             if header[0] == "audio-start-index":
-                audio_start_index = int(header[1].decode())
+                audioStartIndex = int(header[1].decode())
             elif header[0] == "video-start-index":
-                video_start_index = int(header[1].decode())
-            elif header[0] == "audio-sample-rate":
-                audio_sample_rate = int(header[1].decode())
+                videoStartIndex = int(header[1].decode())
 
-        if audio_start_index > video_start_index:
-            return kafka_message.value[video_start_index:audio_start_index], pickle.loads(
-                kafka_message.value[audio_start_index:]), audio_sample_rate
+        if audioStartIndex > videoStartIndex:
+            return message.value[videoStartIndex:audioStartIndex], \
+                   pickle.loads(message.value[audioStartIndex:])
 
-        return kafka_message.value[video_start_index:], pickle.loads(
-            kafka_message.value[audio_start_index:video_start_index]), audio_sample_rate
+        return message.value[videoStartIndex:], \
+               pickle.loads(message.value[audioStartIndex:videoStartIndex])
+
+    def getAudioSamplerateFromMessage(self, message) -> Optional[int]:
+        for header in message.headers:
+            if header[0] == "audio-sample-rate":
+                return int(header[1].decode())
+
+        return None
+
+    def clearAudioAndVideoQueues(self):
+        with self.videoFramesQueue.mutex:
+            self.videoFramesQueue.queue.clear()
+        with self.audioBlocksQueue.mutex:
+            self.audioBlocksQueue.queue.clear()
 
     def displayFrame(self, event):
         if self.keepAspectRatio:
@@ -255,14 +272,14 @@ class TkinterVideo(tk.Label):
         if self.sendInputsThread:
             self.sendInputsThread.join()
 
+        if self.audioStream:
+            self.audioStream.stop()
+
         if self.displayContentThread:
             self.displayContentThread.join()
 
         if self.streamReceiverThread:
             self.streamReceiverThread.join()
-
-        if self.audioStream:
-            self.audioStream.stop()
 
 
 if __name__ == "__main__":

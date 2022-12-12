@@ -11,6 +11,7 @@ class Sender:
         self.videoProcess = None
         self.audioProcess = None
         self.aggregatorProcess = None
+        self.inputExecutorProcess = None
         self.buildProcess = None
 
     def build(self):
@@ -39,19 +40,32 @@ class Sender:
         self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", timestamp],cwd=str(pathlib.Path(os.getcwd()).parent), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", timestamp],cwd=str(pathlib.Path(os.getcwd()).parent), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice"],cwd=str(pathlib.Path(os.getcwd()).parent), stdout=sys.stdout, stderr=subprocess.PIPE)
+        self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py"],cwd=str(pathlib.Path(os.getcwd()).parent), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def stop(self):
         self.aggregatorProcess.send_signal(signal.SIGINT)
         self.videoProcess.send_signal(signal.SIGINT)
         self.audioProcess.send_signal(signal.SIGINT)
+        self.inputExecutorProcess.send_signal(signal.SIGINT)
         try:
             self.aggregatorProcess.wait(timeout=5)
-            self.videoProcess.wait(timeout=5)
-            self.audioProcess.wait(timeout=5)
-        finally:
+        except subprocess.TimeoutExpired as ex:
             self.aggregatorProcess.kill()
+
+        try:
+            self.videoProcess.wait(timeout=5)
+        except subprocess.TimeoutExpired as ex:
             self.videoProcess.kill()
-            self.audioProcess.kill()
+
+        try:
+            self.audioProcess.wait(timeout=5)
+        except subprocess.TimeoutExpired as ex:
+            self.aggregatorProcess.kill()
+
+        try:
+            self.inputExecutorProcess.wait(timeout=5)
+        except subprocess.TimeoutExpired as ex:
+            self.inputExecutorProcess.kill()
 
 
 if __name__ == "__main__":

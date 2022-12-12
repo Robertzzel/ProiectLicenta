@@ -2,6 +2,7 @@ import kafka
 import pynput
 import time
 from TkPynputKeyCodes import KeyTranslator
+from pyautogui import size
 
 INPUTS_TOPIC = "inputs"
 MOVE = 1
@@ -16,24 +17,8 @@ SCROLL_UP = 4
 SCROLL_DOWN = 5
 
 
-def get_screen_sizes():
-    import subprocess
-
-    p = subprocess.Popen(['xrandr'], stdout=subprocess.PIPE)
-    p2 = subprocess.Popen(['grep', '*'], stdin=p.stdout, stdout=subprocess.PIPE)
-
-    p.stdout.close()
-    resolution_string, junk = p2.communicate()
-    resolution = resolution_string.split()[0]
-    width, height = resolution.decode().split('x')
-
-    p.wait()
-    p2.wait()
-    return int(width), int(height)
-
-
 def main():
-    width, height = get_screen_sizes()
+    width, height = size()
     keyboard_controller: pynput.keyboard.Controller = pynput.keyboard.Controller()
     mouse_controller: pynput.mouse.Controller = pynput.mouse.Controller()
     consumer = kafka.KafkaConsumer(INPUTS_TOPIC)

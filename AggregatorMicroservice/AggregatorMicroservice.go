@@ -57,7 +57,7 @@ func GetFileTimestamp(file string) (int, error) {
 }
 
 func CombineAndCompressFiles(files AudioVideoPair, bitrate string, output string) ([]byte, error) {
-	result, err := exec.Command("./CombineAndCompress", files.Video, bitrate, output).Output()
+	result, err := exec.Command("./CombineAndCompress", files.Video, files.Audio, bitrate, output).Output()
 	if err != nil {
 		var exitError *exec.ExitError
 		if errors.As(err, &exitError) {
@@ -68,16 +68,8 @@ func CombineAndCompressFiles(files AudioVideoPair, bitrate string, output string
 	return result, nil
 }
 
-func SendVideo(producer *Kafka.Producer, video, audio []byte) error {
-	message := make([]byte, len(video)+len(audio))
-	copy(message[:len(video)], video)
-	copy(message[len(video):], audio)
-
-	if err := producer.Publish(&Kafka.ProducerMessage{Message: message, Topic: ComposerTopic, Headers: []Kafka.Header{
-		{Key: "audio-start-index", Value: []byte(fmt.Sprint(len(video)))},
-		{Key: "video-start-index", Value: []byte("0")},
-		{Key: "audio-sample-rate", Value: []byte("44100")},
-	}}); err != nil {
+func SendVideo(producer *Kafka.Producer, video []byte) error {
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: ComposerTopic}); err != nil {
 		return err
 	}
 
@@ -161,12 +153,7 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error 
 		return err
 	}
 
-	audio, err := os.ReadFile(files.Audio)
-	if err != nil {
-		return err
-	}
-
-	if err = SendVideo(producer, video, audio); err != nil {
+	if err = SendVideo(producer, video); err != nil {
 		return err
 	}
 

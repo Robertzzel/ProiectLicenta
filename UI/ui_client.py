@@ -149,43 +149,49 @@ class TkinterVideo(tk.Label):
     def resizeEvent(self, event):
         self.currentDisplaySize = event.width, event.height
 
-    def initVideoStream(self, stream, audio_sample_rate):
-        self.videoFramerate = stream.guessed_rate
-        self.audioSamplerate = audio_sample_rate
+    def initVideoStream(self, container):
+        videoStream = container.streams.video[0]
+        audioStream = container.streams.audio[0]
+
+        self.videoFramerate = videoStream.guessed_rate
+        self.audioSamplerate = audioStream.sample_rate
         self.audioBlockSize = self.audioSamplerate // self.videoFramerate
 
-        self.currentTkImage = ImageTk.PhotoImage(Image.new("RGB", (stream.width, stream.height), (255, 255, 255)))
+        self.currentTkImage = ImageTk.PhotoImage(Image.new("RGB", (videoStream.width, videoStream.height), (0, 0, 0)))
         self.config(width=300, height=300, image=self.currentTkImage)
 
-        self.audioStream = sd.OutputStream(channels=1, samplerate=self.audioSamplerate, dtype="int16",
+        self.audioStream = sd.OutputStream(channels=audioStream.codec_context.channels,
+                                           samplerate=self.audioSamplerate, dtype="float32",
                                            callback=self.audioCallback,
-                                           blocksize=self.audioBlockSize)
+                                           blocksize=audioStream.codec_context.frame_size)
 
     def displayContent(self):
         self.currentImage = self.videoFramesQueue.get(block=True)  # wait for the stream to init
         self.audioStream.start()
         rate = 1 / self.videoFramerate
 
-        try:
-            while self.streamRunning:
+        while self.streamRunning:
+            try:
                 start = time.time()
 
                 self.currentImage = self.videoFramesQueue.get(timeout=2).to_image()
                 self.event_generate("<<FrameGenerated>>")
 
                 time.sleep(max(rate - (time.time() - start) % rate, 0))
-        except Exception as ex:
-            print(ex)
+            except queue.Empty:
+                continue
 
     def audioCallback(self, outdata: np.ndarray, frames: int, timet, status):
         try:
             data: np.ndarray = self.audioBlocksQueue.get_nowait()
 
-            if len(data) < self.audioBlockSize:
-                np.append(data, [0] * (self.audioBlockSize - len(data)))
+            diff = 1024 - data.size
+            if diff > 0:
+                data = np.append(data, np.array([0] * diff, dtype=data.dtype))
 
+            data.shape = (1024, 1)
         except queue.Empty:
-            data = np.zeros(shape=(self.audioBlockSize, 1), dtype=np.int16)
+            data = np.zeros(shape=(1024, 1), dtype=self.audioStream.dtype)
         except Exception as ex:
             print("Error:", ex)
             return
@@ -195,60 +201,32 @@ class TkinterVideo(tk.Label):
     def receiveStream(self):
         self.streamConsumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=self.kafkaAddress, consumer_timeout_ms=2000)
 
-        # init stream
         while self.streamRunning:
             try:
-                message = next(self.streamConsumer)
-            except StopIteration as ex:
+                message = next(self.streamConsumer).value
+            except StopIteration:
                 continue
-
-            video, audio = self.getAudioVideoFromMessage(message)
-            with av.open(BytesIO(video)) as container:
-                self.initVideoStream(container.streams.video[0], self.getAudioSamplerateFromMessage(message))
+            with av.open(BytesIO(message)) as container:
+                self.initVideoStream(container)
             break
 
-        # start stream
         while self.streamRunning:
             try:
-                video, audio = self.getAudioVideoFromMessage(next(self.streamConsumer))
-            except StopIteration as ex:
+                with av.open(BytesIO(next(self.streamConsumer).value)) as container:
+                    container.fast_seek, container.discard_corrupt = True, True
+
+                    self.clearAudioAndVideoQueues()
+
+                    for packet in container.demux():
+                        for frame in packet.decode():
+                            if isinstance(frame, av.VideoFrame):
+                                self.videoFramesQueue.put(item=frame, block=True)
+                            elif isinstance(frame, av.AudioFrame):
+                                self.audioBlocksQueue.put(item=frame.to_ndarray(), block=True)
+            except StopIteration:
                 continue
-
-            audio.shape = (len(audio), 1)
-            with av.open(BytesIO(video)) as container:
-                container.fast_seek, container.discard_corrupt = True, True
-
-                self.clearAudioAndVideoQueues()
-
-                for frame in container.decode(video=0):
-                    self.videoFramesQueue.put(item=frame, block=True)
-                    self.audioBlocksQueue.put(
-                        item=audio[frame.index * self.audioBlockSize: (frame.index + 1) * self.audioBlockSize],
-                        block=True)
-
-    def getAudioVideoFromMessage(self, message):
-        audioStartIndex = None
-        videoStartIndex = None
-
-        for header in message.headers:
-            if header[0] == "audio-start-index":
-                audioStartIndex = int(header[1].decode())
-            elif header[0] == "video-start-index":
-                videoStartIndex = int(header[1].decode())
-
-        if audioStartIndex > videoStartIndex:
-            return message.value[videoStartIndex:audioStartIndex], \
-                   pickle.loads(message.value[audioStartIndex:])
-
-        return message.value[videoStartIndex:], \
-               pickle.loads(message.value[audioStartIndex:videoStartIndex])
-
-    def getAudioSamplerateFromMessage(self, message) -> Optional[int]:
-        for header in message.headers:
-            if header[0] == "audio-sample-rate":
-                return int(header[1].decode())
-
-        return None
+            except Exception as ex:
+                print(ex)
 
     def clearAudioAndVideoQueues(self):
         with self.videoFramesQueue.mutex:

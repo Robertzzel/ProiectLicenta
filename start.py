@@ -39,7 +39,7 @@ class Sender:
         timestamp = str(int(time.time()) + 2)
         self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", timestamp],cwd=str(pathlib.Path(os.getcwd()).parent), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", timestamp],cwd=str(pathlib.Path(os.getcwd()).parent), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice"],cwd=str(pathlib.Path(os.getcwd()).parent), stdout=sys.stdout, stderr=subprocess.PIPE)
+        self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice"],cwd=str(pathlib.Path(os.getcwd()).parent), stdout=sys.stdout, stderr=sys.stderr)
         self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py"],cwd=str(pathlib.Path(os.getcwd()).parent), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def stop(self):

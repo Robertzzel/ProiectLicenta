@@ -116,6 +116,10 @@ func (kc *Consumer) Consume() (*ConsumerMessage, error) {
 		}
 	}
 
+	if numberOfMessages == 0 {
+		return &ConsumerMessage{Message: message.Value, Headers: message.Headers}, nil
+	}
+
 	messages := make([][]byte, numberOfMessages)
 	messages[messageNumber] = message.Value
 

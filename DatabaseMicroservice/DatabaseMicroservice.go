@@ -2,104 +2,179 @@ package main
 
 import (
 	"Licenta/Kafka"
-	"database/sql"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
-	_ "github.com/mattn/go-sqlite3"
-	"log"
-	"strings"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 const (
-	tableName   = "videos"
-	dbNamePath  = "./videos.db"
-	MergerTopic = "Merger"
+	connectionString = "robert:robert@tcp(localhost:3306)/licenta?parseTime=true"
+	topic            = "DATABASE"
 )
 
-func checkErr(err error) {
-	if err != nil {
-		panic(err)
+type User struct {
+	gorm.Model
+	Name     string `gorm:"unique;not null"`
+	Password string
+	Videos   []*Video `gorm:"many2many:user_videos;"`
+}
+
+type InputUser struct {
+	Name     string `json:"Name"`
+	Password string `json:"Password"`
+}
+
+func (inputUser InputUser) ToUser() User {
+	return User{Name: inputUser.Name, Password: inputUser.Password}
+}
+
+type Video struct {
+	gorm.Model
+	FilePath string  `gorm:"unique;not null"`
+	Users    []*User `gorm:"many2many:user_videos;"`
+}
+
+type InputVideo struct {
+	FilePath string      `json:"FilePath"`
+	Users    []InputUser `json:"Users"`
+	ID       uint        `json:"ID"`
+}
+
+func (inputVideo InputVideo) ToVideo() Video {
+	users := make([]*User, 0)
+	for _, inputUser := range inputVideo.Users {
+		user := inputUser.ToUser()
+		users = append(users, &user)
 	}
+	return Video{FilePath: inputVideo.FilePath, Users: users, Model: gorm.Model{ID: inputVideo.ID}}
 }
 
-type Database struct {
-	database *sql.DB
+func hash(password string) string {
+	hash := sha256.Sum256([]byte(password))
+	return fmt.Sprintf("%x", hash)
 }
 
-func OpenNewDatabase() (*Database, error) {
-	db, err := sql.Open("sqlite3", dbNamePath)
-	if err != nil {
+func handleUserRequest(db *gorm.DB, operation string, input []byte) (*Kafka.ProducerMessage, error) {
+	var inputUser InputUser
+	if err := json.Unmarshal(input, &inputUser); err != nil {
 		return nil, err
 	}
+	user := inputUser.ToUser()
+	user.Password = hash(user.Password)
 
-	return &Database{db}, err
-}
-
-func (db *Database) createTable() error {
-	statement, err := db.database.Prepare(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (filePath TEXT PRIMARY KEY, dateAdded TEXT)", tableName))
-	if err != nil {
-		return err
+	switch operation {
+	case "CREATE":
+		if err := db.Create(&user).Error; err != nil {
+			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
+		}
+	case "READ": // check
+		if err := db.Where("name = ? and password = ?", user.Name, user.Password).First(&user).Error; err != nil {
+			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
+		}
+	case "DELETE":
+		if err := db.Delete(&user); err != nil {
+			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
+		}
+	case "UPDATE":
+		if err := db.Where("name = ?", user.Name).Update("password", user.Password); err != nil {
+			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
+		}
 	}
 
-	_, err = statement.Exec()
-	return err
+	return &Kafka.ProducerMessage{Message: []byte("OK")}, nil
 }
 
-func (db *Database) Insert(filePath, date string) error {
-	statement, err := db.database.Prepare(fmt.Sprintf("INSERT INTO %s (filePath, dateAdded) VALUES (?, ?)", tableName))
-	if err != nil {
-		return err
-	}
-
-	_, err = statement.Exec(filePath, date)
-	return err
-}
-
-func (db *Database) GetAllRows() ([][2]string, error) {
-	rows, err := db.database.Query(fmt.Sprintf("SELECT filePath, dateAdded FROM %s", tableName))
-	if err != nil {
+func handleVideoRequest(db *gorm.DB, operation string, input []byte) (*Kafka.ProducerMessage, error) {
+	var inputVideo InputVideo
+	if err := json.Unmarshal(input, &inputVideo); err != nil {
 		return nil, err
 	}
+	video := inputVideo.ToVideo()
+	users := video.Users
+	video.Users = nil
 
-	var path string
-	var date string
-	var result [][2]string
-
-	for rows.Next() {
-		err = rows.Scan(&path, &date)
-		if err != nil {
-			return nil, err
+	switch operation {
+	case "CREATE":
+		if db.Create(&video).Error != nil {
+			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
 		}
 
-		result = append(result, [2]string{path, date})
-	}
+		foundUsers := make([]*User, 0)
+		for _, user := range users {
+			if db.Model(user).Where("name = ?", user.Name).First(user).Error == nil {
+				foundUsers = append(foundUsers, user)
+			}
+		}
 
-	return result, nil
+		if err := db.Model(&video).Where("id = ?", video.ID).Association("Users").Append(&foundUsers); err != nil {
+			return &Kafka.ProducerMessage{Message: []byte(err.Error())}, nil
+		}
+	case "READ": // check
+		video = Video{Model: gorm.Model{ID: inputVideo.ID}}
+		if err := db.First(&video).Error; err != nil {
+			return &Kafka.ProducerMessage{Message: []byte(err.Error())}, nil
+		}
+	case "DELETE":
+		if err := db.Delete(&video).Error; err != nil {
+			return &Kafka.ProducerMessage{Message: []byte(err.Error())}, nil
+		}
+	}
+	return &Kafka.ProducerMessage{Message: []byte("OK")}, nil
 }
 
 func main() {
-	db, err := OpenNewDatabase()
+	db, err := gorm.Open(mysql.Open(connectionString), &gorm.Config{})
 	if err != nil {
-		log.Fatal("Deschidere", err)
+		panic("cannot open the database")
 	}
 
-	if err = db.createTable(); err != nil {
-		log.Fatal(err)
+	if err := db.AutoMigrate(&User{}, &Video{}); err != nil {
+		panic(err)
 	}
 
-	mergerConsumer := Kafka.NewConsumer(MergerTopic)
-	defer mergerConsumer.Close()
+	consumer := Kafka.NewConsumer(topic)
+	producer := Kafka.NewProducer()
 
 	for {
-		message, err := mergerConsumer.Consume()
+		kafkaMessage, err := consumer.Consume()
 		if err != nil {
-			panic(err)
+			continue
+		}
+		fmt.Println("Message...")
+
+		var sendTopic, table, operation string
+		var input []byte
+		for _, header := range kafkaMessage.Headers {
+			switch header.Key {
+			case "topic":
+				sendTopic = string(header.Value)
+			case "operation":
+				operation = string(header.Value)
+			case "table":
+				table = string(header.Value)
+			case "input":
+				input = header.Value
+			}
 		}
 
-		if strings.HasPrefix(string(message.Message), "insert") {
-			insertParts := strings.Split(string(message.Message), ";")
-			pathAndTimestamp := strings.Split(insertParts[1], ",")
-			checkErr(db.Insert(pathAndTimestamp[0], pathAndTimestamp[1]))
-			fmt.Println(pathAndTimestamp[0], pathAndTimestamp[1])
+		var resultMessage *Kafka.ProducerMessage
+
+		switch table {
+		case "users":
+			resultMessage, err = handleUserRequest(db, operation, input)
+		case "videos":
+			resultMessage, err = handleVideoRequest(db, operation, input)
+		}
+		if err != nil {
+			break
+		}
+
+		resultMessage.Topic = sendTopic
+		if err = producer.Publish(resultMessage); err != nil {
+			fmt.Println(err)
+			continue
 		}
 	}
 }

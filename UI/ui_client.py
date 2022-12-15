@@ -166,7 +166,12 @@ class TkinterVideo(tk.Label):
                                            blocksize=audioStream.codec_context.frame_size)
 
     def displayContent(self):
-        self.currentImage = self.videoFramesQueue.get(block=True)  # wait for the stream to init
+        while self.streamRunning:
+            try:
+                self.currentImage = self.videoFramesQueue.get(block=True)  # wait for the stream to init
+            except queue.Empty:
+                continue
+            break
         self.audioStream.start()
         rate = 1 / self.videoFramerate
 

@@ -8,6 +8,7 @@ import tempfile
 import subprocess
 
 KAFKA_ADDRESS = "localhost:9092"
+DATABASE_TOPIC = "DATABASE"
 TOPIC = "aggregator"
 
 
@@ -46,9 +47,10 @@ class TempFile:
 class Merger:
     def __init__(self):
         self.consumer: kafka.KafkaConsumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=KAFKA_ADDRESS, consumer_timeout_ms=2000)
+        self.producer = kafka.KafkaProducer(bootstrap_servers=KAFKA_ADDRESS, acks=1)
         self.running = True
         self.videosQueue = queue.Queue()
-        self.finalVideo = None
+        self.finalVideo: str = None
         self.i = 0
 
     def start(self):
@@ -64,10 +66,21 @@ class Merger:
 
             self.videosQueue.put(message)
 
-            if self.videosQueue.qsize() > 10:
+            if self.videosQueue.qsize() > 3:
                 self.aggregateVideosFromQueue()
+                break
 
         self.aggregateVideosFromQueue()
+
+        with open(self.finalVideo, "rb") as f:
+            videoContent = f.read()
+
+        self.producer.send(topic=DATABASE_TOPIC, value=videoContent, headers=[
+            ("topic", b""),
+            ("operation", b"CREATE"),
+            ("table", b"videos"),
+            ("input", "{\"FilePath\": \"test1.mp4\", \"Users\": [{\"Name\": \"Robert\"}]}".encode())
+        ])
 
     def aggregateVideosFromQueue(self):
         videos = []

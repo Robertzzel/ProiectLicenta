@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"os"
 )
 
 const (
@@ -86,7 +87,7 @@ func handleUserRequest(db *gorm.DB, operation string, input []byte) (*Kafka.Prod
 	return &Kafka.ProducerMessage{Message: []byte("OK")}, nil
 }
 
-func handleVideoRequest(db *gorm.DB, operation string, input []byte) (*Kafka.ProducerMessage, error) {
+func handleVideoRequest(db *gorm.DB, operation string, input []byte, data []byte) (*Kafka.ProducerMessage, error) {
 	var inputVideo InputVideo
 	if err := json.Unmarshal(input, &inputVideo); err != nil {
 		return nil, err
@@ -97,6 +98,16 @@ func handleVideoRequest(db *gorm.DB, operation string, input []byte) (*Kafka.Pro
 
 	switch operation {
 	case "CREATE":
+		// create file
+		i := 0
+		for {
+			video.FilePath = fmt.Sprintf("video%d.mp4", i)
+			if err := os.WriteFile(video.FilePath, data, 0777); err == nil {
+				break
+			}
+			i++
+		}
+
 		if db.Create(&video).Error != nil {
 			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
 		}
@@ -135,6 +146,7 @@ func main() {
 	}
 
 	consumer := Kafka.NewConsumer(topic)
+	consumer.SetOffsetToNow()
 	producer := Kafka.NewProducer()
 
 	for {
@@ -165,7 +177,7 @@ func main() {
 		case "users":
 			resultMessage, err = handleUserRequest(db, operation, input)
 		case "videos":
-			resultMessage, err = handleVideoRequest(db, operation, input)
+			resultMessage, err = handleVideoRequest(db, operation, input, kafkaMessage.Message)
 		}
 		if err != nil {
 			break

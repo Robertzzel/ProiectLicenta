@@ -1,4 +1,3 @@
-import pickle
 import queue
 from start import Sender
 import av
@@ -15,6 +14,7 @@ from io import BytesIO
 import numpy as np
 from typing import Optional
 from UI.InputsBuffer import InputsBuffer
+import json
 
 TOPIC = "aggregator"
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
@@ -23,15 +23,24 @@ CLICK = 2
 PRESS = 4
 RELEASE = 5
 INPUTS_TOPIC = "inputs"
+DATABASE_TOPIC = "DATABASE"
 
 
 class MainWindow:
     def __init__(self):
         self.root = tk.Tk()
 
+        self.loggInProducer = None
+        self.loggInConsumer = None
+
+        self.loggedInUserID = None
+        self.statusLabel = ttk.Label(master=self.root, text="")
+        self.statusLabel.pack()
         self.tabControl = ttk.Notebook(self.root)
+        self.loginTab = tk.Frame(self.tabControl)
         self.receiverTab = tk.Frame(self.tabControl)
         self.senderTab = tk.Frame(self.tabControl)
+        self.tabControl.add(child=self.loginTab, text="Login")
         self.tabControl.add(child=self.receiverTab, text="Receive")
         self.tabControl.add(child=self.senderTab, text="Send")
         self.tabControl.pack()
@@ -46,13 +55,77 @@ class MainWindow:
         self.senderButton: tk.Button = tk.Button(master=self.senderTab, text="START", command=self.startStreaming)
         self.senderButton.pack()
 
+        self.configureLoginTab()
+
         self.topLevelWindow: Optional[tk.Toplevel] = None
         self.videoPlayer: Optional[TkinterVideo] = None
         self.sendingProcess: Sender = Sender()
 
         self.root.mainloop()
 
+    def configureLoginTab(self):
+        self.loginKafkaLabel: ttk.Label = ttk.Label(master=self.loginTab, text="Kafka address:")
+        self.loginKafkaLabel.pack()
+        self.loginKafkaEntry: ttk.Entry = ttk.Entry(master=self.loginTab)
+        self.loginKafkaEntry.pack()
+
+        self.loginUsernameLabel: ttk.Label = ttk.Label(master=self.loginTab, text="Username:")
+        self.loginUsernameLabel.pack()
+        self.loginUsernameEntry: ttk.Entry = ttk.Entry(master=self.loginTab)
+        self.loginUsernameEntry.pack()
+        self.loginPasswordLabel: ttk.Label = ttk.Label(master=self.loginTab, text="Password:")
+        self.loginPasswordLabel.pack()
+        self.loginPasswordEntry: ttk.Entry = ttk.Entry(master=self.loginTab)
+        self.loginPasswordEntry.pack()
+        self.loginButton: ttk.Button = tk.Button(master=self.loginTab, text="LOGIN", command=self.login)
+        self.loginButton.pack()
+
+    def login(self):
+        if self.loginUsernameEntry.get() == "" or self.loginPasswordEntry.get() == "":
+            self.statusLabel.config(text="please provide both name and password")
+            return
+
+        loggInKafkaAddress = self.receiverInput.get() if self.receiverInput.get() != "" else "localhost:9092"
+        self.loggInProducer = kafka.KafkaProducer(bootstrap_servers=loggInKafkaAddress, acks=1)
+        thread = threading.Thread(target=self.listenForLoggInMessage, args=(loggInKafkaAddress,))
+        thread.start()
+        time.sleep(1)
+
+        loggInDetails = {
+            "Name": self.loginUsernameEntry.get(),
+            "Password": self.loginPasswordEntry.get(),
+        }
+
+        self.loggInProducer.send(topic=DATABASE_TOPIC, headers=[
+            ("topic", b"UI"),
+            ("operation", b"READ"),
+            ("table", b"users"),
+            ("input", json.dumps(loggInDetails).encode())
+        ], value=b"")
+
+        thread.join()
+        if self.loggedInUserID is None:
+            self.statusLabel.config(text="Username or Password wrong")
+        else:
+            self.statusLabel.config(text=f"Logged In As {self.loginUsernameEntry.get()}")
+
+    def listenForLoggInMessage(self, loggInKafkaAddress: str):
+        self.loggInConsumer = kafka.KafkaConsumer("UI", bootstrap_servers=loggInKafkaAddress, auto_offset_reset="latest")
+        message = next(self.loggInConsumer)
+        for header in message.headers:
+            if header[0] == "status":
+                status = header[1].decode()
+
+        if status.lower() == "ok":
+            self.loggedInUserID = int(message.value.decode())
+
     def openWindow(self):
+        if self.loggedInUserID is None:
+            self.statusLabel.config(text="Not logged in")
+            return
+        else:
+            self.statusLabel.config(text="")
+
         self.receiverButton.config(text="STOP", command=self.closeWindow)
 
         self.topLevelWindow = tk.Toplevel()
@@ -69,6 +142,12 @@ class MainWindow:
         self.topLevelWindow.destroy()
 
     def startStreaming(self):
+        if self.loggedInUserID is None:
+            self.statusLabel.config(text="Not logged in")
+            return
+        else:
+            self.statusLabel.config(text="")
+
         self.senderButton.config(text="STOP", command=self.stopStreaming)
         self.sendingProcess.start()
 

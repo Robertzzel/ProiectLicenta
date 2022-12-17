@@ -19,7 +19,7 @@ const (
 	VideoTopic    = "video"
 	AudioTopic    = "audio"
 	ComposerTopic = "aggregator"
-	StreamerTopic = "StreamerPing"
+	MergeTopic    = "MERGER"
 )
 
 type AudioVideoPair struct {
@@ -72,6 +72,9 @@ func SendVideo(producer *Kafka.Producer, video []byte) error {
 	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: ComposerTopic}); err != nil {
 		return err
 	}
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: MergeTopic}); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -79,12 +82,12 @@ func SendVideo(producer *Kafka.Producer, video []byte) error {
 func GetNextSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer) (AudioVideoPair, error) {
 	files := AudioVideoPair{}
 
-	videoMessage, err := videoConsumer.Consume()
+	videoMessage, err := videoConsumer.Consume(time.Second)
 	if err != nil {
 		return AudioVideoPair{}, err
 	}
 
-	audioMessage, err := audioConsumer.Consume()
+	audioMessage, err := audioConsumer.Consume(time.Second)
 	if err != nil {
 		return AudioVideoPair{}, err
 	}
@@ -134,6 +137,11 @@ func GetNextSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer) (A
 func CollectAudioAndVideoFiles(ctx context.Context, videoConsumer, audioConsumer *Kafka.Consumer, outputChannel chan AudioVideoPair) error {
 	for ctx.Err() == nil {
 		files, err := GetNextSyncedAudioAndVideo(videoConsumer, audioConsumer)
+		if errors.Is(err, context.DeadlineExceeded) {
+			continue
+		} else if err != nil {
+			return err
+		}
 		if err != nil {
 			return err
 		}
@@ -195,7 +203,7 @@ func main() {
 		log.Println(err)
 	}
 
-	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte("quit"), Topic: ComposerTopic}); err != nil {
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte("quit"), Topic: MergeTopic}); err != nil {
 		log.Println(err)
 	}
 

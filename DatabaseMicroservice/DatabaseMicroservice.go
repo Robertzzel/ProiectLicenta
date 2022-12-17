@@ -23,12 +23,13 @@ type User struct {
 }
 
 type InputUser struct {
+	ID       uint   `json:"ID"`
 	Name     string `json:"Name"`
 	Password string `json:"Password"`
 }
 
 func (inputUser InputUser) ToUser() User {
-	return User{Name: inputUser.Name, Password: inputUser.Password}
+	return User{Name: inputUser.Name, Password: inputUser.Password, Model: gorm.Model{ID: inputUser.ID}}
 }
 
 type Video struct {
@@ -52,6 +53,17 @@ func (inputVideo InputVideo) ToVideo() Video {
 	return Video{FilePath: inputVideo.FilePath, Users: users, Model: gorm.Model{ID: inputVideo.ID}}
 }
 
+func addUser() *Kafka.ConsumerMessage {
+	return &Kafka.ConsumerMessage{
+		Headers: []Kafka.Header{
+			{"topic", []byte("UI")},
+			{"operation", []byte("CREATE")},
+			{"table", []byte("users")},
+			{"input", []byte(`{"Name": "admin","Password": "admin"}`)},
+		},
+	}
+}
+
 func hash(password string) string {
 	hash := sha256.Sum256([]byte(password))
 	return fmt.Sprintf("%x", hash)
@@ -72,15 +84,16 @@ func handleUserRequest(db *gorm.DB, operation string, input []byte) (*Kafka.Prod
 		}
 	case "READ": // check
 		if err := db.Where("name = ? and password = ?", user.Name, user.Password).First(&user).Error; err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
+			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, nil
 		}
+		return &Kafka.ProducerMessage{Message: []byte(fmt.Sprint(user.ID)), Headers: []Kafka.Header{{Key: "status", Value: []byte("OK")}}}, nil
 	case "DELETE":
 		if err := db.Delete(&user); err != nil {
 			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
 		}
 	case "UPDATE":
 		if err := db.Where("name = ?", user.Name).Update("password", user.Password); err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
+			return &Kafka.ProducerMessage{Message: []byte(err.Error.Error())}, nil
 		}
 	}
 
@@ -123,6 +136,7 @@ func handleVideoRequest(db *gorm.DB, operation string, input []byte, data []byte
 			return &Kafka.ProducerMessage{Message: []byte(err.Error())}, nil
 		}
 	case "READ": // check
+		// TODO SEND VIDEO CONTENTS
 		video = Video{Model: gorm.Model{ID: inputVideo.ID}}
 		if err := db.First(&video).Error; err != nil {
 			return &Kafka.ProducerMessage{Message: []byte(err.Error())}, nil
@@ -146,9 +160,21 @@ func main() {
 	}
 
 	consumer := Kafka.NewConsumer(topic)
-	consumer.SetOffsetToNow()
+	defer func() {
+		if err := consumer.Close(); err != nil {
+			fmt.Println(err)
+		}
+	}()
 	producer := Kafka.NewProducer()
+	defer func() {
+		if err := producer.Close(); err != nil {
+			fmt.Println(err)
+		}
+	}()
 
+	if err := consumer.SetOffsetToNow(); err != nil {
+		panic(err)
+	}
 	for {
 		kafkaMessage, err := consumer.Consume()
 		if err != nil {

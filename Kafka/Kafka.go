@@ -95,8 +95,16 @@ func NewConsumer(topic string) *Consumer {
 	}
 }
 
-func (kc *Consumer) Consume() (*ConsumerMessage, error) {
-	message, err := kc.kafkaReader.ReadMessage(context.Background())
+func (kc *Consumer) Consume(timeout ...time.Duration) (*ConsumerMessage, error) {
+	var ctx context.Context
+
+	if len(timeout) > 0 {
+		ctx, _ = context.WithTimeout(context.Background(), timeout[0])
+	} else {
+		ctx = context.Background()
+	}
+
+	message, err := kc.kafkaReader.ReadMessage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +162,7 @@ func (kc *Consumer) Close() error {
 }
 
 func (kc *Consumer) SetOffsetToNow() error {
-	return kc.kafkaReader.SetOffsetAt(context.Background(), time.Now())
+	return kc.kafkaReader.SetOffsetAt(context.Background(), time.Now().Add(-time.Second))
 }
 
 func CreateTopic(name string) error {

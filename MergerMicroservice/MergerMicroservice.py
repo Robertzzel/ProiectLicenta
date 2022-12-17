@@ -1,15 +1,14 @@
 import os
 import sys
 import pathlib
-from typing import List
-import kafka
 import queue
 import tempfile
 import subprocess
+from Kafka.Kafka import *
 
 KAFKA_ADDRESS = "localhost:9092"
 DATABASE_TOPIC = "DATABASE"
-TOPIC = "aggregator"
+TOPIC = "MERGER"
 
 
 class VideoAggregator:
@@ -47,7 +46,7 @@ class TempFile:
 class Merger:
     def __init__(self):
         self.consumer: kafka.KafkaConsumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=KAFKA_ADDRESS, consumer_timeout_ms=2000)
-        self.producer = kafka.KafkaProducer(bootstrap_servers=KAFKA_ADDRESS, acks=1)
+        self.producer = KafkaProducerWrapper(bootstrap_servers=KAFKA_ADDRESS, acks=1)
         self.running = True
         self.videosQueue = queue.Queue()
         self.finalVideo: str = None
@@ -61,25 +60,28 @@ class Merger:
                 continue
 
             if message == b"quit":
+                print("Quitting")
                 self.stop()
                 break
 
             self.videosQueue.put(message)
 
-            if self.videosQueue.qsize() > 3:
+            if self.videosQueue.qsize() > 10:
                 self.aggregateVideosFromQueue()
-                break
 
         self.aggregateVideosFromQueue()
+
+        self.compressFinalFile()
 
         with open(self.finalVideo, "rb") as f:
             videoContent = f.read()
 
-        self.producer.send(topic=DATABASE_TOPIC, value=videoContent, headers=[
+        # TODO SEND DYNAMIC AND COMPLETE MESSAGE TO DB
+        self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=videoContent, headers=[
             ("topic", b""),
             ("operation", b"CREATE"),
             ("table", b"videos"),
-            ("input", "{\"FilePath\": \"test1.mp4\", \"Users\": [{\"Name\": \"Robert\"}]}".encode())
+            ("input", "{\"Users\": [{\"Name\": \"Robert\"}]}".encode())
         ])
 
     def aggregateVideosFromQueue(self):
@@ -102,6 +104,15 @@ class Merger:
 
         self.i += 1
         videos.clear()
+
+    def compressFinalFile(self):
+        self.i += 1
+        nextFinalFile = f"final{self.i}.mp4"
+        process = subprocess.Popen(["ffmpeg", "-y", "-i", self.finalVideo, "-c:v", "libx264", "-b:v", "500k", nextFinalFile], stdout=subprocess.PIPE, stderr=sys.stderr, cwd=str(pathlib.Path(os.getcwd()).parent))
+        process.wait()
+        out, err = process.communicate()
+        if err is not None and err != b"":
+            raise Exception("CONCAT ERROR:\n" + err.decode())
 
     def stop(self):
         self.running = False

@@ -283,7 +283,12 @@ class TkinterVideo(tk.Label):
         outdata[:] = data
 
     def receiveStream(self):
-        self.streamConsumer = kafka.KafkaConsumer(TOPIC, bootstrap_servers=self.kafkaAddress, consumer_timeout_ms=2000)
+        self.streamConsumer = kafka.KafkaConsumer(bootstrap_servers=self.kafkaAddress, consumer_timeout_ms=2000)
+        self.streamConsumer.assign([kafka.TopicPartition(TOPIC, 0)])
+
+        producer = kafka.KafkaProducer(bootstrap_servers=self.kafkaAddress, acks=1)
+        producer.send(topic=TOPIC, value=b"start", partition=1)
+        print("Signal sent")
 
         while self.streamRunning:
             try:

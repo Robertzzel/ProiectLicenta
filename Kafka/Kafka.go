@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	kafkago "github.com/segmentio/kafka-go"
+	"math"
+	"net"
 	"strconv"
 	"time"
 )
@@ -29,9 +31,10 @@ type ConsumerMessage struct {
 }
 
 type ProducerMessage struct {
-	Message []byte
-	Topic   string
-	Headers []Header
+	Message   []byte
+	Topic     string
+	Headers   []Header
+	Partition uint
 }
 
 type Producer struct {
@@ -49,20 +52,13 @@ func NewProducer() *Producer {
 			Async:        true,
 			Balancer:     &kafkago.LeastBytes{},
 			BatchSize:    1,
-			RequiredAcks: kafkago.RequireAll,
+			RequiredAcks: kafkago.RequireOne,
 		},
 	}
 }
-func (producer *Producer) Publish(producerMessage *ProducerMessage) error {
-	numberOfMessages := 0
 
-	if len(producerMessage.Message) < MaxMessageBytes {
-		numberOfMessages = 1
-	} else if len(producerMessage.Message)%MaxMessageBytes == 0 {
-		numberOfMessages = len(producerMessage.Message) / MaxMessageBytes
-	} else {
-		numberOfMessages = len(producerMessage.Message)/MaxMessageBytes + 1
-	}
+func (producer *Producer) Publish(producerMessage *ProducerMessage) error {
+	numberOfMessages := int(math.Ceil(float64(len(producerMessage.Message)) / float64(MaxMessageBytes)))
 
 	messages := make([]kafkago.Message, numberOfMessages)
 	for i := 0; i < numberOfMessages; i++ {
@@ -73,6 +69,7 @@ func (producer *Producer) Publish(producerMessage *ProducerMessage) error {
 				{Key: "number-of-messages", Value: []byte(fmt.Sprintf("%05d", numberOfMessages))},
 				{Key: "message-number", Value: []byte(fmt.Sprintf("%05d", i))},
 			}, producerMessage.Headers...),
+			Partition: int(producerMessage.Partition),
 		}
 	}
 
@@ -83,13 +80,14 @@ func (producer *Producer) Close() error {
 	return producer.kafkaWriter.Close()
 }
 
-func NewConsumer(topic string) *Consumer {
+func NewConsumer(topic string, partition uint) *Consumer {
 	return &Consumer{
 		kafkaReader: kafkago.NewReader(
 			kafkago.ReaderConfig{
 				Brokers:     []string{brokerAddress},
 				Topic:       topic,
 				StartOffset: kafkago.LastOffset,
+				Partition:   int(partition),
 			},
 		),
 	}
@@ -165,9 +163,24 @@ func (kc *Consumer) SetOffsetToNow() error {
 	return kc.kafkaReader.SetOffsetAt(context.Background(), time.Now().Add(-time.Second))
 }
 
-func CreateTopic(name string) error {
-	_, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, name, 0)
-	return err
+func CreateTopic(name string, numOfPartitions uint) error {
+	conn, err := kafkago.Dial(brokerNetwork, brokerAddress)
+	if err != nil {
+		return err
+	}
+	controller, _ := conn.Controller()
+
+	connController, err := kafkago.Dial(brokerNetwork, net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port)))
+	if err != nil {
+		return err
+	}
+
+	err = connController.CreateTopics(kafkago.TopicConfig{Topic: name, NumPartitions: int(numOfPartitions), ReplicationFactor: -1})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func DeleteTopic(names ...string) error {

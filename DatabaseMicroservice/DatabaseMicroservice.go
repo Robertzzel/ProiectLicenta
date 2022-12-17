@@ -159,7 +159,7 @@ func main() {
 		panic(err)
 	}
 
-	consumer := Kafka.NewConsumer(topic)
+	consumer := Kafka.NewConsumer(topic, 0)
 	defer func() {
 		if err := consumer.Close(); err != nil {
 			fmt.Println(err)

@@ -30,16 +30,16 @@ func Abs(nr int) int {
 }
 
 func main() {
-	if err := Kafka.CreateTopic(ReceiverTopic); err != nil {
+	if err := Kafka.CreateTopic(ReceiverTopic, 1); err != nil {
 		panic(err)
 	}
 
-	if err := Kafka.CreateTopic(StreamerTopic); err != nil {
+	if err := Kafka.CreateTopic(StreamerTopic, 1); err != nil {
 		panic(err)
 	}
 
-	receiverConsumer := Kafka.NewConsumer(ReceiverTopic)
-	streamerConsumer := Kafka.NewConsumer(StreamerTopic)
+	receiverConsumer := Kafka.NewConsumer(ReceiverTopic, 0)
+	streamerConsumer := Kafka.NewConsumer(StreamerTopic, 0)
 
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {

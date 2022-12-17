@@ -12,24 +12,26 @@ BROKER_ADDRESS = "localhost:9092"
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("No timestamp given")
-        sys.exit(1)
+    audio_blocks_recorded: queue.Queue = queue.Queue(10)
+    audio_recorder: Recorder = Recorder(audio_blocks_recorded)
 
-    recorder_queue = queue.Queue(10)
-    audio_recorder: Recorder = Recorder(recorder_queue)
     producer = kafka.KafkaProducer(bootstrap_servers=BROKER_ADDRESS, acks=1)
+    consumer = kafka.KafkaConsumer(bootstrap_servers=BROKER_ADDRESS, enable_auto_commit=True)
+    consumer.assign([kafka.TopicPartition(AUDIO_TOPIC, 1)])
 
     try:
-        audio_recorder.start(int(sys.argv[1]), VIDEO_LENGTH)
+        ts = int(next(consumer).value.decode())
+
+        audio_recorder.start(ts, VIDEO_LENGTH)
 
         while True:
-            audio_file: str = recorder_queue.get(block=True)
+            audio_file: str = audio_blocks_recorded.get(block=True)
 
             producer.send(
                 topic=AUDIO_TOPIC,
                 value=audio_file.encode(),
-                headers=[("number-of-messages", b'00001'), ("message-number", b'00000')]
+                headers=[("number-of-messages", b'00001'), ("message-number", b'00000')],
+                partition=0
             )
 
             print(f"message {audio_file} sent at {time.time()}")

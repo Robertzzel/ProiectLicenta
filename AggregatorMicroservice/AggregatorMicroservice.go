@@ -72,9 +72,9 @@ func SendVideo(producer *Kafka.Producer, video []byte) error {
 	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: ComposerTopic}); err != nil {
 		return err
 	}
-	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: MergeTopic}); err != nil {
-		return err
-	}
+	//if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: MergeTopic}); err != nil {
+	//	return err
+	//}
 
 	return nil
 }
@@ -142,9 +142,6 @@ func CollectAudioAndVideoFiles(ctx context.Context, videoConsumer, audioConsumer
 		} else if err != nil {
 			return err
 		}
-		if err != nil {
-			return err
-		}
 
 		outputChannel <- files
 	}
@@ -170,23 +167,52 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error 
 }
 
 func main() {
-	videoConsumer := Kafka.NewConsumer(VideoTopic)
-	defer videoConsumer.Close()
-
-	audioConsumer := Kafka.NewConsumer(AudioTopic)
-	defer audioConsumer.Close()
-
-	if err := Kafka.CreateTopic(ComposerTopic); err != nil {
+	// initialize
+	if err := Kafka.CreateTopic(ComposerTopic, 2); err != nil {
 		panic(err)
 	}
 	defer Kafka.DeleteTopic(ComposerTopic)
+
+	videoConsumer := Kafka.NewConsumer(VideoTopic, 0)
+	defer videoConsumer.Close()
+
+	audioConsumer := Kafka.NewConsumer(AudioTopic, 0)
+	defer audioConsumer.Close()
+
+	uiConsumer := Kafka.NewConsumer(ComposerTopic, 1)
+	defer uiConsumer.Close()
+	if err := uiConsumer.SetOffsetToNow(); err != nil {
+		panic(err)
+	}
 
 	producer := Kafka.NewProducer()
 	defer producer.Close()
 
 	filesChannel := make(chan AudioVideoPair, 5)
-
 	errG, ctx := errgroup.WithContext(NewCtx())
+
+	// wait for start
+	fmt.Println("WAting for signal")
+	for ctx.Err() == nil {
+		_, err := uiConsumer.Consume(time.Second * 2)
+		if errors.Is(err, context.DeadlineExceeded) {
+			continue
+		} else if err != nil {
+			panic(err)
+		}
+
+		break
+	}
+	fmt.Println("Starting...")
+	ts := fmt.Sprint(time.Now().UnixMilli()/1000 + 1)
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(ts), Topic: AudioTopic, Partition: 1}); err != nil {
+		panic(err)
+	}
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(ts), Topic: VideoTopic, Partition: 1}); err != nil {
+		panic(err)
+	}
+
+	// start
 	errG.Go(func() error { return CollectAudioAndVideoFiles(ctx, videoConsumer, audioConsumer, filesChannel) })
 	errG.Go(func() error {
 		for {

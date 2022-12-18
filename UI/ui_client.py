@@ -27,12 +27,40 @@ INPUTS_TOPIC = "inputs"
 DATABASE_TOPIC = "DATABASE"
 
 
-class MainWindow:
+class KafkaWindow:
     def __init__(self):
         self.root = tk.Tk()
 
-        self.loggInProducer = None
-        self.loggInConsumer = None
+        self.label = ttk.Label(master=self.root, text="Kafka Address:")
+        self.label.pack()
+        self.input = ttk.Entry(master=self.root)
+        self.input.pack()
+        self.button: ttk.Button = tk.Button(master=self.root, text="SUBMIT", command=self.openMainWindow)
+        self.button.pack()
+
+        self.root.mainloop()
+
+    def checkKafkaAddress(self, address) -> bool:
+        try:
+            kafka.KafkaAdminClient(bootstrap_servers=address)
+        except Exception as ex:
+            return False
+        return True
+
+    def openMainWindow(self):
+        address = self.input.get()
+        if self.checkKafkaAddress(address):
+            self.root.destroy()
+            MainWindow(address)
+
+
+class MainWindow:
+    def __init__(self, kafkaAddress: str):
+        self.root = tk.Tk()
+
+        self.kafkaAddress = kafkaAddress
+        self.databaseProducer = self.databaseProducer = kafka.KafkaProducer(bootstrap_servers=self.kafkaAddress, acks=1)
+        self.databaseConsumer = kafka.KafkaConsumer("UI", bootstrap_servers=self.kafkaAddress, auto_offset_reset="latest")
 
         self.loggedInUserID = None
         self.statusLabel = ttk.Label(master=self.root, text="")
@@ -41,9 +69,11 @@ class MainWindow:
         self.loginTab = tk.Frame(self.tabControl)
         self.receiverTab = tk.Frame(self.tabControl)
         self.senderTab = tk.Frame(self.tabControl)
+        self.videosTab = tk.Frame(self.tabControl)
         self.tabControl.add(child=self.loginTab, text="Login")
         self.tabControl.add(child=self.receiverTab, text="Receive")
         self.tabControl.add(child=self.senderTab, text="Send")
+        self.tabControl.add(child=self.videosTab, text="My Videos")
         self.tabControl.pack()
 
         self.receiverLabel = ttk.Label(master=self.receiverTab, text="IP to receive from:")
@@ -61,15 +91,30 @@ class MainWindow:
         self.topLevelWindow: Optional[tk.Toplevel] = None
         self.videoPlayer: Optional[TkinterVideo] = None
         self.sendingProcess: Sender = Sender()
+        self.tabControl.bind('<<NotebookTabChanged>>', self.on_tab_change)
 
         self.root.mainloop()
 
-    def configureLoginTab(self):
-        self.loginKafkaLabel: ttk.Label = ttk.Label(master=self.loginTab, text="Kafka address:")
-        self.loginKafkaLabel.pack()
-        self.loginKafkaEntry: ttk.Entry = ttk.Entry(master=self.loginTab)
-        self.loginKafkaEntry.pack()
+    def on_tab_change(self, event):
+        if event.widget.tab('current')['text'] != "My Videos":
+            return
 
+        msg = self.databaseCall("UI", "READ_VIDEOS", "users", json.dumps({"ID": self.loggedInUserID}), b"")
+        videos = json.loads(msg.value)
+        self.videosTab.destroy()
+        self.videosTab = ttk.Frame()
+
+    def databaseCall(self, topic: str, operation: str, table: str, inp: str, message: bytes) -> kafka.consumer.fetcher.ConsumerRecord:
+        self.databaseProducer.send(topic=DATABASE_TOPIC, headers=[
+            ("topic", topic.encode()),
+            ("operation", operation.encode()),
+            ("table", table.encode()),
+            ("input", inp.encode())
+        ], value=message)
+
+        return next(self.databaseConsumer)
+
+    def configureLoginTab(self):
         self.loginUsernameLabel: ttk.Label = ttk.Label(master=self.loginTab, text="Username:")
         self.loginUsernameLabel.pack()
         self.loginUsernameEntry: ttk.Entry = ttk.Entry(master=self.loginTab)
@@ -86,39 +131,24 @@ class MainWindow:
             self.statusLabel.config(text="please provide both name and password")
             return
 
-        loggInKafkaAddress = self.receiverInput.get() if self.receiverInput.get() != "" else "localhost:9092"
-        self.loggInProducer = kafka.KafkaProducer(bootstrap_servers=loggInKafkaAddress, acks=1)
-        thread = threading.Thread(target=self.listenForLoggInMessage, args=(loggInKafkaAddress,))
-        thread.start()
-        time.sleep(1)
-
         loggInDetails = {
             "Name": self.loginUsernameEntry.get(),
             "Password": self.loginPasswordEntry.get(),
         }
 
-        self.loggInProducer.send(topic=DATABASE_TOPIC, headers=[
-            ("topic", b"UI"),
-            ("operation", b"READ"),
-            ("table", b"users"),
-            ("input", json.dumps(loggInDetails).encode())
-        ], value=b"")
+        message = self.databaseCall("UI", "READ", "users", json.dumps(loggInDetails), b"")
 
-        thread.join()
-        if self.loggedInUserID is None:
-            self.statusLabel.config(text="Username or Password wrong")
-        else:
-            self.statusLabel.config(text=f"Logged In As {self.loginUsernameEntry.get()}")
-
-    def listenForLoggInMessage(self, loggInKafkaAddress: str):
-        self.loggInConsumer = kafka.KafkaConsumer("UI", bootstrap_servers=loggInKafkaAddress, auto_offset_reset="latest")
-        message = next(self.loggInConsumer)
         for header in message.headers:
             if header[0] == "status":
                 status = header[1].decode()
 
         if status.lower() == "ok":
             self.loggedInUserID = int(message.value.decode())
+
+        if self.loggedInUserID is None:
+            self.statusLabel.config(text="Username or Password wrong")
+        else:
+            self.statusLabel.config(text=f"Logged In As {self.loginUsernameEntry.get()}")
 
     def openWindow(self):
         if self.loggedInUserID is None:
@@ -131,9 +161,9 @@ class MainWindow:
 
         self.topLevelWindow = tk.Toplevel()
         if self.receiverInput.get() != "":
-            self.videoPlayer = TkinterVideo(master=self.topLevelWindow, kafkaAddress=self.receiverInput.get())
+            self.videoPlayer = TkinterVideo(master=self.topLevelWindow, kafkaAddress=self.receiverInput.get(), userId=self.loggedInUserID)
         else:
-            self.videoPlayer = TkinterVideo(master=self.topLevelWindow)
+            self.videoPlayer = TkinterVideo(master=self.topLevelWindow, userId=self.loggedInUserID)
         self.videoPlayer.pack(expand=True, fill="both")
         self.videoPlayer.play()
 
@@ -158,9 +188,10 @@ class MainWindow:
 
 
 class TkinterVideo(tk.Label):
-    def __init__(self, master, kafkaAddress: str = "localhost:9092", keepAspect: bool = False, *args, **kwargs):
+    def __init__(self, master, userId: int, kafkaAddress: str = "localhost:9092" , keepAspect: bool = False, *args, **kwargs):
         super(TkinterVideo, self).__init__(master, *args, **kwargs)
 
+        self.userId = userId
         self.kafkaAddress = kafkaAddress
         self.streamConsumer: Optional[kafka.KafkaConsumer] = None
         self.displayContentThread: threading.Thread = threading.Thread(target=self.displayContent, daemon=True)
@@ -288,7 +319,7 @@ class TkinterVideo(tk.Label):
         self.streamConsumer.assign([kafka.TopicPartition(TOPIC, 0)])
 
         producer = kafka.KafkaProducer(bootstrap_servers=self.kafkaAddress, acks=1)
-        producer.send(topic=START_TOPIC, value=b"start")
+        producer.send(topic=START_TOPIC, value=str(self.userId).encode())
         print("Signal sent")
 
         while self.streamRunning:
@@ -337,18 +368,22 @@ class TkinterVideo(tk.Label):
         self.streamRunning = False
         self.streamConsumer.close()
 
+        print("Stopping inputs thread")
         if self.sendInputsThread:
             self.sendInputsThread.join()
 
+        print("Stopping audio stream")
         if self.audioStream:
             self.audioStream.stop()
 
+        print("Stopping diplay thread")
         if self.displayContentThread:
             self.displayContentThread.join()
 
+        print("Stopping receiver thread")
         if self.streamReceiverThread:
             self.streamReceiverThread.join()
 
 
 if __name__ == "__main__":
-    MainWindow()
+    KafkaWindow()

@@ -48,9 +48,11 @@ func main() {
 	if err := Kafka.CreateTopic(VideoTopic); err != nil {
 		panic(err)
 	}
+	defer Kafka.DeleteTopic(VideoTopic)
 	if err := Kafka.CreateTopic(VideoStartTopic); err != nil {
 		panic(err)
 	}
+	defer Kafka.DeleteTopic(VideoStartTopic)
 
 	producer := Kafka.NewProducer()
 	defer producer.Close()

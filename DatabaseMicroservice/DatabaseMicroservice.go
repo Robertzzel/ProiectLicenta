@@ -54,6 +54,13 @@ func (inputVideo InputVideo) ToVideo() Video {
 	return Video{FilePath: inputVideo.FilePath, Users: users, Model: gorm.Model{ID: inputVideo.ID}}
 }
 
+func doesFileExist(fileName string) bool {
+	_, err := os.Stat(fileName)
+
+	// check if error is "file not exists"
+	return !os.IsNotExist(err)
+}
+
 func addUser() *Kafka.ConsumerMessage {
 	return &Kafka.ConsumerMessage{
 		Headers: []Kafka.Header{
@@ -62,6 +69,43 @@ func addUser() *Kafka.ConsumerMessage {
 			{"table", []byte("users")},
 			{"input", []byte(`{"Name": "admin","Password": "admin"}`)},
 		},
+	}
+}
+
+func addVideo() *Kafka.ConsumerMessage {
+	return &Kafka.ConsumerMessage{
+		Headers: []Kafka.Header{
+			{"topic", []byte("none")},
+			{"operation", []byte("CREATE")},
+			{"table", []byte("videos")},
+			{"input", []byte(`{"Users": [{"ID": 1}]}`)},
+		},
+	}
+}
+
+func getVideosByUser() *Kafka.ConsumerMessage {
+	return &Kafka.ConsumerMessage{
+		Headers: []Kafka.Header{
+			{"topic", []byte("none")},
+			{"operation", []byte("READ_VIDEOS")},
+			{"table", []byte("users")},
+			{"input", []byte(`{"ID": 1}`)},
+		},
+	}
+}
+
+func getNewFile(data []byte) (string, error) {
+	i := 0
+	for {
+		path := fmt.Sprintf("./video%d.mp4", i)
+		if doesFileExist(path) {
+			i++
+			continue
+		}
+		if err := os.WriteFile(path, data, 0777); err != nil {
+			return "", err
+		}
+		return path, nil
 	}
 }
 
@@ -88,6 +132,21 @@ func handleUserRequest(db *gorm.DB, operation string, input []byte) (*Kafka.Prod
 			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, nil
 		}
 		return &Kafka.ProducerMessage{Message: []byte(fmt.Sprint(user.ID)), Headers: []Kafka.Header{{Key: "status", Value: []byte("OK")}}}, nil
+	case "READ_VIDEOS":
+		var foundVideos []Video
+
+		if err := db.Table("users").Where("id = ?", user.ID).First(&user).Error; err != nil { //.Association("Videos").Find(&foundVideos)
+			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, nil
+		}
+		if err := db.Model(&user).Association("Videos").Find(&foundVideos); err != nil {
+			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, nil
+		}
+
+		result, err := json.Marshal(foundVideos)
+		if err != nil {
+			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("OK")}}}, err
+		}
+		return &Kafka.ProducerMessage{Message: result, Headers: []Kafka.Header{{Key: "status", Value: []byte("OK")}}}, nil
 	case "DELETE":
 		if err := db.Delete(&user); err != nil {
 			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
@@ -113,13 +172,10 @@ func handleVideoRequest(db *gorm.DB, operation string, input []byte, data []byte
 	switch operation {
 	case "CREATE":
 		// create file
-		i := 0
-		for {
-			video.FilePath = fmt.Sprintf("video%d.mp4", i)
-			if err := os.WriteFile(video.FilePath, data, 0777); err == nil {
-				break
-			}
-			i++
+		var err error
+		video.FilePath, err = getNewFile(data)
+		if err != nil {
+			return &Kafka.ProducerMessage{Message: []byte("FAILED")}, nil
 		}
 
 		if db.Create(&video).Error != nil {
@@ -128,7 +184,7 @@ func handleVideoRequest(db *gorm.DB, operation string, input []byte, data []byte
 
 		foundUsers := make([]*User, 0)
 		for _, user := range users {
-			if db.Model(user).Where("name = ?", user.Name).First(user).Error == nil {
+			if db.Where("id = ?", user.ID).First(user).Error == nil {
 				foundUsers = append(foundUsers, user)
 			}
 		}
@@ -166,6 +222,9 @@ func main() {
 			fmt.Println(err)
 		}
 	}()
+	if err := consumer.SetOffsetToNow(); err != nil {
+		panic(err)
+	}
 	producer := Kafka.NewProducer()
 	defer func() {
 		if err := producer.Close(); err != nil {

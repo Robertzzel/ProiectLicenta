@@ -4,6 +4,8 @@ import pathlib
 import queue
 import tempfile
 import subprocess
+import json
+import signal
 from Kafka.Kafka import *
 
 KAFKA_ADDRESS = "localhost:9092"
@@ -51,23 +53,35 @@ class Merger:
         self.videosQueue = queue.Queue()
         self.finalVideo: str = None
         self.i = 0
+        self.connectedUsers = 0
 
     def start(self):
-        while self.running:
-            try:
-                message = next(self.consumer).value
-            except StopIteration:
-                continue
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        try:
+            while self.running:
+                try:
+                    message = next(self.consumer)
+                except StopIteration:
+                    continue
 
-            if message == b"quit":
-                print("Quitting")
-                self.stop()
-                break
+                if message.value == b"quit":
+                    print("Quitting")
+                    self.stop()
+                    break
 
-            self.videosQueue.put(message)
+                self.videosQueue.put(message.value)
+                for header in message.headers:
+                    if header[0] == "users":
+                        self.connectedUsers = header[1].decode()
 
-            if self.videosQueue.qsize() > 10:
-                self.aggregateVideosFromQueue()
+                if self.videosQueue.qsize() > 10:
+                    self.aggregateVideosFromQueue()
+        except StopIteration:
+            print("Stop de la Aggregator")
+        except KeyboardInterrupt:
+            print("Stop de la consola")
+        except Exception as ex:
+            print(ex)
 
         self.aggregateVideosFromQueue()
 
@@ -77,11 +91,16 @@ class Merger:
             videoContent = f.read()
 
         # TODO SEND DYNAMIC AND COMPLETE MESSAGE TO DB
+        userJsonObjects = {"Users": []}
+        for userId in self.connectedUsers.split(','):
+            userJsonObjects["Users"].append({
+                "ID": int(userId)
+            })
         self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=videoContent, headers=[
             ("topic", b""),
             ("operation", b"CREATE"),
             ("table", b"videos"),
-            ("input", "{\"Users\": [{\"Name\": \"Robert\"}]}".encode())
+            ("input", json.dumps(userJsonObjects).encode())
         ])
 
     def aggregateVideosFromQueue(self):

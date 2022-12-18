@@ -17,6 +17,7 @@ from UI.InputsBuffer import InputsBuffer
 import json
 
 TOPIC = "aggregator"
+START_TOPIC = "saggregator"
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
 MOVE = 1
 CLICK = 2
@@ -287,7 +288,7 @@ class TkinterVideo(tk.Label):
         self.streamConsumer.assign([kafka.TopicPartition(TOPIC, 0)])
 
         producer = kafka.KafkaProducer(bootstrap_servers=self.kafkaAddress, acks=1)
-        producer.send(topic=TOPIC, value=b"start", partition=1)
+        producer.send(topic=START_TOPIC, value=b"start")
         print("Signal sent")
 
         while self.streamRunning:

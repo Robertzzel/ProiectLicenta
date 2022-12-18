@@ -3,8 +3,7 @@ package Kafka
 import (
 	"context"
 	"fmt"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
-	"math"
+	kafkago "github.com/segmentio/kafka-go"
 	"strconv"
 	"time"
 )
@@ -22,7 +21,7 @@ func min(a, b int) int {
 	return a
 }
 
-type Header = kafka.Header
+type Header = kafkago.Header
 
 type ConsumerMessage struct {
 	Message []byte
@@ -30,88 +29,82 @@ type ConsumerMessage struct {
 }
 
 type ProducerMessage struct {
-	Message   []byte
-	Topic     string
-	Headers   []Header
-	Partition uint
+	Message []byte
+	Topic   string
+	Headers []Header
 }
 
 type Producer struct {
-	*kafka.Producer
+	kafkaWriter *kafkago.Writer
 }
 
 type Consumer struct {
-	*kafka.Consumer
+	kafkaReader *kafkago.Reader
 }
 
-func NewProducer() (*Producer, error) {
-	producer, err := kafka.NewProducer(&kafka.ConfigMap{
-		"bootstrap.servers":  brokerAddress,
-		"acks":               "0",
-		"batch.size":         "1",
-		"linger.ms":          "0",
-		"batch.num.messages": "1",
-	})
-	if err != nil {
-		return nil, err
+func NewProducer() *Producer {
+	return &Producer{
+		kafkaWriter: &kafkago.Writer{
+			Addr:         kafkago.TCP(brokerAddress),
+			Async:        true,
+			Balancer:     &kafkago.LeastBytes{},
+			BatchSize:    1,
+			RequiredAcks: kafkago.RequireAll,
+		},
 	}
-	return &Producer{producer}, nil
 }
-
 func (producer *Producer) Publish(producerMessage *ProducerMessage) error {
-	numberOfMessages := int(math.Ceil(float64(len(producerMessage.Message)) / float64(MaxMessageBytes)))
+	numberOfMessages := 0
 
-	messages := make([]*kafka.Message, numberOfMessages)
+	if len(producerMessage.Message) < MaxMessageBytes {
+		numberOfMessages = 1
+	} else if len(producerMessage.Message)%MaxMessageBytes == 0 {
+		numberOfMessages = len(producerMessage.Message) / MaxMessageBytes
+	} else {
+		numberOfMessages = len(producerMessage.Message)/MaxMessageBytes + 1
+	}
+
+	messages := make([]kafkago.Message, numberOfMessages)
 	for i := 0; i < numberOfMessages; i++ {
-		messages[i] = &kafka.Message{
-			TopicPartition: kafka.TopicPartition{Topic: &producerMessage.Topic, Partition: int32(producerMessage.Partition)},
-			Value:          producerMessage.Message[i*MaxMessageBytes : min(len(producerMessage.Message), (i+1)*MaxMessageBytes)],
-			Headers: append([]kafka.Header{
+		messages[i] = kafkago.Message{
+			Value: producerMessage.Message[i*MaxMessageBytes : min(len(producerMessage.Message), (i+1)*MaxMessageBytes)],
+			Topic: producerMessage.Topic,
+			Headers: append([]kafkago.Header{
 				{Key: "number-of-messages", Value: []byte(fmt.Sprintf("%05d", numberOfMessages))},
 				{Key: "message-number", Value: []byte(fmt.Sprintf("%05d", i))},
 			}, producerMessage.Headers...),
 		}
 	}
 
-	deliveryChan := make(chan kafka.Event, numberOfMessages+1)
-	for _, message := range messages {
-		err := producer.Produce(message, deliveryChan)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return producer.kafkaWriter.WriteMessages(context.Background(), messages...)
 }
 
 func (producer *Producer) Close() error {
-	producer.Flush(1000)
-	producer.Producer.Close()
-	return nil
+	return producer.kafkaWriter.Close()
 }
 
-func NewConsumer(topic string, partition uint) (*Consumer, error) {
-	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": brokerAddress,
-		"auto.offset.reset": "latest",
-		"group.id":          "no",
-	})
-	if err != nil {
-		return nil, err
+func NewConsumer(topic string) *Consumer {
+	return &Consumer{
+		kafkaReader: kafkago.NewReader(
+			kafkago.ReaderConfig{
+				Brokers:     []string{brokerAddress},
+				Topic:       topic,
+				StartOffset: kafkago.LastOffset,
+			},
+		),
 	}
-	if err := consumer.Assign([]kafka.TopicPartition{{Topic: &topic, Partition: int32(partition)}}); err != nil {
-		return nil, err
-	}
-
-	return &Consumer{consumer}, err
 }
 
-func (consumer *Consumer) Consume(timeout ...time.Duration) (*ConsumerMessage, error) {
-	var to = 0
+func (kc *Consumer) Consume(timeout ...time.Duration) (*ConsumerMessage, error) {
+	var ctx context.Context
+
 	if len(timeout) > 0 {
-		to = int(timeout[0] / time.Millisecond)
+		ctx, _ = context.WithTimeout(context.Background(), timeout[0])
+	} else {
+		ctx = context.Background()
 	}
-	message, err := consumer.getNextMessage(to)
+
+	message, err := kc.kafkaReader.ReadMessage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +124,7 @@ func (consumer *Consumer) Consume(timeout ...time.Duration) (*ConsumerMessage, e
 		}
 	}
 
-	if numberOfMessages == 1 || numberOfMessages == 0 {
+	if numberOfMessages == 0 {
 		return &ConsumerMessage{Message: message.Value, Headers: message.Headers}, nil
 	}
 
@@ -139,7 +132,7 @@ func (consumer *Consumer) Consume(timeout ...time.Duration) (*ConsumerMessage, e
 	messages[messageNumber] = message.Value
 
 	for i := 0; i < numberOfMessages-1; i++ {
-		message, err = consumer.getNextMessage(to)
+		message, err = kc.kafkaReader.ReadMessage(context.Background())
 		if err != nil {
 			return nil, err
 		}
@@ -164,51 +157,24 @@ func (consumer *Consumer) Consume(timeout ...time.Duration) (*ConsumerMessage, e
 	return &ConsumerMessage{Message: fullMessage, Headers: message.Headers}, nil
 }
 
-func (consumer *Consumer) getNextMessage(timeoutMs int) (*kafka.Message, error) {
-
-	for {
-		ev := consumer.Poll(timeoutMs)
-		switch e := ev.(type) {
-		case *kafka.Message:
-			fmt.Println(string(e.Value))
-			return e, nil
-		case kafka.Error:
-			return nil, e
-		default:
-			return nil, context.DeadlineExceeded
-		}
-	}
+func (kc *Consumer) Close() error {
+	return kc.kafkaReader.Close()
 }
 
-func (consumer *Consumer) Close() error {
-	return consumer.Consumer.Close()
+func (kc *Consumer) SetOffsetToNow() error {
+	return kc.kafkaReader.SetOffsetAt(context.Background(), time.Now().Add(-time.Second))
 }
 
-func CreateTopic(name string, numOfPartitions uint) error {
-	a, err := kafka.NewAdminClient(&kafka.ConfigMap{"bootstrap.servers": brokerAddress})
-	if err != nil {
-		return err
-	}
-
-	_, err = a.CreateTopics(context.Background(), []kafka.TopicSpecification{{Topic: name, NumPartitions: int(numOfPartitions), Config: map[string]string{"retention.ms": "100"}}})
-	if err != nil {
-		return err
-	}
-
-	return nil
+func CreateTopic(name string) error {
+	_, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, name, 0)
+	return err
 }
 
 func DeleteTopic(names ...string) error {
-
-	a, err := kafka.NewAdminClient(&kafka.ConfigMap{"bootstrap.servers": brokerAddress})
+	conn, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, names[0], 0)
 	if err != nil {
 		return err
 	}
 
-	_, err = a.DeleteTopics(context.Background(), names)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return conn.DeleteTopics(names...)
 }

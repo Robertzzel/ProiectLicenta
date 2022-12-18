@@ -16,10 +16,13 @@ import (
 )
 
 const (
-	VideoTopic    = "video"
-	AudioTopic    = "audio"
-	ComposerTopic = "aggregator"
-	MergeTopic    = "MERGER"
+	VideoTopic           = "video"
+	VideoStartTopic      = "svideo"
+	AudioTopic           = "audio"
+	AudioStartTopic      = "saudio"
+	AggregatorTopic      = "aggregator"
+	AggregatorStartTopic = "saggregator"
+	MergeTopic           = "MERGER"
 )
 
 type AudioVideoPair struct {
@@ -69,12 +72,12 @@ func CombineAndCompressFiles(files AudioVideoPair, bitrate string, output string
 }
 
 func SendVideo(producer *Kafka.Producer, video []byte) error {
-	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: ComposerTopic}); err != nil {
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: AggregatorTopic}); err != nil {
 		return err
 	}
-	//if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: MergeTopic}); err != nil {
-	//	return err
-	//}
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: MergeTopic}); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -157,7 +160,7 @@ func CollectAudioAndVideoFiles(ctx context.Context, videoConsumer, audioConsumer
 
 func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error {
 	defer files.Delete()
-	//s := time.Now()
+	s := time.Now()
 
 	video, err := CombineAndCompressFiles(files, "1M", "pipe:1")
 	if err != nil {
@@ -168,26 +171,23 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error 
 		return err
 	}
 
-	//fmt.Println("video ", files.Video[len(files.Video)-17:len(files.Video)-4], "sent at ", time.Now().UnixMilli(), " ( ", time.Since(s), " ) ", len(video))
+	fmt.Println("video ", files.Video[len(files.Video)-17:len(files.Video)-4], "sent at ", time.Now().UnixMilli(), " ( ", time.Since(s), " ) ", len(video))
 	return nil
 }
 
 func main() {
 	// initialize
-	if err := Kafka.CreateTopic(ComposerTopic, 2); err != nil {
+	if err := Kafka.CreateTopic(AggregatorTopic); err != nil {
+		panic(err)
+	}
+	if err := Kafka.CreateTopic(AggregatorStartTopic); err != nil {
 		panic(err)
 	}
 
-	uiConsumer, err := Kafka.NewConsumer(ComposerTopic, 1)
-	if err != nil {
-		panic(err)
-	}
+	uiConsumer := Kafka.NewConsumer(AggregatorStartTopic)
 	defer uiConsumer.Close()
 
-	producer, err := Kafka.NewProducer()
-	if err != nil {
-		panic(err)
-	}
+	producer := Kafka.NewProducer()
 	defer producer.Close()
 
 	filesChannel := make(chan AudioVideoPair, 5)
@@ -207,23 +207,17 @@ func main() {
 	}
 	fmt.Println("Starting...")
 	ts := fmt.Sprint(time.Now().UnixMilli()/1000 + 1)
-	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(ts), Topic: AudioTopic, Partition: 1}); err != nil {
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(ts), Topic: AudioStartTopic}); err != nil {
 		panic(err)
 	}
-	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(ts), Topic: VideoTopic, Partition: 1}); err != nil {
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(ts), Topic: VideoStartTopic}); err != nil {
 		panic(err)
 	}
 
-	videoConsumer, err := Kafka.NewConsumer(VideoTopic, 0)
-	if err != nil {
-		panic(err)
-	}
+	videoConsumer := Kafka.NewConsumer(VideoTopic)
 	defer videoConsumer.Close()
 
-	audioConsumer, err := Kafka.NewConsumer(AudioTopic, 0)
-	if err != nil {
-		panic(err)
-	}
+	audioConsumer := Kafka.NewConsumer(AudioTopic)
 	defer audioConsumer.Close()
 
 	// start

@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	VideoDuration = time.Second
-	VideoTopic    = "video"
+	VideoDuration   = time.Second
+	VideoTopic      = "video"
+	VideoStartTopic = "svideo"
 )
 
 func NewCtx() context.Context {
@@ -44,25 +45,25 @@ func stringToTimestamp(s string) (time.Time, error) {
 func main() {
 	errGroup, ctx := errgroup.WithContext(NewCtx())
 
-	if err := Kafka.CreateTopic(VideoTopic, 2); err != nil {
+	if err := Kafka.CreateTopic(VideoTopic); err != nil {
+		panic(err)
+	}
+	if err := Kafka.CreateTopic(VideoStartTopic); err != nil {
 		panic(err)
 	}
 
-	producer, err := Kafka.NewProducer()
-	if err != nil {
-		panic(err)
-	}
+	producer := Kafka.NewProducer()
 	defer producer.Close()
-	consumer, err := Kafka.NewConsumer(VideoTopic, 1)
-	if err != nil {
-		panic(err)
-	}
+	startConsumer := Kafka.NewConsumer(VideoStartTopic)
+	defer startConsumer.Close()
 
 	// wait for the start message
 	fmt.Println("waiting for message")
+
 	var tsMessage *Kafka.ConsumerMessage
+	var err error
 	for ctx.Err() == nil {
-		tsMessage, err = consumer.Consume(time.Second * 2)
+		tsMessage, err = startConsumer.Consume(time.Second * 2)
 		if errors.Is(err, context.DeadlineExceeded) {
 			continue
 		} else if err != nil {
@@ -71,11 +72,12 @@ func main() {
 
 		break
 	}
+	fmt.Println("Starting..")
+
 	timestamp, err := stringToTimestamp(string(tsMessage.Message))
 	if err != nil {
 		panic("Timestamp not valid")
 	}
-	fmt.Println("Starting..")
 
 	videoRecorder, err := NewRecorder(ctx, 20)
 	if err != nil {
@@ -88,7 +90,7 @@ func main() {
 		for {
 			select {
 			case videoName := <-videoRecorder.VideoBuffer:
-				if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(videoName), Topic: VideoTopic, Partition: 0}); err != nil {
+				if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(videoName), Topic: VideoTopic}); err != nil {
 					panic(err)
 				}
 				log.Println(videoName, time.Now().UnixMilli())

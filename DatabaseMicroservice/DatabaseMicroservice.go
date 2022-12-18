@@ -160,19 +160,13 @@ func main() {
 		panic(err)
 	}
 
-	consumer, err := Kafka.NewConsumer(topic, 0)
-	if err != nil {
-		panic(err)
-	}
+	consumer := Kafka.NewConsumer(topic)
 	defer func() {
 		if err := consumer.Close(); err != nil {
 			fmt.Println(err)
 		}
 	}()
-	producer, err := Kafka.NewProducer()
-	if err != nil {
-		panic(err)
-	}
+	producer := Kafka.NewProducer()
 	defer func() {
 		if err := producer.Close(); err != nil {
 			fmt.Println(err)

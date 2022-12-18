@@ -8,6 +8,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"os"
+	"time"
 )
 
 const (
@@ -159,24 +160,26 @@ func main() {
 		panic(err)
 	}
 
-	consumer := Kafka.NewConsumer(topic, 0)
+	consumer, err := Kafka.NewConsumer(topic, 0)
+	if err != nil {
+		panic(err)
+	}
 	defer func() {
 		if err := consumer.Close(); err != nil {
 			fmt.Println(err)
 		}
 	}()
-	producer := Kafka.NewProducer()
+	producer, err := Kafka.NewProducer()
+	if err != nil {
+		panic(err)
+	}
 	defer func() {
 		if err := producer.Close(); err != nil {
 			fmt.Println(err)
 		}
 	}()
-
-	if err := consumer.SetOffsetToNow(); err != nil {
-		panic(err)
-	}
 	for {
-		kafkaMessage, err := consumer.Consume()
+		kafkaMessage, err := consumer.Consume(time.Second * 2)
 		if err != nil {
 			continue
 		}

@@ -38,8 +38,14 @@ func main() {
 		panic(err)
 	}
 
-	receiverConsumer := Kafka.NewConsumer(ReceiverTopic, 0)
-	streamerConsumer := Kafka.NewConsumer(StreamerTopic, 0)
+	receiverConsumer, err := Kafka.NewConsumer(ReceiverTopic, 0)
+	if err != nil {
+		panic(err)
+	}
+	streamerConsumer, err := Kafka.NewConsumer(StreamerTopic, 0)
+	if err != nil {
+		panic(err)
+	}
 
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {

@@ -5,7 +5,7 @@
 # shellcheck disable=SC2046
 timestamp=`expr $(date +"%s") + 2`
 #xterm -hold -T "Merger" -e ./MergerMicroservice/MergerMicroservice &
-xterm -hold -T "Aggregator" -e ./AggregatorMicroservice/AggregatorMicroservice &
+#xterm -hold -T "Aggregator" -e ./AggregatorMicroservice/AggregatorMicroservice &
 xterm -hold -T "Video" -e ./VideoMicroservice/VideoMicroservice "$timestamp" &
 xterm -hold -T "Audio" -e venv/bin/python3 AudioMicroservice/AudioMicroservice.py "$timestamp" &
 # xterm -hold -T "InputExecutor" -e venv/bin/python3 InputExecutorMicroservice/InputExecutorMicroservice.py &

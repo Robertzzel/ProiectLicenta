@@ -47,20 +47,23 @@ func main() {
 	if err := Kafka.CreateTopic(VideoTopic, 2); err != nil {
 		panic(err)
 	}
-	defer Kafka.DeleteTopic(VideoTopic)
 
-	producer := Kafka.NewProducer()
+	producer, err := Kafka.NewProducer()
+	if err != nil {
+		panic(err)
+	}
 	defer producer.Close()
-	consumer := Kafka.NewConsumer(VideoTopic, 1)
+	consumer, err := Kafka.NewConsumer(VideoTopic, 1)
+	if err != nil {
+		panic(err)
+	}
 
 	// wait for the start message
 	fmt.Println("waiting for message")
 	var tsMessage *Kafka.ConsumerMessage
-	var err error
 	for ctx.Err() == nil {
 		tsMessage, err = consumer.Consume(time.Second * 2)
 		if errors.Is(err, context.DeadlineExceeded) {
-			fmt.Println("empty")
 			continue
 		} else if err != nil {
 			panic(err)

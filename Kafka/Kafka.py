@@ -52,3 +52,13 @@ class KafkaConsumerWrapper(kafka.KafkaConsumer):
             finalMessage += message
 
         return finalMessage, headersToBeReturned
+
+
+def createTopic(brokerAddress:str, topic: str, partitions: int = 1):
+    admin_client = kafka.KafkaAdminClient(
+        bootstrap_servers=brokerAddress,
+        client_id='test'
+    )
+
+    topic_list = [kafka.admin.NewTopic(name=topic, num_partitions=partitions, replication_factor=1, topic_configs={ "retention.ms": "100"})]
+    admin_client.create_topics(new_topics=topic_list, validate_only=False)

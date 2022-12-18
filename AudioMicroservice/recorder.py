@@ -43,7 +43,8 @@ class Recorder:
     def close(self):
         self.input_stream.close()
         self.running = False
-        self.process_thread.join()
+        if self.process_thread is not None:
+            self.process_thread.join()
 
     def stream_callback(self, indata, _, time_info, s_):
         self.lock.acquire()

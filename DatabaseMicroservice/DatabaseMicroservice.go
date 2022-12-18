@@ -144,7 +144,7 @@ func handleUserRequest(db *gorm.DB, operation string, input []byte) (*Kafka.Prod
 
 		result, err := json.Marshal(foundVideos)
 		if err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("OK")}}}, err
+			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, err
 		}
 		return &Kafka.ProducerMessage{Message: result, Headers: []Kafka.Header{{Key: "status", Value: []byte("OK")}}}, nil
 	case "DELETE":
@@ -195,9 +195,14 @@ func handleVideoRequest(db *gorm.DB, operation string, input []byte, data []byte
 	case "READ": // check
 		// TODO SEND VIDEO CONTENTS
 		video = Video{Model: gorm.Model{ID: inputVideo.ID}}
-		if err := db.First(&video).Error; err != nil {
+		if err := db.Where("id=?", video.ID).First(&video).Error; err != nil {
 			return &Kafka.ProducerMessage{Message: []byte(err.Error())}, nil
 		}
+		videoContents, err := os.ReadFile(video.FilePath)
+		if err != nil {
+			return &Kafka.ProducerMessage{Message: []byte(""), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, err
+		}
+		return &Kafka.ProducerMessage{Message: videoContents, Headers: []Kafka.Header{{Key: "status", Value: []byte("OK")}}}, nil
 	case "DELETE":
 		if err := db.Delete(&video).Error; err != nil {
 			return &Kafka.ProducerMessage{Message: []byte(err.Error())}, nil

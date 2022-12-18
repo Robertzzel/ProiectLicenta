@@ -3,6 +3,7 @@ from start import Sender
 import av
 import time
 import threading
+from typing import Dict, List
 import logging
 from queue import Queue
 import tkinter as tk
@@ -15,6 +16,7 @@ import numpy as np
 from typing import Optional
 from UI.InputsBuffer import InputsBuffer
 import json
+from Kafka.Kafka import KafkaConsumerWrapper
 
 TOPIC = "aggregator"
 START_TOPIC = "saggregator"
@@ -52,15 +54,22 @@ class KafkaWindow:
         if self.checkKafkaAddress(address):
             self.root.destroy()
             MainWindow(address)
+        else:
+            self.notValidLabel = ttk.Label(master=self.root, text="Broker not available on this address")
+            self.notValidLabel.pack()
 
 
 class MainWindow:
     def __init__(self, kafkaAddress: str):
         self.root = tk.Tk()
+        kafka.KafkaAdminClient(bootstrap_servers=kafkaAddress).delete_topics(["UI"])
 
         self.kafkaAddress = kafkaAddress
-        self.databaseProducer = self.databaseProducer = kafka.KafkaProducer(bootstrap_servers=self.kafkaAddress, acks=1)
-        self.databaseConsumer = kafka.KafkaConsumer("UI", bootstrap_servers=self.kafkaAddress, auto_offset_reset="latest")
+        self.databaseProducer = kafka.KafkaProducer(bootstrap_servers=self.kafkaAddress, acks=1)
+        self.databaseConsumer = KafkaConsumerWrapper("UI", bootstrap_servers=self.kafkaAddress, auto_offset_reset="earliest")
+        partition = kafka.TopicPartition("UI", 0)
+        end_offset = self.databaseConsumer.end_offsets([partition])
+        self.databaseConsumer.seek(partition,list(end_offset.values())[0])
 
         self.loggedInUserID = None
         self.statusLabel = ttk.Label(master=self.root, text="")
@@ -70,6 +79,7 @@ class MainWindow:
         self.receiverTab = tk.Frame(self.tabControl)
         self.senderTab = tk.Frame(self.tabControl)
         self.videosTab = tk.Frame(self.tabControl)
+        ttk.Label(master=self.videosTab, text="Log In to see your videos").pack(expand=True, fill="both")
         self.tabControl.add(child=self.loginTab, text="Login")
         self.tabControl.add(child=self.receiverTab, text="Receive")
         self.tabControl.add(child=self.senderTab, text="Send")
@@ -96,15 +106,27 @@ class MainWindow:
         self.root.mainloop()
 
     def on_tab_change(self, event):
-        if event.widget.tab('current')['text'] != "My Videos":
+        if event.widget.tab('current')['text'] != "My Videos" or self.loggedInUserID is None:
             return
 
         msg = self.databaseCall("UI", "READ_VIDEOS", "users", json.dumps({"ID": self.loggedInUserID}), b"")
-        videos = json.loads(msg.value)
-        self.videosTab.destroy()
-        self.videosTab = ttk.Frame()
+        videos: List[Dict] = json.loads(msg.value)
 
-    def databaseCall(self, topic: str, operation: str, table: str, inp: str, message: bytes) -> kafka.consumer.fetcher.ConsumerRecord:
+        for widget in self.videosTab.winfo_children():
+            widget.destroy()
+
+        for i, video in enumerate(videos):
+            print(video.get("ID"))
+            ttk.Label(master=self.videosTab, text=video.get("CreatedAt")).grid(row=i, column=0)
+            ttk.Button(master=self.videosTab, text="Download", command=lambda id=video.get("ID"): self.downloadVideo(id)).grid(row=i, column=1)
+
+    def downloadVideo(self, videoId: int):
+        print(videoId)
+        msg, headers = self.databaseCall("UI", "READ", "videos", json.dumps({"ID": videoId}), b"", bigFile=True)
+        with open("downloadedVideo.mp4", "wb") as f:
+            f.write(msg)
+
+    def databaseCall(self, topic: str, operation: str, table: str, inp: str, message: bytes, bigFile=False) -> kafka.consumer.fetcher.ConsumerRecord:
         self.databaseProducer.send(topic=DATABASE_TOPIC, headers=[
             ("topic", topic.encode()),
             ("operation", operation.encode()),
@@ -112,6 +134,8 @@ class MainWindow:
             ("input", inp.encode())
         ], value=message)
 
+        if bigFile:
+            return self.databaseConsumer.receiveBigMessage()
         return next(self.databaseConsumer)
 
     def configureLoginTab(self):
@@ -188,7 +212,7 @@ class MainWindow:
 
 
 class TkinterVideo(tk.Label):
-    def __init__(self, master, userId: int, kafkaAddress: str = "localhost:9092" , keepAspect: bool = False, *args, **kwargs):
+    def __init__(self, master, userId: int, kafkaAddress: str = "localhost:9092", keepAspect: bool = False, *args, **kwargs):
         super(TkinterVideo, self).__init__(master, *args, **kwargs)
 
         self.userId = userId

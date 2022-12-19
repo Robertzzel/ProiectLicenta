@@ -85,9 +85,10 @@ func SendVideo(producer *Kafka.Producer, video []byte, users []int) error {
 		return err
 	}
 
-	parsedUsers := Map(users, func(a int) string { return strconv.Itoa(a) })
+	parsedUsersList := Map(users, func(a int) string { return strconv.Itoa(a) })
+	jsonString := strings.Join(parsedUsersList, ",")
 	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: MergeTopic, Headers: []Kafka.Header{
-		{"users", []byte(strings.Join(parsedUsers, ","))}}}); err != nil {
+		{"users", []byte(jsonString)}}}); err != nil {
 		return err
 	}
 
@@ -97,14 +98,12 @@ func SendVideo(producer *Kafka.Producer, video []byte, users []int) error {
 func GetNextSyncedAudioAndVideo(videoConsumer, audioConsumer *Kafka.Consumer) (AudioVideoPair, error) {
 	files := AudioVideoPair{}
 
-	videoMessage, err := videoConsumer.Consume()
+	videoMessage, err := videoConsumer.Consume(time.Second)
 	if err != nil {
-		print(err)
 		return AudioVideoPair{}, err
 	}
-	audioMessage, err := audioConsumer.Consume()
+	audioMessage, err := audioConsumer.Consume(time.Second)
 	if err != nil {
-		print(err)
 		return AudioVideoPair{}, err
 	}
 
@@ -186,6 +185,7 @@ func captureConnectedUsers(ctx context.Context, users *[]int) error {
 	if err := Kafka.CreateTopic(AggregatorStartTopic); err != nil {
 		return err
 	}
+	defer Kafka.DeleteTopic(AggregatorStartTopic)
 
 	uiConsumer := Kafka.NewConsumer(AggregatorStartTopic)
 	defer uiConsumer.Close()
@@ -228,6 +228,7 @@ func main() {
 
 	// wait for start
 	fmt.Println("Waiting for signal")
+
 	var usersConnected []int
 	errG.Go(func() error { return captureConnectedUsers(ctx, &usersConnected) })
 	for len(usersConnected) == 0 {
@@ -271,6 +272,7 @@ func main() {
 	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte("quit"), Topic: MergeTopic}); err != nil {
 		log.Println(err)
 	}
+	fmt.Println("Quit signal sent")
 
 	defer fmt.Println("Cleanup Done")
 }

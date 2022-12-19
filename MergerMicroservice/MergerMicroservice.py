@@ -90,9 +90,8 @@ class Merger:
         with open(self.finalVideo, "rb") as f:
             videoContent = f.read()
 
-        # TODO SEND DYNAMIC AND COMPLETE MESSAGE TO DB
         userJsonObjects = {"Users": []}
-        for userId in self.connectedUsers.split(','):
+        for userId in set(self.connectedUsers.split(',')):
             userJsonObjects["Users"].append({
                 "ID": int(userId)
             })

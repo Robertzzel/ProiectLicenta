@@ -50,7 +50,7 @@ class KafkaWindow:
         return True
 
     def openMainWindow(self):
-        address = self.input.get()
+        address = self.input.get() if self.input.get() != "" else "localhost:9092"
         if self.checkKafkaAddress(address):
             self.root.destroy()
             MainWindow(address)
@@ -62,14 +62,13 @@ class KafkaWindow:
 class MainWindow:
     def __init__(self, kafkaAddress: str):
         self.root = tk.Tk()
-        kafka.KafkaAdminClient(bootstrap_servers=kafkaAddress).delete_topics(["UI"])
 
         self.kafkaAddress = kafkaAddress
         self.databaseProducer = kafka.KafkaProducer(bootstrap_servers=self.kafkaAddress, acks=1)
         self.databaseConsumer = KafkaConsumerWrapper("UI", bootstrap_servers=self.kafkaAddress, auto_offset_reset="earliest")
         partition = kafka.TopicPartition("UI", 0)
         end_offset = self.databaseConsumer.end_offsets([partition])
-        self.databaseConsumer.seek(partition,list(end_offset.values())[0])
+        self.databaseConsumer.seek(partition, list(end_offset.values())[0])
 
         self.loggedInUserID = None
         self.statusLabel = ttk.Label(master=self.root, text="")
@@ -86,10 +85,6 @@ class MainWindow:
         self.tabControl.add(child=self.videosTab, text="My Videos")
         self.tabControl.pack()
 
-        self.receiverLabel = ttk.Label(master=self.receiverTab, text="IP to receive from:")
-        self.receiverLabel.pack()
-        self.receiverInput = ttk.Entry(master=self.receiverTab)
-        self.receiverInput.pack()
         self.receiverButton: tk.Button = tk.Button(master=self.receiverTab, text="START", command=self.openWindow)
         self.receiverButton.pack()
 
@@ -126,7 +121,7 @@ class MainWindow:
         with open("downloadedVideo.mp4", "wb") as f:
             f.write(msg)
 
-    def databaseCall(self, topic: str, operation: str, table: str, inp: str, message: bytes, bigFile=False) -> kafka.consumer.fetcher.ConsumerRecord:
+    def databaseCall(self, topic: str, operation: str, table: str, inp: str, message: bytes, bigFile=False):
         self.databaseProducer.send(topic=DATABASE_TOPIC, headers=[
             ("topic", topic.encode()),
             ("operation", operation.encode()),
@@ -184,10 +179,8 @@ class MainWindow:
         self.receiverButton.config(text="STOP", command=self.closeWindow)
 
         self.topLevelWindow = tk.Toplevel()
-        if self.receiverInput.get() != "":
-            self.videoPlayer = TkinterVideo(master=self.topLevelWindow, kafkaAddress=self.receiverInput.get(), userId=self.loggedInUserID)
-        else:
-            self.videoPlayer = TkinterVideo(master=self.topLevelWindow, userId=self.loggedInUserID)
+        self.videoPlayer = TkinterVideo(master=self.topLevelWindow, kafkaAddress=self.kafkaAddress, userId=self.loggedInUserID)
+
         self.videoPlayer.pack(expand=True, fill="both")
         self.videoPlayer.play()
 
@@ -303,11 +296,14 @@ class TkinterVideo(tk.Label):
     def displayContent(self):
         while self.streamRunning:
             try:
-                self.currentImage = self.videoFramesQueue.get(block=True)  # wait for the stream to init
+                self.currentImage = self.videoFramesQueue.get(block=True, timeout=2)  # wait for the stream to init
+                break
             except queue.Empty:
                 continue
-            break
-        self.audioStream.start()
+
+        if self.audioStream:
+            self.audioStream.start()
+
         rate = 1 / self.videoFramerate
 
         while self.streamRunning:

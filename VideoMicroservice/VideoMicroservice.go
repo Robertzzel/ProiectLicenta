@@ -3,6 +3,7 @@ package main
 import (
 	"Licenta/Kafka"
 	"context"
+	"errors"
 	"fmt"
 	"golang.org/x/sync/errgroup"
 	"log"
@@ -14,8 +15,9 @@ import (
 )
 
 const (
-	VideoDuration = time.Second
-	VideoTopic    = "video"
+	VideoDuration   = time.Second
+	VideoTopic      = "video"
+	VideoStartTopic = "svideo"
 )
 
 func NewCtx() context.Context {
@@ -42,36 +44,61 @@ func stringToTimestamp(s string) (time.Time, error) {
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("No timestamp given")
+		fmt.Println("No broker address given")
+		return
 	}
-
-	timestamp, err := stringToTimestamp(os.Args[1])
-	if err != nil {
-		log.Fatal("Timestamp not valid")
-	}
+	brokerAddress := os.Args[1]
 
 	errGroup, ctx := errgroup.WithContext(NewCtx())
+
+	if err := Kafka.CreateTopic(brokerAddress, VideoTopic); err != nil {
+		panic(err)
+	}
+	defer Kafka.DeleteTopic(brokerAddress, VideoTopic)
+	if err := Kafka.CreateTopic(brokerAddress, VideoStartTopic); err != nil {
+		panic(err)
+	}
+	defer Kafka.DeleteTopic(brokerAddress, VideoStartTopic)
+
+	producer := Kafka.NewProducer(brokerAddress)
+	defer producer.Close()
+	startConsumer := Kafka.NewConsumer(brokerAddress, VideoStartTopic)
+	defer startConsumer.Close()
+
+	// wait for the start message
+	fmt.Println("waiting for message")
+
+	var tsMessage *Kafka.ConsumerMessage
+	var err error
+	for ctx.Err() == nil {
+		tsMessage, err = startConsumer.Consume(time.Second * 2)
+		if errors.Is(err, context.DeadlineExceeded) {
+			continue
+		} else if err != nil {
+			panic(err)
+		}
+
+		break
+	}
+	fmt.Println("Starting..")
+
+	timestamp, err := stringToTimestamp(string(tsMessage.Message))
+	if err != nil {
+		panic("Timestamp not valid")
+	}
 
 	videoRecorder, err := NewRecorder(ctx, 20)
 	if err != nil {
 		log.Fatal("Recorder cannot be initiated: ", err)
 	}
 
-	errGroup.Go(func() error { return videoRecorder.Start(timestamp, VideoDuration) })
-
-	if err := Kafka.CreateTopic(VideoTopic); err != nil {
-		panic(err)
-	}
-	defer Kafka.DeleteTopic(VideoTopic)
-
-	composer := Kafka.NewProducer()
-	defer composer.Close()
+	videoRecorder.Start(timestamp, VideoDuration)
 
 	errGroup.Go(func() error {
 		for {
 			select {
 			case videoName := <-videoRecorder.VideoBuffer:
-				if err := composer.Publish(&Kafka.ProducerMessage{Message: []byte(videoName), Topic: VideoTopic}); err != nil {
+				if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(videoName), Topic: VideoTopic}); err != nil {
 					panic(err)
 				}
 				log.Println(videoName, time.Now().UnixMilli())

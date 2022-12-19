@@ -43,7 +43,8 @@ class Recorder:
     def close(self):
         self.input_stream.close()
         self.running = False
-        self.process_thread.join()
+        if self.process_thread is not None:
+            self.process_thread.join()
 
     def stream_callback(self, indata, _, time_info, s_):
         self.lock.acquire()
@@ -59,7 +60,8 @@ class Recorder:
                 time.sleep(next_chunk_end - time.time())
 
             self.lock.acquire()
-            audio_chunk = self.buffer.tolist()[:]
+            audio_chunk = np.empty_like(self.buffer)
+            audio_chunk[:] = self.buffer
             self.buffer = np.array([], dtype=np.int16)
             self.lock.release()
 
@@ -67,12 +69,12 @@ class Recorder:
             if len(audio_chunk) > number_of_bytes_needed:
                 audio_chunk = audio_chunk[len(audio_chunk) - number_of_bytes_needed:]
             elif len(audio_chunk) < number_of_bytes_needed:
-                audio_chunk.extend([0] * int(number_of_bytes_needed - len(audio_chunk)))
+                audio_chunk = np.append(audio_chunk, np.array([0] * int(number_of_bytes_needed - len(audio_chunk)), dtype=np.int16))
 
             audio_file_name = cwd + "/audio/" + str(int((next_chunk_end - chunk_size_seconds) * 1000)) + ".wav"
-            #create_audio_file(audio_file_name, audio_chunk, SAMPLERATE)
-            with open(audio_file_name, "wb") as f:
-                f.write(pickle.dumps(np.array(audio_chunk, dtype=np.int16)))
+            create_audio_file(audio_file_name, audio_chunk, SAMPLERATE)
+            # with open(audio_file_name, "wb") as f:
+            #     f.write(pickle.dumps(np.array(audio_chunk, dtype=np.int16)))
 
             self.audio_queue.put_nowait(audio_file_name)
 

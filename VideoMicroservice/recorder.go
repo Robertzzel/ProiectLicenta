@@ -23,12 +23,6 @@ type Recorder struct {
 	ctx            context.Context
 }
 
-func emptyChannel(c chan []byte) {
-	for len(c) > 0 {
-		<-c
-	}
-}
-
 func NewRecorder(outContext context.Context, fps int) (*Recorder, error) {
 	if fps > 60 && fps < 1 {
 		return nil, errors.New("fps must be between 1 and 60")
@@ -58,15 +52,17 @@ func NewRecorder(outContext context.Context, fps int) (*Recorder, error) {
 	}, nil
 }
 
-func (r *Recorder) Start(startTime time.Time, chunkSize time.Duration) error {
-	for time.Now().Before(startTime) {
-		time.Sleep(time.Now().Sub(startTime))
-	}
+func (r *Recorder) Start(startTime time.Time, chunkSize time.Duration) {
+	r.errorGroup.Go(func() error {
+		for time.Now().Before(startTime) {
+			time.Sleep(time.Now().Sub(startTime))
+		}
 
-	r.errorGroup.Go(r.startRecording)
-	r.errorGroup.Go(func() error { return r.processImagesBuffer(startTime, chunkSize) })
+		r.errorGroup.Go(r.startRecording)
+		r.errorGroup.Go(func() error { return r.processImagesBuffer(startTime, chunkSize) })
 
-	return r.errorGroup.Wait()
+		return r.errorGroup.Wait()
+	})
 }
 
 func (r *Recorder) startRecording() error {
@@ -125,4 +121,8 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 	}
 
 	return nil
+}
+
+func (r *Recorder) Stop() {
+	r.ctx.Done()
 }

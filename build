@@ -8,13 +8,9 @@ cd AggregatorMicroservice
 go build AggregatorMicroservice.go
 cd ..
 
-cd MergerMicroservice
-go build MergerMicroservice.go
-cd ..
-
 cd DatabaseMicroservice
 go build DatabaseMicroservice.go
 cd ..
 
-cd PingMicroservice
-go build PingMicroservice.go
+#cd PingMicroservice
+#go build PingMicroservice.go

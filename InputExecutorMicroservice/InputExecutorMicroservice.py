@@ -3,6 +3,7 @@ import pynput
 import time
 from TkPynputKeyCodes import KeyTranslator
 from pyautogui import size
+import sys
 
 INPUTS_TOPIC = "inputs"
 MOVE = 1
@@ -18,10 +19,16 @@ SCROLL_DOWN = 5
 
 
 def main():
+    if len(sys.argv) < 2:
+        print("No broker address given")
+        return
+
+    brokerAddress = sys.argv[1]
+
     width, height = size()
     keyboard_controller: pynput.keyboard.Controller = pynput.keyboard.Controller()
     mouse_controller: pynput.mouse.Controller = pynput.mouse.Controller()
-    consumer = kafka.KafkaConsumer(INPUTS_TOPIC)
+    consumer = kafka.KafkaConsumer(INPUTS_TOPIC, bootstrap_servers=brokerAddress)
 
     for msg in consumer:
         for command in msg.value.decode().split(";"):

@@ -1,23 +1,28 @@
 import queue
-import sys
 import time
 from recorder import Recorder
 import kafka
+import sys
 
 AUDIO_TOPIC = "audio"
 AUDIO_START_TOPIC = "saudio"
 VIDEO_LENGTH = 1
 SAMPLERATE = 44100
 MESSAGE_SIZE_LENGTH = 10
-BROKER_ADDRESS = "localhost:9092"
 
 
-if __name__ == "__main__":
+def main():
+    if len(sys.argv) < 2:
+        print("No broker address given")
+        return
+
+    brokerAddress = sys.argv[1]
+
     audio_blocks_recorded: queue.Queue = queue.Queue(10)
     audio_recorder: Recorder = Recorder(audio_blocks_recorded)
 
-    producer = kafka.KafkaProducer(bootstrap_servers=BROKER_ADDRESS, acks=1)
-    consumer = kafka.KafkaConsumer(AUDIO_START_TOPIC, bootstrap_servers=BROKER_ADDRESS, enable_auto_commit=True)
+    producer = kafka.KafkaProducer(bootstrap_servers=brokerAddress, acks=1)
+    consumer = kafka.KafkaConsumer(AUDIO_START_TOPIC, bootstrap_servers=brokerAddress, enable_auto_commit=True)
 
     try:
         print("Waiting for message")
@@ -44,7 +49,10 @@ if __name__ == "__main__":
 
     audio_recorder.close()
     producer.close()
-    kafka.KafkaAdminClient(bootstrap_servers=BROKER_ADDRESS).delete_topics([AUDIO_TOPIC])
+    kafka.KafkaAdminClient(bootstrap_servers=brokerAddress).delete_topics([AUDIO_TOPIC])
     print("Cleanup done")
     sys.exit(1)
+
+if __name__ == "__main__":
+    main()
 

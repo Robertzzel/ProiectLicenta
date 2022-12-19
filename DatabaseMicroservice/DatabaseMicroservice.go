@@ -212,6 +212,12 @@ func handleVideoRequest(db *gorm.DB, operation string, input []byte, data []byte
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("No broker address given")
+		return
+	}
+	brokerAddress := os.Args[1]
+
 	db, err := gorm.Open(mysql.Open(connectionString), &gorm.Config{})
 	if err != nil {
 		panic("cannot open the database")
@@ -221,7 +227,7 @@ func main() {
 		panic(err)
 	}
 
-	consumer := Kafka.NewConsumer(topic)
+	consumer := Kafka.NewConsumer(brokerAddress, topic)
 	defer func() {
 		if err := consumer.Close(); err != nil {
 			fmt.Println(err)
@@ -230,7 +236,7 @@ func main() {
 	if err := consumer.SetOffsetToNow(); err != nil {
 		panic(err)
 	}
-	producer := Kafka.NewProducer()
+	producer := Kafka.NewProducer(brokerAddress)
 	defer func() {
 		if err := producer.Close(); err != nil {
 			fmt.Println(err)

@@ -2,12 +2,12 @@ import os.path
 import signal
 import subprocess
 import sys
-import time
 import pathlib
 
 
 class Sender:
-    def __init__(self):
+    def __init__(self, brokerAddress: str):
+        self.brokerAddress = brokerAddress
         self.videoProcess = None
         self.audioProcess = None
         self.aggregatorProcess = None
@@ -37,11 +37,10 @@ class Sender:
         if not self.build():
             return
 
-        timestamp = str(int(time.time()) + 2)
-        self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", timestamp],cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", timestamp],cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice"],cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
-        self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py"],cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress],cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
+        self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def stop(self):
         self.aggregatorProcess.send_signal(signal.SIGINT)
@@ -73,12 +72,20 @@ class Sender:
             print("aggregator process not closing")
             self.aggregatorProcess.kill()
 
+def main():
+    if len(sys.argv) < 2:
+        print("No broker address given")
+        return
 
-if __name__ == "__main__":
-    m = Sender()
+    brokerAddress = sys.argv[1]
+
+    m = Sender(brokerAddress)
     m.start()
     try:
         input("Enter to stop")
     except KeyboardInterrupt:
         pass
     m.stop()
+
+if __name__ == "__main__":
+    main()

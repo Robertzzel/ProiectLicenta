@@ -181,13 +181,13 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair, users 
 	return nil
 }
 
-func captureConnectedUsers(ctx context.Context, users *[]int) error {
-	if err := Kafka.CreateTopic(AggregatorStartTopic); err != nil {
+func captureConnectedUsers(ctx context.Context, brokerAddress string, users *[]int) error {
+	if err := Kafka.CreateTopic(brokerAddress, AggregatorStartTopic); err != nil {
 		return err
 	}
-	defer Kafka.DeleteTopic(AggregatorStartTopic)
+	defer Kafka.DeleteTopic(brokerAddress, AggregatorStartTopic)
 
-	uiConsumer := Kafka.NewConsumer(AggregatorStartTopic)
+	uiConsumer := Kafka.NewConsumer(brokerAddress, AggregatorStartTopic)
 	defer uiConsumer.Close()
 
 	if err := uiConsumer.SetOffsetToNow(); err != nil {
@@ -216,12 +216,17 @@ func captureConnectedUsers(ctx context.Context, users *[]int) error {
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("No broker address given")
+		return
+	}
+	brokerAddress := os.Args[1]
 	// initialize
-	if err := Kafka.CreateTopic(AggregatorTopic); err != nil {
+	if err := Kafka.CreateTopic(brokerAddress, AggregatorTopic); err != nil {
 		panic(err)
 	}
 
-	producer := Kafka.NewProducer()
+	producer := Kafka.NewProducer(brokerAddress)
 	defer producer.Close()
 
 	errG, ctx := errgroup.WithContext(NewCtx())
@@ -230,7 +235,7 @@ func main() {
 	fmt.Println("Waiting for signal")
 
 	var usersConnected []int
-	errG.Go(func() error { return captureConnectedUsers(ctx, &usersConnected) })
+	errG.Go(func() error { return captureConnectedUsers(ctx, brokerAddress, &usersConnected) })
 	for len(usersConnected) == 0 {
 		time.Sleep(time.Second / 2)
 	}
@@ -244,10 +249,10 @@ func main() {
 		panic(err)
 	}
 
-	videoConsumer := Kafka.NewConsumer(VideoTopic)
+	videoConsumer := Kafka.NewConsumer(brokerAddress, VideoTopic)
 	defer videoConsumer.Close()
 
-	audioConsumer := Kafka.NewConsumer(AudioTopic)
+	audioConsumer := Kafka.NewConsumer(brokerAddress, AudioTopic)
 	defer audioConsumer.Close()
 
 	// start

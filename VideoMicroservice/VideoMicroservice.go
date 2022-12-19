@@ -43,20 +43,26 @@ func stringToTimestamp(s string) (time.Time, error) {
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("No broker address given")
+		return
+	}
+	brokerAddress := os.Args[1]
+
 	errGroup, ctx := errgroup.WithContext(NewCtx())
 
-	if err := Kafka.CreateTopic(VideoTopic); err != nil {
+	if err := Kafka.CreateTopic(brokerAddress, VideoTopic); err != nil {
 		panic(err)
 	}
-	defer Kafka.DeleteTopic(VideoTopic)
-	if err := Kafka.CreateTopic(VideoStartTopic); err != nil {
+	defer Kafka.DeleteTopic(brokerAddress, VideoTopic)
+	if err := Kafka.CreateTopic(brokerAddress, VideoStartTopic); err != nil {
 		panic(err)
 	}
-	defer Kafka.DeleteTopic(VideoStartTopic)
+	defer Kafka.DeleteTopic(brokerAddress, VideoStartTopic)
 
-	producer := Kafka.NewProducer()
+	producer := Kafka.NewProducer(brokerAddress)
 	defer producer.Close()
-	startConsumer := Kafka.NewConsumer(VideoStartTopic)
+	startConsumer := Kafka.NewConsumer(brokerAddress, VideoStartTopic)
 	defer startConsumer.Close()
 
 	// wait for the start message

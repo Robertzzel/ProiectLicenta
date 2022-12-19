@@ -95,7 +95,7 @@ class MainWindow:
 
         self.topLevelWindow: Optional[tk.Toplevel] = None
         self.videoPlayer: Optional[TkinterVideo] = None
-        self.sendingProcess: Sender = Sender()
+        self.sendingProcess: Sender = Sender(brokerAddress=kafkaAddress)
         self.tabControl.bind('<<NotebookTabChanged>>', self.on_tab_change)
 
         self.root.mainloop()

@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	brokerAddress   = "localhost:9092"
 	brokerNetwork   = "tcp"
 	MaxMessageBytes = 1000000
 )
@@ -42,7 +41,7 @@ type Consumer struct {
 	kafkaReader *kafkago.Reader
 }
 
-func NewProducer() *Producer {
+func NewProducer(brokerAddress string) *Producer {
 	return &Producer{
 		kafkaWriter: &kafkago.Writer{
 			Addr:         kafkago.TCP(brokerAddress),
@@ -83,7 +82,7 @@ func (producer *Producer) Close() error {
 	return producer.kafkaWriter.Close()
 }
 
-func NewConsumer(topic string) *Consumer {
+func NewConsumer(brokerAddress, topic string) *Consumer {
 	return &Consumer{
 		kafkaReader: kafkago.NewReader(
 			kafkago.ReaderConfig{
@@ -165,12 +164,12 @@ func (kc *Consumer) SetOffsetToNow() error {
 	return kc.kafkaReader.SetOffsetAt(context.Background(), time.Now().Add(-time.Second))
 }
 
-func CreateTopic(name string) error {
+func CreateTopic(brokerAddress, name string) error {
 	_, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, name, 0)
 	return err
 }
 
-func DeleteTopic(names ...string) error {
+func DeleteTopic(brokerAddress string, names ...string) error {
 	conn, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, names[0], 0)
 	if err != nil {
 		return err

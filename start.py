@@ -37,10 +37,13 @@ class Sender:
         if not self.build():
             return
 
-        self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress],cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
-        self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
+            self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
+            self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress],cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
+            self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
+        except:
+            self.stop()
 
     def stop(self):
         self.aggregatorProcess.send_signal(signal.SIGINT)

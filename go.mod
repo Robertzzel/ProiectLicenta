@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/BurntSushi/xgb v0.0.0-20210121224620-deaf085860bc
 	github.com/go-vgo/robotgo v1.0.0-beta5.3
+	github.com/google/uuid v1.3.0
 	github.com/icza/mjpeg v0.0.0-20220812133530-f79265a232f2
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
 	github.com/segmentio/kafka-go v0.4.35

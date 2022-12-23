@@ -1,9 +1,9 @@
+import json
 import queue
-from start import Sender
+
 import av
 import time
 import threading
-from typing import Dict, List
 import logging
 from queue import Queue
 import tkinter as tk
@@ -13,10 +13,11 @@ import sounddevice as sd
 import kafka
 from io import BytesIO
 import numpy as np
-from typing import Optional
-from UI.InputsBuffer import InputsBuffer
-import json
+from typing import Optional, Dict, List
+from tkinter import ttk
 from Kafka.Kafka import KafkaConsumerWrapper
+from UI.InputsBuffer import InputsBuffer
+from start import Sender
 
 TOPIC = "aggregator"
 START_TOPIC = "saggregator"
@@ -29,56 +30,27 @@ INPUTS_TOPIC = "inputs"
 DATABASE_TOPIC = "DATABASE"
 
 
-class KafkaWindow:
-    def __init__(self):
-        self.root = tk.Tk()
-
-        self.label = ttk.Label(master=self.root, text="Kafka Address:")
-        self.label.pack()
-        self.input = ttk.Entry(master=self.root)
-        self.input.pack()
-        self.button: ttk.Button = tk.Button(master=self.root, text="SUBMIT", command=self.openMainWindow)
-        self.button.pack()
-
-        self.root.mainloop()
-
-    def checkKafkaAddress(self, address) -> bool:
-        try:
-            kafka.KafkaAdminClient(bootstrap_servers=address)
-        except Exception as ex:
-            return False
-        return True
-
-    def openMainWindow(self):
-        address = self.input.get() if self.input.get() != "" else "localhost:9092"
-        if self.checkKafkaAddress(address):
-            self.root.destroy()
-            MainWindow(address)
-        else:
-            self.notValidLabel = ttk.Label(master=self.root, text="Broker not available on this address")
-            self.notValidLabel.pack()
-
-
 class MainWindow:
     def __init__(self, kafkaAddress: str):
         self.root = tk.Tk()
 
         self.kafkaAddress = kafkaAddress
         self.databaseProducer = kafka.KafkaProducer(bootstrap_servers=self.kafkaAddress, acks=1)
-        self.databaseConsumer = KafkaConsumerWrapper("UI", bootstrap_servers=self.kafkaAddress, auto_offset_reset="earliest")
+        self.databaseConsumer = KafkaConsumerWrapper("UI", bootstrap_servers=self.kafkaAddress,
+                                                     auto_offset_reset="earliest")
         partition = kafka.TopicPartition("UI", 0)
         end_offset = self.databaseConsumer.end_offsets([partition])
         self.databaseConsumer.seek(partition, list(end_offset.values())[0])
 
         self.loggedInUserID = None
-        self.statusLabel = ttk.Label(master=self.root, text="")
+        self.statusLabel = tk.Label(master=self.root, text="")
         self.statusLabel.pack()
         self.tabControl = ttk.Notebook(self.root)
         self.loginTab = tk.Frame(self.tabControl)
         self.receiverTab = tk.Frame(self.tabControl)
         self.senderTab = tk.Frame(self.tabControl)
         self.videosTab = tk.Frame(self.tabControl)
-        ttk.Label(master=self.videosTab, text="Log In to see your videos").pack(expand=True, fill="both")
+        tk.Label(master=self.videosTab, text="Log In to see your videos").pack(expand=True, fill="both")
         self.tabControl.add(child=self.loginTab, text="Login")
         self.tabControl.add(child=self.receiverTab, text="Receive")
         self.tabControl.add(child=self.senderTab, text="Send")
@@ -104,7 +76,7 @@ class MainWindow:
         if event.widget.tab('current')['text'] != "My Videos" or self.loggedInUserID is None:
             return
 
-        msg = self.databaseCall("UI", "READ_VIDEOS", "users", json.dumps({"ID": self.loggedInUserID}), b"")
+        msg = self.databaseCall("UI", "READ_VIDEOS", json.dumps({"ID": self.loggedInUserID}).encode())
         videos: List[Dict] = json.loads(msg.value)
 
         for widget in self.videosTab.winfo_children():
@@ -112,8 +84,9 @@ class MainWindow:
 
         for i, video in enumerate(videos):
             print(video.get("ID"))
-            ttk.Label(master=self.videosTab, text=video.get("CreatedAt")).grid(row=i, column=0)
-            ttk.Button(master=self.videosTab, text="Download", command=lambda id=video.get("ID"): self.downloadVideo(id)).grid(row=i, column=1)
+            tk.Label(master=self.videosTab, text=video.get("CreatedAt")).grid(row=i, column=0)
+            tk.Button(master=self.videosTab, text="Download",
+                      command=lambda id=video.get("ID"): self.downloadVideo(id)).grid(row=i, column=1)
 
     def downloadVideo(self, videoId: int):
         print(videoId)
@@ -134,15 +107,15 @@ class MainWindow:
         return next(self.databaseConsumer)
 
     def configureLoginTab(self):
-        self.loginUsernameLabel: ttk.Label = ttk.Label(master=self.loginTab, text="Username:")
+        self.loginUsernameLabel: tk.Label = tk.Label(master=self.loginTab, text="Username:")
         self.loginUsernameLabel.pack()
-        self.loginUsernameEntry: ttk.Entry = ttk.Entry(master=self.loginTab)
+        self.loginUsernameEntry: tk.Entry = tk.Entry(master=self.loginTab)
         self.loginUsernameEntry.pack()
-        self.loginPasswordLabel: ttk.Label = ttk.Label(master=self.loginTab, text="Password:")
+        self.loginPasswordLabel: tk.Label = tk.Label(master=self.loginTab, text="Password:")
         self.loginPasswordLabel.pack()
-        self.loginPasswordEntry: ttk.Entry = ttk.Entry(master=self.loginTab)
+        self.loginPasswordEntry: tk.Entry = tk.Entry(master=self.loginTab)
         self.loginPasswordEntry.pack()
-        self.loginButton: ttk.Button = tk.Button(master=self.loginTab, text="LOGIN", command=self.login)
+        self.loginButton: tk.Button = tk.Button(master=self.loginTab, text="LOGIN", command=self.login)
         self.loginButton.pack()
 
     def login(self):
@@ -179,7 +152,8 @@ class MainWindow:
         self.receiverButton.config(text="STOP", command=self.closeWindow)
 
         self.topLevelWindow = tk.Toplevel()
-        self.videoPlayer = TkinterVideo(master=self.topLevelWindow, kafkaAddress=self.kafkaAddress, userId=self.loggedInUserID)
+        self.videoPlayer = TkinterVideo(master=self.topLevelWindow, kafkaAddress=self.kafkaAddress,
+                                        userId=self.loggedInUserID)
 
         self.videoPlayer.pack(expand=True, fill="both")
         self.videoPlayer.play()
@@ -202,6 +176,35 @@ class MainWindow:
     def stopStreaming(self):
         self.senderButton.config(text="START", command=self.startStreaming)
         self.sendingProcess.stop()
+
+class KafkaWindow:
+    def __init__(self):
+        self.root = tk.Tk()
+
+        self.label = ttk.Label(master=self.root, text="Kafka Address:")
+        self.label.pack()
+        self.input = ttk.Entry(master=self.root)
+        self.input.pack()
+        self.button: ttk.Button = tk.Button(master=self.root, text="SUBMIT", command=self.openMainWindow)
+        self.button.pack()
+
+        self.root.mainloop()
+
+    def checkKafkaAddress(self, address) -> bool:
+        try:
+            kafka.KafkaAdminClient(bootstrap_servers=address)
+        except Exception as ex:
+            return False
+        return True
+
+    def openMainWindow(self):
+        address = self.input.get() if self.input.get() != "" else "localhost:9092"
+        if self.checkKafkaAddress(address):
+            self.root.destroy()
+            MainWindow(address)
+        else:
+            self.notValidLabel = ttk.Label(master=self.root, text="Broker not available on this address")
+            self.notValidLabel.pack()
 
 
 class TkinterVideo(tk.Label):

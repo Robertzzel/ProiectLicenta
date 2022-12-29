@@ -3,6 +3,8 @@ import signal
 import subprocess
 import sys
 import pathlib
+import platform
+import uuid
 
 
 class Sender:
@@ -14,9 +16,10 @@ class Sender:
         self.inputExecutorProcess = None
         self.buildProcess = None
         self.path = str(pathlib.Path(os.getcwd()).parent)
+        self.aggregatorTopic = str(uuid.uuid1())
+        self.inputsTopic = str(uuid.uuid1())
 
     def build(self):
-
         self.buildProcess = subprocess.Popen(["/bin/sh", "./build"], cwd=self.path, stdout=sys.stdout, stderr=subprocess.PIPE)
         stdout, stderr = self.buildProcess.communicate()
 
@@ -34,16 +37,17 @@ class Sender:
         return True
 
     def start(self):
-        if not self.build():
+        if not self.build() or platform.system().lower() == "windows":
             return
 
         try:
             self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
             self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
-            self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress],cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
-            self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
-        except:
+            self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress, self.aggregatorTopic],cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
+            self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, self.inputsTopic], cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
+        except Exception as ex:
             self.stop()
+            raise ex
 
     def stop(self):
         self.aggregatorProcess.send_signal(signal.SIGINT)

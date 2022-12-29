@@ -9,7 +9,7 @@ go build AggregatorMicroservice.go
 cd ..
 
 cd DatabaseMicroservice
-go build DatabaseMicroservice.go
+go build DatabaseMicroservice.go models.go
 cd ..
 
 #cd PingMicroservice

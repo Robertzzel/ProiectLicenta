@@ -184,19 +184,45 @@ func handleVideoRequest(db *gorm.DB, operation string, input []byte, data []byte
 }
 
 func handleLogin(db *gorm.DB, message []byte) ([]byte, error) {
-	user, err := getUserFromMessage(message)
-	if err != nil {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
 		return nil, err
 	}
 
-	if err = db.First(&user, "name = ? and password = ?", user.Name, hash(user.Password)).Error; err != nil {
+	name, nameExists := input["Name"]
+	password, passwordExists := input["Password"]
+	aggregatorTopic, aggregatorTopicExists := input["AggregatorTopic"]
+	inputsTopic, inputsTopicExists := input["InputsTopic"]
+
+	if !nameExists || !passwordExists || !aggregatorTopicExists || !inputsTopicExists {
+		return nil, errors.New("name, password and topic needed")
+	}
+
+	var user User
+	if err := db.First(&user, "name = ? and password = ?", name, hash(password)).Error; err != nil {
 		return nil, err
 	}
 
-	user.CallPassword = uuid.NewString()[:4]
-	user.active = true
+	if user.SessionId != 0 {
+		var foundSession Session
+		_ = db.Where(&Session{Model: gorm.Model{ID: user.SessionId}}).First(&foundSession).Error != nil &&
+			db.Delete(&foundSession).Error != nil // TODO DO SOMETHING WITH IS VALUE
+	}
 
-	if err = db.Save(&user).Error; err != nil {
+	var session = Session{TopicAggregator: aggregatorTopic, TopicInputs: inputsTopic}
+	if err := db.Create(&session).Error; err != nil {
+		return nil, err
+	}
+
+	if err := db.Model(&user).Update("call_password", uuid.NewString()[:4]).Error; err != nil {
+		return nil, err
+	}
+
+	if err := db.Model(&user).Update("session_id", session.ID).Error; err != nil {
+		return nil, err
+	}
+
+	if err := db.Model(&session).Association("Users").Append(&user); err != nil {
 		return nil, err
 	}
 
@@ -215,7 +241,6 @@ func handleRegister(db *gorm.DB, message []byte) ([]byte, error) {
 
 	user.Password = hash(user.Password)
 	user.CallKey = uuid.NewString() // PANICS
-	user.active = false
 
 	if err = db.Create(&user).Error; err != nil {
 		return nil, err
@@ -254,17 +279,43 @@ func handleAddVideo(db *gorm.DB, message []byte) ([]byte, error) {
 	return []byte("video added"), nil
 }
 
-/*
-LOGIN, REGISTER, ADD_VIDEO, IS_ACTIVE, GET_BY_KEY, SET_ACTIVE, SET_INACTIVE, GET_VIDEOS_BY_USER,
-DOWNLOAD VIDEO BY ID, DISCONNECT,
-*/
-
 func handleIsUserActive(db *gorm.DB, message []byte) ([]byte, error) {
 	return nil, nil
 }
 
 func handleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) {
-	return nil, nil
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	key, keyExists := input["Key"]
+	password, passwordExists := input["Password"]
+
+	if !keyExists || !passwordExists {
+		return nil, errors.New("password AND key needed")
+	}
+
+	var user User
+	if err := db.Where(&User{CallKey: key, CallPassword: password}).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	var seesion Session
+	if err := db.Where(&Session{Model: gorm.Model{ID: user.SessionId}}).First(&seesion).Error; err != nil {
+		return nil, err
+	}
+
+	result, err := json.Marshal(map[string]string{"AggregatorTopic": seesion.TopicAggregator, "InputsTopic": seesion.TopicInputs})
+	if err != nil {
+		return nil, err
+	}
+
+	if err = db.Model(&seesion).Association("Users").Append(&user); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func handleSetUserActive(db *gorm.DB, message []byte) ([]byte, error) {
@@ -383,7 +434,7 @@ func main() {
 		panic("cannot open the database")
 	}
 
-	if err = db.AutoMigrate(&User{}, &Video{}); err != nil {
+	if err = db.AutoMigrate(&Session{}, &User{}, &Video{}); err != nil {
 		panic(err)
 	}
 

@@ -2,6 +2,9 @@ import json
 import tkinter as tk
 from Kafka.Kafka import *
 import uuid
+from start import Sender
+from typing import Optional
+from ControlWindow import TkinterVideo
 
 WHITE = "white"
 DATABASE_TOPIC = "DATABASE"
@@ -31,6 +34,16 @@ class MainWindow2(tk.Tk):
         self.menuFrame.bind("<<LoginClick>>", lambda x: self.mainFrame.buildLoginFrame())
         self.menuFrame.bind("<<RegisterClick>>", lambda x: self.mainFrame.buildRegisterFrame())
         self.menuFrame.bind("<<KafkaClick>>", lambda x: self.mainFrame.buildKafkaFrame())
+        self.protocol("WM_DELETE_WINDOW", self.on_exit)
+
+    def on_exit(self):
+        if self.mainFrame.videoPlayer is not None:
+            self.mainFrame.videoPlayer.stop()
+
+        if self.mainFrame.sender is not None:
+            self.mainFrame.sender.stop()
+
+        self.destroy()
 
 
 class MenuFrame(tk.Frame):
@@ -84,6 +97,9 @@ class MainFrame(tk.Frame):
         self.kafkaAddress = None
         self.databaseProducer = None  # KafkaProducerWrapper(bootstrap_servers=self.kafkaAddress, acks=1)
         self.databaseConsumer = None
+        self.sender: Optional[Sender] = None
+        self.videoPlayer: Optional[TkinterVideo] = None
+        self.videoPlayerWindow: Optional[tk.Toplevel] = None
 
     def buildRemoteControlFrame(self):
         self.cleanFrame()
@@ -111,12 +127,25 @@ class MainFrame(tk.Frame):
         divRight = tk.Frame(rightFrame, background=WHITE)
         divRight.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         tk.Label(master=divRight, text="USER ID:", font=("Arial", 17), background=WHITE).grid(row=0, column=0, padx=(0, 20))
-        tk.Entry(master=divRight, font=("Arial", 17)).grid(row=0, column=2)
+        idEntry = tk.Entry(master=divRight, font=("Arial", 17))
+        idEntry.grid(row=0, column=2)
 
         tk.Label(master=divRight, text="PASSWORD:", font=("Arial", 17), background=WHITE).grid(row=1, column=0, pady=(30, 0), padx=(0, 20))
-        tk.Entry(master=divRight, font=("Arial", 17)).grid(row=1, column=2, pady=(30, 0))
+        passwordEntry = tk.Entry(master=divRight, font=("Arial", 17))
+        passwordEntry.grid(row=1, column=2, pady=(30, 0))
 
-        tk.Button(master=divRight, text="SUBMIT", font=("Arial", 17)).grid(row=2, column=1, pady=(30, 0))
+        tk.Button(master=divRight, text="SUBMIT", font=("Arial", 17), command=lambda: self.startCall(idEntry.get(), passwordEntry.get())).grid(row=2, column=1, pady=(30, 0))
+
+    def startCall(self, callKey: str, callPassword: str):
+        responseMessage = self.databaseCall(MY_TOPIC, "GET_CALL_BY_KEY", json.dumps({"Key": callKey, "Password": callPassword}).encode())
+        responseValue = json.loads(responseMessage.value())
+        aggregatorTopic = responseValue["AggregatorTopic"]
+        inputsTopic = responseValue["InputsTopic"]
+
+        self.videoPlayerWindow = tk.Toplevel()
+        self.videoPlayer = TkinterVideo(master=self.videoPlayerWindow, aggregatorTopic=aggregatorTopic, inputsTopic=inputsTopic, kafkaAddress=self.kafkaAddress)
+        self.videoPlayer.pack(expand=True, fill="both")
+        self.videoPlayer.play()
 
     def buildMyVideosFrame(self):
         self.cleanFrame()
@@ -159,7 +188,7 @@ class MainFrame(tk.Frame):
         if username == "" or password == "":
             return
 
-        loggInDetails = {"Name": username, "Password": password}
+        loggInDetails = {"Name": username, "Password": password, "AggregatorTopic": self.sender.aggregatorTopic, "InputsTopic": self.sender.inputsTopic}
         message = self.databaseCall(MY_TOPIC, "LOGIN", json.dumps(loggInDetails).encode())
 
         status = None
@@ -176,6 +205,10 @@ class MainFrame(tk.Frame):
         self.callKey = message.get("CallKey", None)
         self.callPassword = message.get("CallPassword", None)
         self.buildLoginFrame()
+
+    def startAggregator(self):
+        self.sender = Sender(self.kafkaAddress)
+        self.sender.start()
 
     def disconnect(self):
         self.userId = None
@@ -256,6 +289,8 @@ class MainFrame(tk.Frame):
                     'auto.offset.reset': 'latest',
                     'allow.auto.create.topics': "true",
                 }, [MY_TOPIC])
+
+            self.startAggregator()
         except Exception as ex:
             print(ex)
             self.databaseProducer = None

@@ -5,6 +5,37 @@ import sys
 import pathlib
 import platform
 import uuid
+from typing import *
+
+import Kafka.Kafka
+
+
+class Merger:
+    def __init__(self, brokerAddress: str):
+        self.broker = brokerAddress
+        self.topic = str(uuid.uuid1())
+        self.process: Optional[subprocess.Popen] = None
+        self.path = str(pathlib.Path(os.getcwd()).parent)
+        Kafka.Kafka.createTopic(self.broker, self.topic)
+
+    def start(self, sessionId: int):
+        self.process = subprocess.Popen(["venv/bin/python3", "MergerMicroservice/MergerMicroservice.py", self.broker, self.topic, str(sessionId)],
+                                        cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
+
+    def stop(self):
+        if self.process is None:
+            return
+
+        #self.process.send_signal(signal.SIGINT)
+
+        try:
+            self.process.wait(timeout=10)
+        except subprocess.TimeoutExpired as ex:
+            self.process.kill()
+        finally:
+            print("merger process closed")
+
+        Kafka.Kafka.deleteTopic(self.broker, self.topic)
 
 
 class Sender:
@@ -16,8 +47,12 @@ class Sender:
         self.inputExecutorProcess = None
         self.buildProcess = None
         self.path = str(pathlib.Path(os.getcwd()).parent)
+
         self.aggregatorTopic = str(uuid.uuid1())
         self.inputsTopic = str(uuid.uuid1())
+        self.videoTopic = str(uuid.uuid1())
+        self.audioTopic = str(uuid.uuid1())
+        self.topics = [self.aggregatorTopic, self.inputsTopic, f"s{self.videoTopic}", self.videoTopic, f"s{self.audioTopic}", self.audioTopic]
 
     def build(self):
         self.buildProcess = subprocess.Popen(["/bin/sh", "./build"], cwd=self.path, stdout=sys.stdout, stderr=subprocess.PIPE)
@@ -36,63 +71,73 @@ class Sender:
 
         return True
 
-    def start(self):
+    def start(self, mergerTopic: str):
         if not self.build() or platform.system().lower() == "windows":
             return
 
+        self.createTopics()
+
         try:
-            self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
-            self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress],cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
-            self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress, self.aggregatorTopic],cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
-            self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, self.inputsTopic], cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
+            self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress, self.videoTopic],
+                                                 cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
+            self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress, self.audioTopic],
+                                                 cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
+            self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress, self.aggregatorTopic, self.videoTopic, self.audioTopic, mergerTopic],
+                                                      cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
+            self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, self.inputsTopic],
+                                                         cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
         except Exception as ex:
             self.stop()
             raise ex
 
     def stop(self):
-        self.aggregatorProcess.send_signal(signal.SIGINT)
-        self.videoProcess.send_signal(signal.SIGINT)
-        self.audioProcess.send_signal(signal.SIGINT)
-        self.inputExecutorProcess.send_signal(signal.SIGINT)
+        if self.aggregatorProcess is not None:
+            self.aggregatorProcess.send_signal(signal.SIGINT)
+
+        if self.videoProcess is not None:
+            self.videoProcess.send_signal(signal.SIGINT)
+
+        if self.audioProcess is not None:
+            self.audioProcess.send_signal(signal.SIGINT)
+
+        if self.inputsTopic is not None:
+            self.inputExecutorProcess.send_signal(signal.SIGINT)
 
         try:
             self.videoProcess.wait(timeout=5)
         except subprocess.TimeoutExpired as ex:
-            print("video process not closing")
             self.videoProcess.kill()
+        finally:
+            print("video process closed")
 
         try:
             self.audioProcess.wait(timeout=5)
         except subprocess.TimeoutExpired as ex:
-            print("audio process not closing")
             self.aggregatorProcess.kill()
+        finally:
+            print("audio process closed")
 
         try:
             self.inputExecutorProcess.wait(timeout=5)
         except subprocess.TimeoutExpired as ex:
-            print("input process not closing")
             self.inputExecutorProcess.kill()
+        finally:
+            print("input process closed")
 
         try:
             self.aggregatorProcess.wait(timeout=5)
         except subprocess.TimeoutExpired as ex:
-            print("aggregator process not closing")
             self.aggregatorProcess.kill()
+        finally:
+            print("aggregator process closed")
 
-def main():
-    if len(sys.argv) < 2:
-        print("No broker address given")
-        return
+        try:
+            self.deleteTopics()
+        except BaseException as ex:
+            print(ex)
 
-    brokerAddress = sys.argv[1]
+    def deleteTopics(self):
+        [Kafka.Kafka.deleteTopic(self.brokerAddress, topic) for topic in self.topics]
 
-    m = Sender(brokerAddress)
-    m.start()
-    try:
-        input("Enter to stop")
-    except KeyboardInterrupt:
-        pass
-    m.stop()
-
-if __name__ == "__main__":
-    main()
+    def createTopics(self):
+        [Kafka.Kafka.createTopic(self.brokerAddress, topic) for topic in self.topics]

@@ -103,7 +103,7 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 		}
 		i := 0
 
-		for time.Now().Before(nextChunkEndTime) && r.ctx.Err() == nil {
+		for r.ctx.Err() == nil && time.Now().Before(nextChunkEndTime) {
 			if err := video.AddFrame(<-r.imageBuffer); err != nil {
 				log.Println("Error adding frame to video file ", err)
 				return err
@@ -111,11 +111,9 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 			i++
 		}
 
-		fmt.Printf("Frames: %d\n", i)
-
 		r.VideoBuffer <- videoFileName
 
-		if err := video.Close(); err != nil {
+		if err = video.Close(); err != nil {
 			return err
 		}
 	}

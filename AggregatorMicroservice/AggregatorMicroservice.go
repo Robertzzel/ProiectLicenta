@@ -15,17 +15,14 @@ import (
 	"time"
 )
 
-const (
-	VideoTopic      = "video"
-	VideoStartTopic = "svideo"
-	AudioTopic      = "audio"
-	AudioStartTopic = "saudio"
-	MergeTopic      = "MERGER"
-)
-
 var (
 	AggregatorTopic      string
 	AggregatorStartTopic string
+	VideoTopic           string
+	VideoStartTopic      string
+	AudioTopic           string
+	AudioStartTopic      string
+	MergeTopic           string
 )
 
 type AudioVideoPair struct {
@@ -79,9 +76,9 @@ func SendVideo(producer *Kafka.Producer, video []byte) error {
 		return err
 	}
 
-	//if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: MergeTopic}); err != nil {
-	//	return err
-	//}
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: MergeTopic}); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -172,7 +169,7 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error 
 	return nil
 }
 
-func waitForAUser(brokerAddress string) error {
+func waitForAUser(ctx context.Context, brokerAddress string) error {
 	uiConsumer := Kafka.NewConsumer(brokerAddress, AggregatorStartTopic)
 	defer uiConsumer.Close()
 
@@ -180,7 +177,7 @@ func waitForAUser(brokerAddress string) error {
 		panic(err)
 	}
 
-	for {
+	for ctx.Err() == nil {
 		_, err := uiConsumer.Consume(time.Second * 2)
 		if errors.Is(err, context.DeadlineExceeded) {
 			continue
@@ -189,16 +186,27 @@ func waitForAUser(brokerAddress string) error {
 		}
 		return nil
 	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return nil
 }
 
 func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("No broker address and topic given")
+	if len(os.Args) < 6 {
+		fmt.Println("No broker address and topics given")
 		return
 	}
 	brokerAddress := os.Args[1]
 	AggregatorTopic = os.Args[2]
 	AggregatorStartTopic = "s" + AggregatorTopic
+	VideoTopic = os.Args[3]
+	VideoStartTopic = "s" + VideoTopic
+	AudioTopic = os.Args[4]
+	AudioStartTopic = "s" + AudioTopic
+	MergeTopic = os.Args[5]
+	log.Println("Aggregator: ", MergeTopic)
+
 	// initialize
 	if err := Kafka.CreateTopic(brokerAddress, AggregatorTopic); err != nil {
 		panic(err)
@@ -215,11 +223,10 @@ func main() {
 	defer Kafka.DeleteTopic(brokerAddress, AggregatorStartTopic)
 
 	fmt.Println("Waiting for a signal")
-	if err := waitForAUser(brokerAddress); err != nil {
+	if err := waitForAUser(ctx, brokerAddress); err != nil {
 		panic(err)
 	}
-
-	fmt.Println("Starting...")
+	fmt.Println("Starting aggregator...")
 
 	ts := fmt.Sprint(time.Now().UnixMilli()/1000 + 1)
 	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(ts), Topic: AudioStartTopic}); err != nil {
@@ -256,6 +263,7 @@ func main() {
 	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte("quit"), Topic: MergeTopic}); err != nil {
 		log.Println(err)
 	}
+
 	fmt.Println("Quit signal sent")
 
 	defer fmt.Println("Cleanup Done")

@@ -59,4 +59,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt as ex:
+        print(ex)
+    except Exception as ex:
+        print(ex)

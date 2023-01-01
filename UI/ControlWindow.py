@@ -1,23 +1,17 @@
-import json
 import queue
 import av
-import time
-import threading
 import logging
 from queue import Queue
 import tkinter as tk
-import tkinter.ttk as ttk
 from PIL import ImageTk, Image, ImageOps
 import sounddevice as sd
 from kafka import KafkaAdminClient
 from Kafka.Kafka import *
 from io import BytesIO
 import numpy as np
-from typing import Optional, Dict, List
-from tkinter import ttk
+from typing import Optional
 from Kafka.Kafka import KafkaConsumerWrapper
 from UI.InputsBuffer import InputsBuffer
-from start import Sender
 import uuid
 
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
@@ -90,7 +84,10 @@ class TkinterVideo(tk.Label):
             if inputs != "":
                 self.kafkaProducer.produce(topic=self.inputsTopic, value=inputs.encode())
 
-        KafkaAdminClient(bootstrap_servers=self.kafkaAddress).delete_topics([self.inputsTopic])
+        try:
+            KafkaAdminClient(bootstrap_servers=self.kafkaAddress).delete_topics([self.inputsTopic])
+        except Exception as ex:
+            print(ex)
 
     def play(self):
         if self.streamReceiverThread is not None:
@@ -175,7 +172,7 @@ class TkinterVideo(tk.Label):
 
         while self.streamRunning:
             try:
-                message = next(self.streamConsumer).value()
+                message = self.streamConsumer.consumeMessage(timeoutSeconds=1).value()
             except StopIteration:
                 continue
             with av.open(BytesIO(message)) as container:
@@ -184,7 +181,7 @@ class TkinterVideo(tk.Label):
 
         while self.streamRunning:
             try:
-                with av.open(BytesIO(next(self.streamConsumer).value())) as container:
+                with av.open(BytesIO(self.streamConsumer.consumeMessage(timeoutSeconds=1).value())) as container:
                     container.fast_seek, container.discard_corrupt = True, True
 
                     self.clearAudioAndVideoQueues()

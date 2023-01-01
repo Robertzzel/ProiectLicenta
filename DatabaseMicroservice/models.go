@@ -33,6 +33,7 @@ type Session struct {
 	gorm.Model
 	TopicAggregator string  `gorm:"not null"`
 	TopicInputs     string  `gorm:"not null"`
+	MergerTopic     string  `gorm:"not null"`
 	Users           []*User `gorm:"foreignKey:SessionId"`
 }
 
@@ -44,20 +45,4 @@ type JsonUser struct {
 
 func (inputUser JsonUser) ToUser() User {
 	return User{Name: inputUser.Name, Password: inputUser.Password, Model: gorm.Model{ID: inputUser.ID}}
-}
-
-type JsonVideo struct {
-	FilePath string     `json:"FilePath"`
-	Users    []JsonUser `json:"Users"`
-	ID       uint       `json:"ID"`
-	Content  []byte     `json:"Content"`
-}
-
-func (inputVideo JsonVideo) ToVideo() Video {
-	users := make([]*User, 0)
-	for _, inputUser := range inputVideo.Users {
-		user := inputUser.ToUser()
-		users = append(users, &user)
-	}
-	return Video{FilePath: inputVideo.FilePath, Users: users, Model: gorm.Model{ID: inputVideo.ID}}
 }

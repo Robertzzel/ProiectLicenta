@@ -1,8 +1,7 @@
 import json
 import tkinter as tk
 from Kafka.Kafka import *
-import uuid
-from start import Sender
+from start import *
 from typing import Optional
 from ControlWindow import TkinterVideo
 
@@ -100,6 +99,7 @@ class MainFrame(tk.Frame):
         self.sender: Optional[Sender] = None
         self.videoPlayer: Optional[TkinterVideo] = None
         self.videoPlayerWindow: Optional[tk.Toplevel] = None
+        self.merger: Optional[Merger] = None
 
     def buildRemoteControlFrame(self):
         self.cleanFrame()
@@ -146,6 +146,20 @@ class MainFrame(tk.Frame):
         self.videoPlayer = TkinterVideo(master=self.videoPlayerWindow, aggregatorTopic=aggregatorTopic, inputsTopic=inputsTopic, kafkaAddress=self.kafkaAddress)
         self.videoPlayer.pack(expand=True, fill="both")
         self.videoPlayer.play()
+        self.videoPlayerWindow.protocol("WM_DELETE_WINDOW", self.exitCallWindow)
+
+    def exitCallWindow(self):
+        if self.videoPlayer is not None:
+            self.videoPlayer.stop()
+
+        if self.videoPlayerWindow is not None:
+            self.videoPlayerWindow.destroy()
+
+        if self.sender is not None:
+            self.sender.stop()
+
+        if self.merger is not None:
+            self.merger.stop()
 
     def buildMyVideosFrame(self):
         self.cleanFrame()
@@ -155,8 +169,17 @@ class MainFrame(tk.Frame):
         div.pack()
 
         msg = self.databaseCall(MY_TOPIC, "GET_VIDEOS_BY_USER", json.dumps({"ID": self.userId}).encode())
-        data = json.loads(msg.value)
-        print(data)
+        data = json.loads(msg.value())
+
+        for i, video in enumerate(data):
+            tk.Label(master=div, text=video.get("CreatedAt")).grid(row=i, column=0)
+            tk.Button(master=div, text="Download",
+                      command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)).grid(row=i, column=1)
+
+    def downloadVideo(self, videoId: int):
+        msg, headers = self.databaseCall("UI", "DOWNLOAD_VIDEO_BY_ID", str(videoId).encode(), bigFile=True)
+        with open("downloadedVideo.mp4", "wb") as f:
+            f.write(msg)
 
     def buildLoginFrame(self):
         self.cleanFrame()
@@ -188,7 +211,10 @@ class MainFrame(tk.Frame):
         if username == "" or password == "":
             return
 
-        loggInDetails = {"Name": username, "Password": password, "AggregatorTopic": self.sender.aggregatorTopic, "InputsTopic": self.sender.inputsTopic}
+        self.sender = Sender(self.kafkaAddress)
+        self.merger = Merger(self.kafkaAddress)
+
+        loggInDetails = {"Name": username, "Password": password, "AggregatorTopic": self.sender.aggregatorTopic, "InputsTopic": self.sender.inputsTopic, "MergerTopic": self.merger.topic}
         message = self.databaseCall(MY_TOPIC, "LOGIN", json.dumps(loggInDetails).encode())
 
         status = None
@@ -204,15 +230,30 @@ class MainFrame(tk.Frame):
         self.userName = username
         self.callKey = message.get("CallKey", None)
         self.callPassword = message.get("CallPassword", None)
+
+        self.startAggregator(self.merger.topic)
+        self.startMerger(message.get("SessionId", None))
+
         self.buildLoginFrame()
 
-    def startAggregator(self):
-        self.sender = Sender(self.kafkaAddress)
-        self.sender.start()
+    def startAggregator(self, mergerTopic: str):
+        self.sender.start(str(mergerTopic))
+
+    def startMerger(self, sessionId: int):
+        self.merger.start(sessionId)
 
     def disconnect(self):
         self.userId = None
         self.userName = None
+
+        if self.sender is not None:
+            self.sender.stop()
+        self.sender = None
+
+        if self.merger is not None:
+            self.merger.stop()
+        self.merger = None
+
         self.buildLoginFrame()
 
     def buildRegisterFrame(self):
@@ -244,7 +285,7 @@ class MainFrame(tk.Frame):
         loggInDetails = {"Name": username, "Password": password}
         message = self.databaseCall("UI", "REGISTER", json.dumps(loggInDetails).encode())
 
-        status: str = None
+        status: Optional[str] = None
         for header in message.headers():
             if header[0] == "status":
                 status = header[1].decode()
@@ -263,6 +304,7 @@ class MainFrame(tk.Frame):
             tk.Button(master=self, text="CONNECT", font=("Arial", 17),
                       command=lambda: self.getKafkaConnection(entry.get() if entry.get() != "" else "localhost:9092")).pack(pady=(30, 0))
         else:
+            tk.Label(master=self, text=f"Connected to {self.kafkaAddress}").pack(pady=(30, 0))
             tk.Button(master=self, text="DISCONNECT", font=("Arial", 17), command=lambda: self.resetKafkaConnection()).pack(pady=(30, 0))
 
     def cleanFrame(self):
@@ -280,6 +322,8 @@ class MainFrame(tk.Frame):
     def getKafkaConnection(self, address: str):
         try:
             self.kafkaAddress = address
+            checkKafkaActive(self.kafkaAddress)
+
             self.databaseProducer = KafkaProducerWrapper({'bootstrap.servers': self.kafkaAddress})
 
             createTopic(self.kafkaAddress, MY_TOPIC)
@@ -290,7 +334,6 @@ class MainFrame(tk.Frame):
                     'allow.auto.create.topics': "true",
                 }, [MY_TOPIC])
 
-            self.startAggregator()
         except Exception as ex:
             print(ex)
             self.databaseProducer = None
@@ -301,11 +344,10 @@ class MainFrame(tk.Frame):
         return True
 
     def resetKafkaConnection(self):
-        if self.databaseProducer:
-            self.databaseProducer.close()
+        if self.databaseProducer is not None:
             self.databaseProducer = None
 
-        if self.databaseConsumer:
+        if self.databaseConsumer is not None:
             self.databaseConsumer.close()
             self.databaseConsumer = None
 

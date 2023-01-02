@@ -1,5 +1,6 @@
-import threading
+from __future__ import annotations
 
+from typing import *
 import confluent_kafka as kafka
 from confluent_kafka.admin import AdminClient
 from math import ceil
@@ -7,12 +8,25 @@ from typing import List
 import time
 
 
+class CustomKafkaMessage:
+    def __init__(self, value: bytes, headers: List, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.savedValue = value
+        self.savedHeaders = headers
+
+    def value(self):
+        return self.savedValue
+
+    def headers(self):
+        return self.savedHeaders
+
+
 class KafkaProducerWrapper(kafka.Producer):
     def __init__(self, config):
         super().__init__(config)
         self.maxSingleMessageSize = 500_000
 
-    def sendBigMessage(self, topic: str, value=None, headers=None, key=None, partition=0, timestamp_ms=None):
+    def sendBigMessage(self, topic: str, value=None, headers=None, key=None, partition=0):
         numberOfMessages = ceil(len(value) / self.maxSingleMessageSize)
         numberOfMessagesHeader = ("number-of-messages", str(numberOfMessages).zfill(5).encode())
         if headers is None:
@@ -32,9 +46,9 @@ class KafkaConsumerWrapper(kafka.Consumer):
         super().__init__(config)
         self.subscribe(topics)
 
-    def __next__(self):
+    def __next__(self) -> kafka.Message:
         while True:
-            msg = self.poll(1)
+            msg = self.poll(0.25)
 
             if msg is None:
                 continue
@@ -43,8 +57,9 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
             return msg
 
-    def receiveBigMessage(self, interMessageTimeoutSeconds: int = None):
-        message = self.consumeMessage(interMessageTimeoutSeconds)
+    def receiveBigMessage(self) -> Optional[kafka.Message | CustomKafkaMessage]:
+        message = self.consumeMessage()
+
         headersToBeReturned: List[str, bytes] = list(
             filter(lambda h: h[0] not in ("number-of-messages", "message-number"), message.headers()))
         numberOfMessages: int = 0
@@ -59,7 +74,7 @@ class KafkaConsumerWrapper(kafka.Consumer):
         messages: List[bytes] = [b""] * numberOfMessages
         messages[currentMessageNumber] = message.value()
         for i in range(numberOfMessages - 1):
-            message = self.consumeMessage(interMessageTimeoutSeconds)
+            message = self.consumeMessage()
             for header in message.headers():
                 if header[0] == "message-number":
                     currentMessageNumber = int(header[1].decode())
@@ -69,12 +84,12 @@ class KafkaConsumerWrapper(kafka.Consumer):
         for message in messages:
             finalMessage += message
 
-        return finalMessage, headersToBeReturned
+        return CustomKafkaMessage(value=finalMessage, headers=headersToBeReturned)
 
-    def consumeMessage(self, timeoutSeconds: int = None):
+    def consumeMessage(self, timeoutSeconds: int = None) -> Optional[kafka.Message]:
         if timeoutSeconds is None:
             while True:
-                msg = self.poll(0.5)
+                msg = self.poll(0.25)
 
                 if msg is None:
                     continue
@@ -82,18 +97,18 @@ class KafkaConsumerWrapper(kafka.Consumer):
                     raise Exception(f"Consumer error: {msg.error()}")
 
                 return msg
-        else:
-            s = time.time() + timeoutSeconds
-            while time.time() < s:
-                msg = self.poll(0.5)
 
-                if msg is None:
-                    continue
-                if msg.error():
-                    raise Exception(f"Consumer error: {msg.error()}")
+        s = time.time() + timeoutSeconds
+        while time.time() < s:
+            msg = self.poll(0.5)
 
-                return msg
-            raise StopIteration()
+            if msg is None:
+                continue
+            if msg.error():
+                raise Exception(f"Consumer error: {msg.error()}")
+
+            return msg
+        return None
 
 
 def createTopic(brokerAddress: str, topic: str, partitions: int = 1):
@@ -110,26 +125,10 @@ def deleteTopic(brokerAddress: str, topic: str):
         time.sleep(0.01)
 
 
-def checkKafkaActive(brokerAddress: str):
+def checkKafkaActive(brokerAddress: str) -> bool:
     import kafka
-    kafka.KafkaConsumer(bootstrap_servers=[brokerAddress])
-
-def receive(consumer: KafkaConsumerWrapper):
-    msg = consumer.receiveBigMessage()
-    print(msg)
-
-
-if __name__ == "__main__":
-    consumer = KafkaConsumerWrapper({
-        'bootstrap.servers': "localhost:9092",
-        'group.id': "test12301",
-        'auto.offset.reset': 'latest',
-        'allow.auto.create.topics': "true",
-    }, ["test"])
-    producer = KafkaProducerWrapper({'bootstrap.servers': "localhost:9092"})
-    t = threading.Thread(target=receive, args=(consumer,))
-    t.start()
-    time.sleep(1)
-    producer.sendBigMessage(topic="test", value=b"10" * 2_000_000)
-
-    t.join()
+    try:
+        kafka.KafkaConsumer(bootstrap_servers=[brokerAddress])
+    except BaseException:
+        return False
+    return True

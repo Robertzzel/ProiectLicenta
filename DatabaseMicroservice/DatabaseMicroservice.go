@@ -87,11 +87,7 @@ func handleLogin(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if user.SessionId != 0 {
-		if err := deleteSession(db, user.SessionId); err != nil {
-			return nil, err
-		}
-	}
+	_ = deleteSession(db, user.SessionId)
 
 	var session = Session{TopicAggregator: aggregatorTopic, TopicInputs: inputsTopic, MergerTopic: mergerTopic}
 	if err := db.Create(&session).Error; err != nil {
@@ -163,10 +159,6 @@ func handleAddVideo(db *gorm.DB, message []byte, sessionId int) ([]byte, error) 
 	return []byte("video added"), nil
 }
 
-func handleIsUserActive(db *gorm.DB, message []byte) ([]byte, error) {
-	return nil, nil
-}
-
 func handleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) {
 	var input map[string]string
 	if err := json.Unmarshal(message, &input); err != nil {
@@ -200,14 +192,6 @@ func handleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) 
 	}
 
 	return result, nil
-}
-
-func handleSetUserActive(db *gorm.DB, message []byte) ([]byte, error) {
-	return nil, nil
-}
-
-func handleSetUserInactive(db *gorm.DB, message []byte) ([]byte, error) {
-	return nil, nil
 }
 
 func handleGetVideoByUser(db *gorm.DB, message []byte) ([]byte, error) {
@@ -253,7 +237,60 @@ func handleDownloadVideoById(db *gorm.DB, message []byte) ([]byte, error) {
 }
 
 func handleDisconnect(db *gorm.DB, message []byte) ([]byte, error) {
-	return nil, nil
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	idString, idExists := input["ID"]
+	if !idExists {
+		return nil, errors.New("id not given")
+	}
+
+	id, err := strconv.Atoi(idString)
+	if err != nil {
+		return nil, err
+	}
+
+	var user User
+	if err = db.First(&user, "id = ?", uint(id)).Error; err != nil {
+		return nil, err
+	}
+
+	if err = deleteSession(db, user.SessionId); err != nil {
+		return nil, err
+	}
+
+	return []byte("success"), nil
+}
+
+func handleUsersInSession(db *gorm.DB, message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	sessionIdString, idExists := input["ID"]
+	if !idExists {
+		return nil, errors.New("sessionId not given")
+	}
+
+	sessionId, err := strconv.Atoi(sessionIdString)
+	if err != nil {
+		return nil, err
+	}
+
+	var session Session
+	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
+		return nil, err
+	}
+
+	var associatedUsers []User
+	if err = db.Where("session_id = ?", uint(sessionId)).Find(&associatedUsers).Error; err != nil {
+		return nil, err
+	}
+
+	return []byte(strconv.Itoa(len(associatedUsers))), nil
 }
 
 func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.Producer) {
@@ -276,7 +313,6 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 	case "REGISTER":
 		response, err = handleRegister(db, message.Message)
 	case "ADD_VIDEO":
-		fmt.Println("AD VIDEO")
 		var sessionId int
 		for _, header := range message.Headers {
 			switch header.Key {
@@ -290,20 +326,16 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 		}
 
 		response, err = handleAddVideo(db, message.Message, sessionId)
-	case "IS_ACTIVE":
-		response, err = handleIsUserActive(db, message.Message)
 	case "GET_CALL_BY_KEY":
 		response, err = handleGetCallByKeyAndPassword(db, message.Message)
-	case "SET_ACTIVE":
-		response, err = handleSetUserActive(db, message.Message)
-	case "SET_INACTIVE":
-		response, err = handleSetUserInactive(db, message.Message)
 	case "GET_VIDEOS_BY_USER":
 		response, err = handleGetVideoByUser(db, message.Message)
 	case "DOWNLOAD_VIDEO_BY_ID":
 		response, err = handleDownloadVideoById(db, message.Message)
 	case "DISCONNECT":
 		response, err = handleDisconnect(db, message.Message)
+	case "USERS_IN_SESSION":
+		response, err = handleUsersInSession(db, message.Message)
 	default:
 		err = errors.New("operation not permitted")
 	}
@@ -330,6 +362,8 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 	} else {
 		if len(responseMessage.Message) < 250 {
 			fmt.Println("Sent response... ", string(responseMessage.Message))
+		} else {
+			fmt.Println("Sent response... ", len(responseMessage.Message), "bytes")
 		}
 	}
 }

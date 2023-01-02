@@ -171,7 +171,6 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error 
 
 func waitForAUser(ctx context.Context, brokerAddress string) error {
 	uiConsumer := Kafka.NewConsumer(brokerAddress, AggregatorStartTopic)
-	defer uiConsumer.Close()
 
 	if err := uiConsumer.SetOffsetToNow(); err != nil {
 		panic(err)
@@ -205,22 +204,12 @@ func main() {
 	AudioTopic = os.Args[4]
 	AudioStartTopic = "s" + AudioTopic
 	MergeTopic = os.Args[5]
-	log.Println("Aggregator: ", MergeTopic)
 
 	// initialize
-	if err := Kafka.CreateTopic(brokerAddress, AggregatorTopic); err != nil {
-		panic(err)
-	}
 
 	producer := Kafka.NewProducer(brokerAddress)
-	defer producer.Close()
 
 	errG, ctx := errgroup.WithContext(NewCtx())
-
-	if err := Kafka.CreateTopic(brokerAddress, AggregatorStartTopic); err != nil {
-		panic(err)
-	}
-	defer Kafka.DeleteTopic(brokerAddress, AggregatorStartTopic)
 
 	fmt.Println("Waiting for a signal")
 	if err := waitForAUser(ctx, brokerAddress); err != nil {
@@ -237,10 +226,8 @@ func main() {
 	}
 
 	videoConsumer := Kafka.NewConsumer(brokerAddress, VideoTopic)
-	defer videoConsumer.Close()
 
 	audioConsumer := Kafka.NewConsumer(brokerAddress, AudioTopic)
-	defer audioConsumer.Close()
 
 	// start
 	filesChannel := make(chan AudioVideoPair, 5)

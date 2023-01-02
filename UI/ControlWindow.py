@@ -13,6 +13,7 @@ from typing import Optional
 from Kafka.Kafka import KafkaConsumerWrapper
 from UI.InputsBuffer import InputsBuffer
 import uuid
+import threading
 
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
 MOVE = 1
@@ -142,6 +143,8 @@ class TkinterVideo(tk.Label):
             except queue.Empty:
                 continue
 
+        self.videoFramesQueue.queue.clear()
+
     def audioCallback(self, outdata: np.ndarray, frames: int, timet, status):
         try:
             data: np.ndarray = self.audioBlocksQueue.get_nowait()
@@ -171,17 +174,22 @@ class TkinterVideo(tk.Label):
         print("Signal sent")
 
         while self.streamRunning:
-            try:
-                message = self.streamConsumer.consumeMessage(timeoutSeconds=1).value()
-            except StopIteration:
+            message = self.streamConsumer.consumeMessage(timeoutSeconds=1)
+            if message is None:
                 continue
-            with av.open(BytesIO(message)) as container:
+
+            with av.open(BytesIO(message.value())) as container:
                 self.initVideoStream(container)
+
             break
 
-        while self.streamRunning:
-            try:
-                with av.open(BytesIO(self.streamConsumer.consumeMessage(timeoutSeconds=1).value())) as container:
+        try:
+            while self.streamRunning:
+                message = self.streamConsumer.consumeMessage(timeoutSeconds=1)
+                if message is None:
+                    continue
+
+                with av.open(BytesIO(message.value())) as container:
                     container.fast_seek, container.discard_corrupt = True, True
 
                     self.clearAudioAndVideoQueues()
@@ -192,10 +200,8 @@ class TkinterVideo(tk.Label):
                                 self.videoFramesQueue.put(item=frame, block=True)
                             elif isinstance(frame, av.AudioFrame):
                                 self.audioBlocksQueue.put(item=frame.to_ndarray(), block=True)
-            except StopIteration:
-                continue
-            except Exception as ex:
-                print(ex)
+        except BaseException as ex:
+            print(ex)
 
     def clearAudioAndVideoQueues(self):
         with self.videoFramesQueue.mutex:

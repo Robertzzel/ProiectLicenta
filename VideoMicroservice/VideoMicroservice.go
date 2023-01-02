@@ -45,7 +45,26 @@ func stringToTimestamp(s string) (time.Time, error) {
 	return time.Unix(timestamp, 0), nil
 }
 
+func getStartTime(ctx context.Context, consumer *Kafka.Consumer) (string, error) {
+	var tsMessage *Kafka.ConsumerMessage
+	var err error
+
+	for ctx.Err() == nil {
+		tsMessage, err = consumer.Consume(time.Second / 4)
+		if errors.Is(err, context.DeadlineExceeded) {
+			continue
+		} else if err != nil {
+			return "", err
+		}
+
+		return string(tsMessage.Message), nil
+	}
+
+	return "", ctx.Err()
+}
+
 func main() {
+	defer log.Println("All done")
 	if len(os.Args) < 3 {
 		fmt.Println("No broker address given")
 		return
@@ -56,60 +75,26 @@ func main() {
 
 	errGroup, ctx := errgroup.WithContext(NewCtx())
 
-	if err := Kafka.CreateTopic(brokerAddress, VideoTopic); err != nil {
-		panic(err)
-	}
-	defer func(brokerAddress string, topic string) {
-		err := Kafka.DeleteTopic(brokerAddress, topic)
-		if err != nil {
-			fmt.Println(err)
-		}
-	}(brokerAddress, VideoTopic)
-
-	if err := Kafka.CreateTopic(brokerAddress, VideoStartTopic); err != nil {
-		panic(err)
-	}
-	defer func(brokerAddress string, names string) {
-		err := Kafka.DeleteTopic(brokerAddress, names)
-		if err != nil {
-			fmt.Println(err)
-		}
-	}(brokerAddress, VideoStartTopic)
-
 	producer := Kafka.NewProducer(brokerAddress)
-	defer producer.Close()
 
 	startConsumer := Kafka.NewConsumer(brokerAddress, VideoStartTopic)
-	defer startConsumer.Close()
 	if err := startConsumer.SetOffsetToNow(); err != nil {
 		panic(err)
 	}
 
-	// wait for the start message
 	fmt.Println("waiting for message")
 
-	var tsMessage *Kafka.ConsumerMessage
-	var err error
-	for ctx.Err() == nil {
-		tsMessage, err = startConsumer.Consume(time.Second / 2)
-		if errors.Is(err, context.DeadlineExceeded) {
-			continue
-		} else if err != nil {
-			panic(err)
-		}
-
-		break
-	}
-	if ctx.Err() != nil {
-		fmt.Println("Video: ", ctx.Err())
-		return
-	}
-	fmt.Println("Starting..")
-
-	timestamp, err := stringToTimestamp(string(tsMessage.Message))
+	startTimestamp, err := getStartTime(ctx, startConsumer)
 	if err != nil {
-		panic("Timestamp not valid")
+		panic(err)
 	}
+
+	timestamp, err := stringToTimestamp(startTimestamp)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Starting..")
 
 	videoRecorder, err := NewRecorder(ctx, 15)
 	if err != nil {
@@ -119,20 +104,15 @@ func main() {
 	videoRecorder.Start(timestamp, VideoDuration)
 
 	errGroup.Go(func() error {
-		for {
-			select {
-			case videoName := <-videoRecorder.VideoBuffer:
-				if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(videoName), Topic: VideoTopic}); err != nil {
-					panic(err)
-				}
-				fmt.Println(videoName, time.Now().UnixMilli())
-			case <-ctx.Done():
-				return nil
+		for ctx.Err() == nil {
+			if err = producer.Publish(&Kafka.ProducerMessage{Message: []byte(<-videoRecorder.VideoBuffer), Topic: VideoTopic}); err != nil {
+				return err
 			}
 		}
+		return nil
 	})
 
-	if err := errGroup.Wait(); err != nil {
+	if err = errGroup.Wait(); err != nil {
 		log.Println(err)
 	}
 

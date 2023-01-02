@@ -88,6 +88,11 @@ func handleLogin(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
+	if err := db.Model(&user).Update("session_id", nil).Error; err != nil {
+		return nil, err
+	}
+
+	user.SessionId = nil
 	return json.Marshal(&user)
 }
 
@@ -159,17 +164,21 @@ func handleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) 
 		return nil, err
 	}
 
-	var seesion Session
-	if err := db.Where(&Session{Model: gorm.Model{ID: *user.SessionId}}).First(&seesion).Error; err != nil {
+	if user.SessionId == nil {
+		return []byte("NOT ACTIVE"), nil
+	}
+
+	var session Session
+	if err := db.Where(&Session{Model: gorm.Model{ID: *user.SessionId}}).First(&session).Error; err != nil {
 		return nil, err
 	}
 
-	result, err := json.Marshal(map[string]string{"AggregatorTopic": seesion.TopicAggregator, "InputsTopic": seesion.TopicInputs})
+	result, err := json.Marshal(map[string]string{"AggregatorTopic": session.TopicAggregator, "InputsTopic": session.TopicInputs})
 	if err != nil {
 		return nil, err
 	}
 
-	if err = db.Model(&seesion).Association("Users").Append(&user); err != nil {
+	if err = db.Model(&session).Association("Users").Append(&user); err != nil {
 		return nil, err
 	}
 
@@ -239,10 +248,11 @@ func handleDisconnect(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if err = deleteSession(db, *user.SessionId); err != nil {
-		return nil, err
+	if user.SessionId != nil {
+		if err = deleteSession(db, *user.SessionId); err != nil {
+			return nil, err
+		}
 	}
-
 	return []byte("success"), nil
 }
 
@@ -295,13 +305,11 @@ func handleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	//creaza sesiune
 	session := Session{TopicAggregator: aggregatorTopic, TopicInputs: inputsTopic, MergerTopic: mergerTopic}
 	if err = db.Create(&session).Error; err != nil {
 		return nil, err
 	}
 
-	//linkuieste user
 	var user User
 	if err = db.First(&user, "id = ?", uint(userId)).Error; err != nil {
 		return nil, err
@@ -315,8 +323,50 @@ func handleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	//trimite id ul sesiunii
 	return []byte(strconv.Itoa(int(session.ID))), nil
+}
+
+func handleDeleteSession(db *gorm.DB, message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	sessionIdString, hasSessionId := input["SessionId"]
+	userIdString, hasUserId := input["SessionId"]
+	if !(hasSessionId && hasUserId) {
+		return nil, errors.New("not id given")
+	}
+
+	sessionId, err := strconv.Atoi(sessionIdString)
+	if err != nil {
+		return nil, err
+	}
+
+	userId, err := strconv.Atoi(userIdString)
+	if err != nil {
+		return nil, err
+	}
+
+	var user User
+	if err = db.First(&user, "id = ?", uint(userId)).Error; err != nil {
+		return nil, err
+	}
+
+	if err = db.Model(&user).Update("session_id", nil).Error; err != nil {
+		return nil, err
+	}
+
+	var session Session
+	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
+		return nil, err
+	}
+
+	if err = db.Delete(&session).Error; err != nil {
+		return nil, err
+	}
+
+	return []byte("success"), nil
 }
 
 func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.Producer) {
@@ -364,6 +414,8 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 		response, err = handleUsersInSession(db, message.Message)
 	case "CREATE_SESSION":
 		response, err = handleCreateSession(db, message.Message)
+	case "DELETE_SESSION":
+		response, err = handleDeleteSession(db, message.Message)
 	default:
 		err = errors.New("operation not permitted")
 	}

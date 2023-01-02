@@ -26,7 +26,6 @@ class MainFrame(tk.Frame):
         self.merger: Optional[Merger] = None
         self.mainWindow = parent
         self.kafkaConnection = None
-        self.startCallThread = threading.Thread(target=self.listenForEvents)
 
     def buildRemoteControlFrame(self):
         self.cleanFrame()
@@ -54,6 +53,13 @@ class MainFrame(tk.Frame):
         tk.Label(master=div, text="PASSWORD:", font=("Arial", 17), background=WHITE).grid(row=2, column=0, pady=(30, 0), padx=(0, 20))
         tk.Label(master=div, text=str(self.user.callPassword), font=("Arial", 17), background=WHITE).grid(row=3, column=0)
 
+        if self.user.sessionId is None:
+            tk.Button(master=div, text="START SHARING", command=self.buttonStartSharing).grid(row=4, column=0, pady=(30, 0))
+        elif self.videoPlayerWindow is not None:
+            tk.Button(master=div, text="START SHARING", state=tk.DISABLED).grid(row=4, column=0, pady=(30, 0))
+        else:
+            tk.Button(master=div, text="STOP SHARING", command=self.buttonStopSharing).grid(row=4, column=0, pady=(30, 0))
+
         rightFrame = tk.Frame(self, background=WHITE, borderwidth=0.5, relief="solid")
         rightFrame.pack(expand=True, fill=tk.BOTH, side=tk.RIGHT)
         rightFrame.pack_propagate(False)
@@ -70,7 +76,19 @@ class MainFrame(tk.Frame):
         passwordEntry = tk.Entry(master=divRight, font=("Arial", 17))
         passwordEntry.grid(row=1, column=2, pady=(30, 0))
 
-        tk.Button(master=divRight, text="SUBMIT", font=("Arial", 17), command=lambda: self.startCall(idEntry.get(), passwordEntry.get())).grid(row=2, column=1, pady=(30, 0))
+        tk.Button(master=divRight, text="SUBMIT", font=("Arial", 17), command=lambda: self.buttonStartCall(idEntry.get(), passwordEntry.get())).grid(row=2, column=1, pady=(30, 0))
+
+    def buttonStartCall(self, callKey: str, callPassword: str):
+        self.startCall(callKey, callPassword)
+        self.buildRemoteControlFrame()
+
+    def buttonStartSharing(self):
+        self.startSharing()
+        self.buildRemoteControlFrame()
+
+    def buttonStopSharing(self):
+        self.stopSharing()
+        self.buildRemoteControlFrame()
 
     def buildMyVideosFrame(self):
         self.cleanFrame()
@@ -163,23 +181,51 @@ class MainFrame(tk.Frame):
     def buildNotLoggedInFrame(self):
         tk.Label(master=self, text="Log In", font=("Arial", 17), background=WHITE).pack(anchor=tk.CENTER)
 
-    def listenForEvents(self):
-        callRunning = False
-        while True:
-            msg = self.databaseCall(topic=MY_TOPIC, operation="USERS_IN_SESSION", message=json.dumps({"ID": str(self.user.sessionId)}).encode())
-            usersOnSession = int(msg.value().decode())
+    def startSharing(self):
+        msg = self.databaseCall(topic=MY_TOPIC, operation="CREATE_SESSION", message=json.dumps({
+            "AggregatorTopic": self.sender.aggregatorTopic,
+            "InputsTopic": self.sender.inputsTopic,
+            "MergerTopic": self.merger.topic,
+            "UserID": str(self.user.id),
+        }).encode())
 
-            if usersOnSession > 1:
-                self.sender.start(self.merger.topic)
-                self.merger.start(self.user.sessionId)
-                callRunning = True
-            elif callRunning and usersOnSession == 1:
-                self.sender.start(self.merger.topic)
-                self.merger.start(self.user.sessionId)
-                callRunning = False
-            time.sleep(2)
+        status: Optional[str] = None
+        for header in msg.headers():
+            if header[0] == "status":
+                status = header[1].decode()
+        if status is None or status.lower() != "ok":
+            self.setStatusMessage("Cannot start sharing")
+            return
+
+        sessionId = int(msg.value().decode())
+        self.user.sessionId = sessionId
+
+        if self.sender is not None:
+            self.sender.start(self.merger.topic)
+
+        if self.merger is not None:
+            self.merger.start(str(self.user.sessionId))
+
+    def stopSharing(self):
+        if self.sender is not None:
+            self.sender.stop()
+
+        if self.merger is not None:
+            self.merger.stop()
+
+        msg = self.databaseCall(topic=MY_TOPIC, operation="DELETE_SESSION", message=json.dumps({
+            "SessionId": str(self.user.sessionId),
+            "UserId": str(self.user.id),
+        }).encode())
+
+        self.user.sessionId = None
+        self.setStatusMessage("Call stopped")
 
     def startCall(self, callKey: str, callPassword: str):
+        if callKey == "" or callPassword == "":
+            self.setStatusMessage("provide both key and password")
+            return
+
         responseMessage = self.databaseCall(MY_TOPIC, "GET_CALL_BY_KEY", json.dumps({"Key": callKey, "Password": callPassword}).encode())
 
         status: Optional[str] = None
@@ -188,6 +234,10 @@ class MainFrame(tk.Frame):
                 status = header[1].decode()
         if status is None or status.lower() != "ok":
             self.setStatusMessage("Cannot start call")
+            return
+
+        if responseMessage.value() == b"NOT ACTIVE":
+            self.setStatusMessage("User not active")
             return
 
         responseValue = json.loads(responseMessage.value())
@@ -199,6 +249,15 @@ class MainFrame(tk.Frame):
         self.videoPlayer.pack(expand=True, fill="both")
         self.videoPlayer.play()
         self.videoPlayerWindow.protocol("WM_DELETE_WINDOW", self.exitCallWindow)
+
+    def stopCall(self):
+        if self.videoPlayer is not None:
+            self.videoPlayer.stop()
+        self.videoPlayer = None
+
+        if self.videoPlayerWindow is not None:
+            self.videoPlayerWindow.destroy()
+        self.videoPlayerWindow = None
 
     def cleanFrame(self):
         for widget in self.winfo_children():
@@ -245,17 +304,8 @@ class MainFrame(tk.Frame):
         self.mainWindow.setStatusMessage(message)
 
     def exitCallWindow(self):
-        if self.videoPlayer is not None:
-            self.videoPlayer.stop()
-
-        if self.videoPlayerWindow is not None:
-            self.videoPlayerWindow.destroy()
-
-        if self.sender is not None:
-            self.sender.stop()
-
-        if self.merger is not None:
-            self.merger.stop()
+        self.stopCall()
+        self.stopSharing()
 
     def downloadVideo(self, videoId: int):
         file = filedialog.asksaveasfile(mode="wb", defaultextension=".mp4")
@@ -284,9 +334,11 @@ class MainFrame(tk.Frame):
             return
 
         message = json.loads(message.value())
-        self.user = User(message.get("ID", None), username, message.get("CallKey", None), message.get("CallPassword", None))
+        self.user = User(message.get("ID", None), username, message.get("CallKey", None), message.get("CallPassword", None), message.get("SessionId", None))
 
-        self.startCallThread.start()
+        self.sender = Sender(self.kafkaAddress)
+        self.merger = Merger(self.kafkaAddress)
+
         self.buildLoginFrame()
         self.setStatusMessage("Logged in")
 

@@ -144,6 +144,8 @@ class TkinterVideo(tk.Label):
                 continue
 
         self.videoFramesQueue.queue.clear()
+        self.audioBlocksQueue.queue.clear()
+        print("DISPLAYED THREAD: I AM STOPPED")
 
     def audioCallback(self, outdata: np.ndarray, frames: int, timet, status):
         try:

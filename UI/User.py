@@ -7,4 +7,4 @@ class User:
     name: str
     callKey: str
     callPassword: str
-    sessionId: str
+    sessionId: str = None

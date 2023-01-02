@@ -26,7 +26,7 @@ class MainFrame(tk.Frame):
         self.merger: Optional[Merger] = None
         self.mainWindow = parent
         self.kafkaConnection = None
-        # self.startCallThread = threading.Thread(target=self.listenForEvents)
+        self.startCallThread = threading.Thread(target=self.listenForEvents)
 
     def buildRemoteControlFrame(self):
         self.cleanFrame()
@@ -163,21 +163,21 @@ class MainFrame(tk.Frame):
     def buildNotLoggedInFrame(self):
         tk.Label(master=self, text="Log In", font=("Arial", 17), background=WHITE).pack(anchor=tk.CENTER)
 
-    # def listenForEvents(self):
-    #     callRunning = False
-    #     while True:
-    #         msg = self.databaseCall(topic=MY_TOPIC, operation="USERS_IN_SESSION", message=json.dumps({"ID": str(self.user.sessionId)}).encode())
-    #         usersOnSession = int(msg.value().decode())
-    #
-    #         if usersOnSession > 1:
-    #             self.sender.start(self.merger.topic)
-    #             self.merger.start(self.user.sessionId)
-    #             callRunning = True
-    #         elif callRunning and usersOnSession == 1:
-    #             self.sender.start(self.merger.topic)
-    #             self.merger.start(self.user.sessionId)
-    #             callRunning = False
-    #         time.sleep(2)
+    def listenForEvents(self):
+        callRunning = False
+        while True:
+            msg = self.databaseCall(topic=MY_TOPIC, operation="USERS_IN_SESSION", message=json.dumps({"ID": str(self.user.sessionId)}).encode())
+            usersOnSession = int(msg.value().decode())
+
+            if usersOnSession > 1:
+                self.sender.start(self.merger.topic)
+                self.merger.start(self.user.sessionId)
+                callRunning = True
+            elif callRunning and usersOnSession == 1:
+                self.sender.start(self.merger.topic)
+                self.merger.start(self.user.sessionId)
+                callRunning = False
+            time.sleep(2)
 
     def startCall(self, callKey: str, callPassword: str):
         responseMessage = self.databaseCall(MY_TOPIC, "GET_CALL_BY_KEY", json.dumps({"Key": callKey, "Password": callPassword}).encode())
@@ -271,10 +271,7 @@ class MainFrame(tk.Frame):
             self.setStatusMessage("Need both name and pass")
             return
 
-        self.sender = Sender(self.kafkaAddress)
-        self.merger = Merger(self.kafkaAddress)
-
-        loggInDetails = {"Name": username, "Password": password, "AggregatorTopic": self.sender.aggregatorTopic, "InputsTopic": self.sender.inputsTopic, "MergerTopic": self.merger.topic}
+        loggInDetails = {"Name": username, "Password": password}
         message = self.databaseCall(MY_TOPIC, "LOGIN", json.dumps(loggInDetails).encode())
 
         status = None
@@ -287,7 +284,7 @@ class MainFrame(tk.Frame):
             return
 
         message = json.loads(message.value())
-        self.user = User(message.get("ID", None), username, message.get("CallKey", None), message.get("CallPassword", None), message.get("SessionId", None))
+        self.user = User(message.get("ID", None), username, message.get("CallKey", None), message.get("CallPassword", None))
 
         self.startCallThread.start()
         self.buildLoginFrame()

@@ -19,7 +19,7 @@ type User struct {
 	Password     string   `gorm:"not null"`
 	CallKey      string   `gorm:"unique;not null"`
 	CallPassword string   `gorm:"not null"`
-	SessionId    uint     `gorm:"default:null"`
+	SessionId    *uint    `gorm:"default:null"`
 	Videos       []*Video `gorm:"many2many:user_videos;"`
 }
 

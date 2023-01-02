@@ -74,11 +74,8 @@ func handleLogin(db *gorm.DB, message []byte) ([]byte, error) {
 
 	name, nameExists := input["Name"]
 	password, passwordExists := input["Password"]
-	aggregatorTopic, aggregatorTopicExists := input["AggregatorTopic"]
-	inputsTopic, inputsTopicExists := input["InputsTopic"]
-	mergerTopic, mergerTopicExists := input["MergerTopic"]
 
-	if !(nameExists && passwordExists && aggregatorTopicExists && inputsTopicExists && mergerTopicExists) {
+	if !(nameExists && passwordExists) {
 		return nil, errors.New("name, password and topic needed")
 	}
 
@@ -87,22 +84,7 @@ func handleLogin(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	_ = deleteSession(db, user.SessionId)
-
-	var session = Session{TopicAggregator: aggregatorTopic, TopicInputs: inputsTopic, MergerTopic: mergerTopic}
-	if err := db.Create(&session).Error; err != nil {
-		return nil, err
-	}
-
 	if err := db.Model(&user).Update("call_password", uuid.NewString()[:4]).Error; err != nil {
-		return nil, err
-	}
-
-	if err := db.Model(&user).Update("session_id", session.ID).Error; err != nil {
-		return nil, err
-	}
-
-	if err := db.Model(&session).Association("Users").Append(&user); err != nil {
 		return nil, err
 	}
 
@@ -178,7 +160,7 @@ func handleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) 
 	}
 
 	var seesion Session
-	if err := db.Where(&Session{Model: gorm.Model{ID: user.SessionId}}).First(&seesion).Error; err != nil {
+	if err := db.Where(&Session{Model: gorm.Model{ID: *user.SessionId}}).First(&seesion).Error; err != nil {
 		return nil, err
 	}
 
@@ -257,7 +239,7 @@ func handleDisconnect(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if err = deleteSession(db, user.SessionId); err != nil {
+	if err = deleteSession(db, *user.SessionId); err != nil {
 		return nil, err
 	}
 
@@ -291,6 +273,50 @@ func handleUsersInSession(db *gorm.DB, message []byte) ([]byte, error) {
 	}
 
 	return []byte(strconv.Itoa(len(associatedUsers))), nil
+}
+
+func handleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	aggregatorTopic, hasAggregatorTopic := input["AggregatorTopic"]
+	inputsTopic, hasInputsTopic := input["InputsTopic"]
+	mergerTopic, hasMergerTopic := input["MergerTopic"]
+	userIdString, hasUserId := input["UserID"]
+
+	if !(hasAggregatorTopic && hasMergerTopic && hasInputsTopic && hasUserId) {
+		return nil, errors.New("not enough topics")
+	}
+
+	userId, err := strconv.Atoi(userIdString)
+	if err != nil {
+		return nil, err
+	}
+
+	//creaza sesiune
+	session := Session{TopicAggregator: aggregatorTopic, TopicInputs: inputsTopic, MergerTopic: mergerTopic}
+	if err = db.Create(&session).Error; err != nil {
+		return nil, err
+	}
+
+	//linkuieste user
+	var user User
+	if err = db.First(&user, "id = ?", uint(userId)).Error; err != nil {
+		return nil, err
+	}
+
+	if err = db.Model(&session).Association("Users").Append(&user); err != nil {
+		return nil, err
+	}
+
+	if err = db.Model(&user).Update("session_id", session.ID).Error; err != nil {
+		return nil, err
+	}
+
+	//trimite id ul sesiunii
+	return []byte(strconv.Itoa(int(session.ID))), nil
 }
 
 func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.Producer) {
@@ -336,6 +362,8 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 		response, err = handleDisconnect(db, message.Message)
 	case "USERS_IN_SESSION":
 		response, err = handleUsersInSession(db, message.Message)
+	case "CREATE_SESSION":
+		response, err = handleCreateSession(db, message.Message)
 	default:
 		err = errors.New("operation not permitted")
 	}

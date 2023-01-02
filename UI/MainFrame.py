@@ -340,20 +340,17 @@ class MainFrame(tk.Frame):
         self.merger = Merger(self.kafkaAddress)
 
         self.buildLoginFrame()
+        self.mainWindow.title(f"RMI {self.user.name}")
         self.setStatusMessage("Logged in")
 
     def disconnect(self):
-        if self.user is not None:
-            self.databaseCall(MY_TOPIC, "DISCONNECT", json.dumps({"ID": str(self.user.id)}).encode())
         self.user = None
 
-        if self.sender is not None:
+        if self.sender is not None and self.sender.running:
             self.sender.stop()
-        self.sender = None
 
-        if self.merger is not None:
+        if self.merger is not None and self.merger.running:
             self.merger.stop()
-        self.merger = None
 
         self.buildLoginFrame()
 

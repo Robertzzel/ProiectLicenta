@@ -17,11 +17,13 @@ class Merger:
         self.topic = str(uuid.uuid1())
         self.process: Optional[subprocess.Popen] = None
         self.path = str(pathlib.Path(os.getcwd()).parent)
+        self.running = False
         Kafka.Kafka.createTopic(self.broker, self.topic)
 
     def start(self, sessionId: str):
         self.process = subprocess.Popen(["venv/bin/python3", "MergerMicroservice/MergerMicroservice.py", self.broker, self.topic, str(sessionId)],
                                         cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.running = True
 
     def stop(self):
         if self.process is None:
@@ -30,13 +32,14 @@ class Merger:
         #self.process.send_signal(signal.SIGINT)
 
         try:
-            self.process.wait(timeout=5)
+            self.process.wait(timeout=10)
         except subprocess.TimeoutExpired as ex:
             self.process.kill()
         finally:
             print("merger process closed")
 
         Kafka.Kafka.deleteTopic(self.broker, self.topic)
+        self.running = False
 
 
 class Sender:

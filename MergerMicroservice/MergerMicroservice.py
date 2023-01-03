@@ -65,10 +65,10 @@ class Merger:
         signal.signal(signal.SIGINT, signal.default_int_handler)
         try:
             while self.running:
-                try:
-                    message = next(self.consumer)
-                except StopIteration:
+                message = self.consumer.consumeMessage(timeoutSeconds=1)
+                if message is None:
                     continue
+                print(f"goo msg {len(message.value())}", self.running)
 
                 if message.value() == b"quit":
                     print("Quitting")
@@ -79,11 +79,7 @@ class Merger:
 
                 if self.videosQueue.qsize() > 10:
                     self.aggregateVideosFromQueue()
-        except StopIteration:
-            print("Stop de la Aggregator")
-        except KeyboardInterrupt:
-            print("Stop de la consola")
-        except Exception as ex:
+        except BaseException as ex:
             print(ex)
 
         self.aggregateVideosFromQueue()

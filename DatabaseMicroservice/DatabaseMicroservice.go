@@ -119,7 +119,7 @@ func handleRegister(db *gorm.DB, message []byte) ([]byte, error) {
 func handleAddVideo(db *gorm.DB, message []byte, sessionId int) ([]byte, error) {
 	var err error
 	video := Video{}
-	session := Session{Model: gorm.Model{ID: uint(sessionId)}}
+	session := Session{}
 
 	video.FilePath, err = WriteNewFile(message)
 	if err != nil {
@@ -130,7 +130,7 @@ func handleAddVideo(db *gorm.DB, message []byte, sessionId int) ([]byte, error) 
 		return nil, err
 	}
 
-	if err = db.First(&session, "id = ?", session.ID).Error; err != nil {
+	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
 		return nil, err
 	}
 
@@ -139,7 +139,12 @@ func handleAddVideo(db *gorm.DB, message []byte, sessionId int) ([]byte, error) 
 		return nil, err
 	}
 
-	if err = db.Model(&video).Where("id = ?", video.ID).Association("Users").Append(&associatedUsers); err != nil {
+	var foundUsers []User
+	if err = db.Model(&session).Association("Users").Find(&foundUsers); err != nil {
+		return nil, err
+	}
+
+	if err = db.Model(&video).Where("id = ?", video.ID).Association("Users").Append(&foundUsers); err != nil {
 		return nil, err
 	}
 
@@ -154,22 +159,33 @@ func handleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) 
 
 	key, keyExists := input["Key"]
 	password, passwordExists := input["Password"]
+	callerIdString, hasCallerId := input["CallerId"]
 
-	if !keyExists || !passwordExists {
-		return nil, errors.New("password AND key needed")
-	}
-
-	var user User
-	if err := db.Where(&User{CallKey: key, CallPassword: password}).First(&user).Error; err != nil {
+	callerId, err := strconv.Atoi(callerIdString)
+	if err != nil {
 		return nil, err
 	}
 
-	if user.SessionId == nil {
+	if !keyExists || !passwordExists || !hasCallerId {
+		return nil, errors.New("password AND key needed")
+	}
+
+	var sharerUser User
+	if err = db.Where(&User{CallKey: key, CallPassword: password}).First(&sharerUser).Error; err != nil {
+		return nil, err
+	}
+
+	var callerUser User
+	if err = db.First(&callerUser, "id = ?", uint(callerId)).Error; err != nil {
+		return nil, err
+	}
+
+	if sharerUser.SessionId == nil {
 		return []byte("NOT ACTIVE"), nil
 	}
 
 	var session Session
-	if err := db.Where(&Session{Model: gorm.Model{ID: *user.SessionId}}).First(&session).Error; err != nil {
+	if err = db.Where(&Session{Model: gorm.Model{ID: *sharerUser.SessionId}}).First(&session).Error; err != nil {
 		return nil, err
 	}
 
@@ -178,7 +194,7 @@ func handleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) 
 		return nil, err
 	}
 
-	if err = db.Model(&session).Association("Users").Append(&user); err != nil {
+	if err = db.Model(&callerUser).Update("session_id", session.ID).Error; err != nil {
 		return nil, err
 	}
 

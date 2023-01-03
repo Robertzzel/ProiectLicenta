@@ -226,7 +226,7 @@ class MainFrame(tk.Frame):
             self.setStatusMessage("provide both key and password")
             return
 
-        responseMessage = self.databaseCall(MY_TOPIC, "GET_CALL_BY_KEY", json.dumps({"Key": callKey, "Password": callPassword}).encode())
+        responseMessage = self.databaseCall(MY_TOPIC, "GET_CALL_BY_KEY", json.dumps({"Key": callKey, "Password": callPassword, "CallerId": str(self.user.id)}).encode())
 
         status: Optional[str] = None
         for header in responseMessage.headers():
@@ -282,7 +282,7 @@ class MainFrame(tk.Frame):
         self.databaseConsumer = KafkaConsumerWrapper({
                 'bootstrap.servers': self.kafkaAddress,
                 'group.id': str(uuid.uuid1()),
-                'auto.offset.reset': 'earliest',
+                'auto.offset.reset': 'latest',
                 'allow.auto.create.topics': "true",
             }, [MY_TOPIC])
 
@@ -305,7 +305,6 @@ class MainFrame(tk.Frame):
 
     def exitCallWindow(self):
         self.stopCall()
-        self.stopSharing()
 
     def downloadVideo(self, videoId: int):
         file = filedialog.asksaveasfile(mode="wb", defaultextension=".mp4")

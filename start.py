@@ -22,7 +22,7 @@ class Merger:
 
     def start(self, sessionId: str):
         self.process = subprocess.Popen(["venv/bin/python3", "MergerMicroservice/MergerMicroservice.py", self.broker, self.topic, str(sessionId)],
-                                        cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                        cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
         self.running = True
 
     def stop(self):
@@ -85,13 +85,13 @@ class Sender:
 
         try:
             self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress, self.videoTopic],
-                                                 cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
+                                                 cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
             self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress, self.audioTopic],
-                                                 cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                                 cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
             self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress, self.aggregatorTopic, self.videoTopic, self.audioTopic, mergerTopic],
-                                                      cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                                      cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
             self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, self.inputsTopic],
-                                                         cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                                         cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
 
             self.running = True
         except Exception as ex:
@@ -117,7 +117,7 @@ class Sender:
 
         try:
             self.audioProcess.wait(timeout=5)
-        except subprocess.TimeoutExpired as ex:
+        except BaseException as ex:
             self.aggregatorProcess.kill()
         finally:
             print(f"audio process closed in", time.time() - s)
@@ -129,7 +129,7 @@ class Sender:
 
         try:
             self.videoProcess.wait(timeout=5)
-        except subprocess.TimeoutExpired as ex:
+        except BaseException as ex:
             self.videoProcess.kill()
         finally:
             print("video process closed", time.time() - s)
@@ -141,7 +141,7 @@ class Sender:
 
         try:
             self.aggregatorProcess.wait(timeout=5)
-        except subprocess.TimeoutExpired as ex:
+        except BaseException as ex:
             self.aggregatorProcess.kill()
         finally:
             print("aggregator process closed", time.time() - s)
@@ -153,7 +153,7 @@ class Sender:
 
         try:
             self.inputExecutorProcess.wait(timeout=5)
-        except subprocess.TimeoutExpired as ex:
+        except BaseException as ex:
             self.inputExecutorProcess.kill()
         finally:
             print("input process closed", time.time() - s)

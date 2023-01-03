@@ -250,6 +250,7 @@ func main() {
 	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte("quit"), Topic: MergeTopic}); err != nil {
 		log.Println(err)
 	}
+	producer.Close()
 
 	fmt.Println("Quit signal sent")
 

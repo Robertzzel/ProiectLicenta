@@ -102,7 +102,10 @@ class Sender:
         threads = [self.threadPool.submit(self.stopVideoProcess), self.threadPool.submit(self.stopAudioProcess),
                    self.threadPool.submit(self.stopAggregatorProcess), self.threadPool.submit(self.stopInputProcess)]
 
-        [thread.result() for thread in threads]
+        for thread in threads:
+            if thread is not None:
+                thread.result()
+
         try:
             self.deleteTopics()
         except BaseException as ex:
@@ -111,9 +114,12 @@ class Sender:
         self.running = False
 
     def stopAudioProcess(self):
+        if self.audioProcess is None:
+            return
+
         s = time.time()
-        if self.audioProcess is not None:
-            self.audioProcess.send_signal(signal.SIGINT)
+
+        self.audioProcess.send_signal(signal.SIGINT)
 
         try:
             self.audioProcess.wait(timeout=5)
@@ -123,9 +129,12 @@ class Sender:
             print(f"audio process closed in", time.time() - s)
 
     def stopVideoProcess(self):
+        if self.videoProcess is None:
+            return
+
         s = time.time()
-        if self.videoProcess is not None:
-            self.videoProcess.send_signal(signal.SIGINT)
+
+        self.videoProcess.send_signal(signal.SIGINT)
 
         try:
             self.videoProcess.wait(timeout=5)
@@ -135,9 +144,11 @@ class Sender:
             print("video process closed", time.time() - s)
 
     def stopAggregatorProcess(self):
+        if self.aggregatorProcess is None:
+            return
+
         s = time.time()
-        if self.aggregatorProcess is not None:
-            self.aggregatorProcess.send_signal(signal.SIGINT)
+        self.aggregatorProcess.send_signal(signal.SIGINT)
 
         try:
             self.aggregatorProcess.wait(timeout=5)
@@ -147,9 +158,12 @@ class Sender:
             print("aggregator process closed", time.time() - s)
 
     def stopInputProcess(self):
+        if self.inputExecutorProcess is None:
+            return
+
         s = time.time()
-        if self.inputsTopic is not None:
-            self.inputExecutorProcess.send_signal(signal.SIGINT)
+
+        self.inputExecutorProcess.send_signal(signal.SIGINT)
 
         try:
             self.inputExecutorProcess.wait(timeout=5)

@@ -1,7 +1,9 @@
 import tkinter as tk
+import customtkinter
 
 BACKGROUND = "#161616"
 MENU_TEXT_COLOR = "#FFFFFF"
+
 
 class MenuFrame(tk.Frame):
     def __init__(self, parent=None, *args, **kwargs):

@@ -1,11 +1,12 @@
 import tkinter as tk
+import customtkinter
 from MenuFrame import MenuFrame
 from MainFrame import MainFrame
 
 BACKGROUND = "#161616"
 
 
-class MainWindow(tk.Tk):
+class MainWindow(customtkinter.CTk):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.title("RMI")
@@ -17,10 +18,10 @@ class MainWindow(tk.Tk):
         self.geometry(f"{windowWidth}x{windowHeight}")
         self.config(background=BACKGROUND)
 
-        self.menuFrame = MenuFrame(self, background="lightgray", width=windowWidth // 8, height=windowHeight)
+        self.menuFrame = MenuFrame(self, width=windowWidth // 8, height=windowHeight)
         self.menuFrame.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
         self.menuFrame.pack_propagate(False)
-        self.mainFrame = MainFrame(self, background=BACKGROUND, width=windowWidth // 8 * 7, height=windowHeight)
+        self.mainFrame = MainFrame(self, width=windowWidth // 8 * 7, height=windowHeight)
         self.mainFrame.pack(fill=tk.BOTH, expand=True, side=tk.RIGHT)
         self.mainFrame.pack_propagate(False)
 
@@ -47,4 +48,6 @@ class MainWindow(tk.Tk):
 
 if __name__ == "__main__":
     app = MainWindow()
+    customtkinter.set_appearance_mode("dark")
+    customtkinter.set_default_color_theme("dark-blue")
     app.mainloop()

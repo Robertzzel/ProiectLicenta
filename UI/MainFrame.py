@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import filedialog
 from Kafka.Kafka import *
 from start import *
+import customtkinter
 from typing import Optional
 from ControlWindow import TkinterVideo
 from User import User
@@ -13,10 +14,11 @@ TEXT_COLOR = "#FFFFFF"
 BUTTON_BG = "#d5f372"
 BUTTON_FG = "#000000"
 DATABASE_TOPIC = "DATABASE"
+
 MY_TOPIC = f"{uuid.uuid1()}"
 
 
-class MainFrame(tk.Frame):
+class MainFrame(customtkinter.CTkFrame):
     def __init__(self, parent=None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.user: Optional[User] = None
@@ -30,6 +32,8 @@ class MainFrame(tk.Frame):
         self.mainWindow = parent
         self.kafkaConnection = None
 
+        self.LABEL_FONT = customtkinter.CTkFont(size=20, family="Arial")
+
     def buildRemoteControlFrame(self):
         self.cleanFrame()
 
@@ -41,48 +45,48 @@ class MainFrame(tk.Frame):
             self.buildNotLoggedInFrame()
             return
 
-        leftFrame = tk.Frame(self, background=BACKGROUND, borderwidth=0.5, relief="solid")
+        leftFrame = customtkinter.CTkFrame(self)
         leftFrame.pack(expand=True, fill=tk.BOTH, side=tk.LEFT)
         leftFrame.pack_propagate(False)
 
-        tk.Label(master=leftFrame, text="Allow Remote Control", background=BACKGROUND, font=("Arial", 17), fg=TEXT_COLOR).place(relx=0.5, rely=0.25, anchor=tk.CENTER)
+        customtkinter.CTkLabel(master=leftFrame, text="Allow Remote Control", font=self.LABEL_FONT, ).place(relx=0.5, rely=0.25, anchor=tk.CENTER)
 
-        div = tk.Frame(leftFrame, background=BACKGROUND)
+        div = customtkinter.CTkFrame(leftFrame)
         div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-        tk.Label(master=div, text="YOUR ID:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=0, column=0, padx=(0, 20))
-        tk.Label(master=div, text=str(self.user.callKey), font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=1, column=0)
+        customtkinter.CTkLabel(master=div, text="YOUR ID:", font=self.LABEL_FONT, ).grid(row=0, column=0, padx=(50, 20), pady=(50, 0))
+        customtkinter.CTkLabel(master=div, text=str(self.user.callKey), font=self.LABEL_FONT, ).grid(row=1, column=0, padx=(0, 50))
 
-        tk.Label(master=div, text="PASSWORD:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=2, column=0, pady=(30, 0), padx=(0, 20))
-        tk.Label(master=div, text=str(self.user.callPassword), font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=3, column=0)
+        customtkinter.CTkLabel(master=div, text="PASSWORD:", font=self.LABEL_FONT, ).grid(row=2, column=0, pady=(30, 20), padx=(0, 20))
+        customtkinter.CTkLabel(master=div, text=str(self.user.callPassword), font=self.LABEL_FONT, ).grid(row=3, column=0)
 
         if self.user.sessionId is None and self.videoPlayerWindow is None:
-            tk.Button(master=div, text="START SHARING", command=self.buttonStartSharing, background=BUTTON_BG, foreground=BUTTON_FG).grid(row=4, column=0, pady=(30, 0))
-        if self.videoPlayerWindow is not None:
-            tk.Button(master=div, text="START SHARING", state=tk.DISABLED).grid(row=4, column=0, pady=(30, 0))
+            customtkinter.CTkButton(master=div, text="START SHARING", command=self.buttonStartSharing).grid(row=4, column=0, pady=(30, 50))
+        elif self.videoPlayerWindow is not None:
+            customtkinter.CTkButton(master=div, text="START SHARING", state=tk.DISABLED).grid(row=4, column=0, pady=(30, 50))
         else:
-            tk.Button(master=div, text="STOP SHARING", command=self.buttonStopSharing, background=BUTTON_BG, foreground=BUTTON_FG).grid(row=4, column=0, pady=(30, 0))
+            customtkinter.CTkButton(master=div, text="STOP SHARING", command=self.buttonStopSharing).grid(row=4, column=0, pady=(30, 50))
 
-        rightFrame = tk.Frame(self, background=BACKGROUND, borderwidth=0.5, relief="solid")
+        rightFrame = customtkinter.CTkFrame(self)
         rightFrame.pack(expand=True, fill=tk.BOTH, side=tk.RIGHT)
         rightFrame.pack_propagate(False)
 
-        tk.Label(master=rightFrame, text="Control Remote Computer", background=BACKGROUND, font=("Arial", 17), fg=TEXT_COLOR).place(relx=0.5, rely=0.25, anchor=tk.CENTER)
+        customtkinter.CTkLabel(master=rightFrame, text="Control Remote Computer", font=self.LABEL_FONT, ).place(relx=0.5, rely=0.25, anchor=tk.CENTER)
 
-        divRight = tk.Frame(rightFrame, background=BACKGROUND)
+        divRight = customtkinter.CTkFrame(rightFrame)
         divRight.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-        tk.Label(master=divRight, text="USER ID:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=0, column=0, padx=(0, 20))
-        idEntry = tk.Entry(master=divRight, font=("Arial", 17))
+        customtkinter.CTkLabel(master=divRight, text="USER ID:", font=self.LABEL_FONT, ).grid(row=0, column=0, padx=(0, 20))
+        idEntry = customtkinter.CTkEntry(master=divRight, font=self.LABEL_FONT)
         idEntry.grid(row=0, column=2)
 
-        tk.Label(master=divRight, text="PASSWORD:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=1, column=0, pady=(30, 0), padx=(0, 20))
-        passwordEntry = tk.Entry(master=divRight, font=("Arial", 17))
+        customtkinter.CTkLabel(master=divRight, text="PASSWORD:", font=self.LABEL_FONT, ).grid(row=1, column=0, pady=(30, 0), padx=(0, 20))
+        passwordEntry = customtkinter.CTkEntry(master=divRight, font=self.LABEL_FONT)
         passwordEntry.grid(row=1, column=2, pady=(30, 0))
 
         if self.videoPlayerWindow is not None:
-            tk.Button(master=divRight, text="SUBMIT", font=("Arial", 17), state=tk.DISABLED, background=BUTTON_BG, foreground=BUTTON_FG).grid(row=2, column=1, pady=(30, 0))
+            customtkinter.CTkButton(master=divRight, text="SUBMIT", font=self.LABEL_FONT, state=tk.DISABLED).grid(row=2, column=1, pady=(30, 0))
         else:
-            tk.Button(master=divRight, text="SUBMIT", font=("Arial", 17), command=lambda: self.buttonStartCall(idEntry.get(), passwordEntry.get()), background=BUTTON_BG, foreground=BUTTON_FG).grid(row=2, column=1, pady=(30, 0))
+            customtkinter.CTkButton(master=divRight, text="SUBMIT", font=self.LABEL_FONT, command=lambda: self.buttonStartCall(idEntry.get(), passwordEntry.get())).grid(row=2, column=1, pady=(30, 0))
 
     def buttonStartCall(self, callKey: str, callPassword: str):
         self.startCall(callKey, callPassword)
@@ -107,17 +111,19 @@ class MainFrame(tk.Frame):
             self.buildNotLoggedInFrame()
             return
 
-        div = tk.Frame(self, background=BACKGROUND)
-        div.pack()
-
         msg = self.databaseCall(MY_TOPIC, "GET_VIDEOS_BY_USER", json.dumps({"ID": self.user.id}).encode())
         data = json.loads(msg.value())
 
+        if len(data) == 0:
+            return
+
+        div = customtkinter.CTkFrame(self)
+        div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+
         for i, video in enumerate(data):
-            tk.Label(master=div, text=video.get("CreatedAt"), fg=TEXT_COLOR).grid(row=i, column=0)
-            tk.Button(master=div, text="Download",
-                      command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)
-                      , background=BUTTON_BG, foreground=BUTTON_FG).grid(row=i, column=1)
+            customtkinter.CTkLabel(master=div, text=video.get("CreatedAt"), ).grid(row=i, column=0)
+            customtkinter.CTkButton(master=div, text="Download",
+                      command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)).grid(row=i, column=1)
 
     def buildLoginFrame(self):
         self.cleanFrame()
@@ -126,22 +132,21 @@ class MainFrame(tk.Frame):
             self.buildNotConnectedToKafkaFrame()
             return
 
+        div = customtkinter.CTkFrame(self)
+        div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         if self.user is None:
-            div = tk.Frame(self, background=BACKGROUND)
-            div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+            customtkinter.CTkLabel(master=div, text="Username:", font=self.LABEL_FONT, ).pack(pady=(50, 0))
+            usernameEntry = customtkinter.CTkEntry(master=div, font=self.LABEL_FONT)
+            usernameEntry.pack(anchor=tk.CENTER, pady=(10, 0), padx=(50, 50))
 
-            tk.Label(master=div, text="Username:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack()
-            usernameEntry = tk.Entry(master=div, font=("Arial", 17))
-            usernameEntry.pack(anchor=tk.CENTER, pady=(10, 0))
+            customtkinter.CTkLabel(master=div, text="Password:", font=self.LABEL_FONT, ).pack(pady=(30, 0))
+            passwordEntry = customtkinter.CTkEntry(master=div, font=self.LABEL_FONT)
+            passwordEntry.pack(pady=(10, 0), padx=(50, 50))
 
-            tk.Label(master=div, text="Password:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack(pady=(30, 0))
-            passwordEntry = tk.Entry(master=div, font=("Arial", 17))
-            passwordEntry.pack(pady=(10, 0))
-
-            tk.Button(master=div, text="SUBMIT", font=("Arial", 17), command=lambda: self.login(usernameEntry.get(), passwordEntry.get()), background=BUTTON_BG, foreground=BUTTON_FG).pack(pady=(30, 0))
+            customtkinter.CTkButton(master=div, text="SUBMIT", font=self.LABEL_FONT, command=lambda: self.login(usernameEntry.get(), passwordEntry.get())).pack(pady=(30, 50))
         else:
-            tk.Label(master=self, text=f"Logged in as {self.user.name}", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack()
-            tk.Button(master=self, text="DISCONNECT", font=("Arial", 17), command=lambda: self.disconnect(), background=BUTTON_BG, foreground=BUTTON_FG).pack()
+            customtkinter.CTkLabel(master=div, text=f"Logged in as {self.user.name}", font=self.LABEL_FONT, ).pack(pady=(50, 0), padx=50)
+            customtkinter.CTkButton(master=div, text="DISCONNECT", font=self.LABEL_FONT, command=lambda: self.disconnect()).pack(pady=(30, 50))
 
     def buildRegisterFrame(self):
         self.cleanFrame()
@@ -150,46 +155,62 @@ class MainFrame(tk.Frame):
             self.buildNotConnectedToKafkaFrame()
             return
 
-        div = tk.Frame(self, background=BACKGROUND)
+        div = customtkinter.CTkFrame(self)
         div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-        tk.Label(master=div, text="Username:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack()
-        usernameEntry = tk.Entry(master=div, font=("Arial", 17))
-        usernameEntry.pack(anchor=tk.CENTER, pady=(10, 0))
+        customtkinter.CTkLabel(master=div, text="Username:", font=self.LABEL_FONT).pack(pady=(50, 0))
+        usernameEntry = customtkinter.CTkEntry(master=div, font=self.LABEL_FONT)
+        usernameEntry.pack(anchor=tk.CENTER, pady=(10, 0), padx=(50, 50))
 
-        tk.Label(master=div, text="Password:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack(pady=(30, 0))
-        passwordEntry = tk.Entry(master=div, font=("Arial", 17))
+        customtkinter.CTkLabel(master=div, text="Password:", font=self.LABEL_FONT, ).pack(pady=(30, 0))
+        passwordEntry = customtkinter.CTkEntry(master=div, font=self.LABEL_FONT)
         passwordEntry.pack(pady=(10, 0))
 
-        tk.Label(master=div, text="Confirm password:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack(pady=(30, 0))
-        confirmPasswordEntry = tk.Entry(master=div, font=("Arial", 17))
+        customtkinter.CTkLabel(master=div, text="Confirm password:", font=self.LABEL_FONT, ).pack(pady=(30, 0))
+        confirmPasswordEntry = customtkinter.CTkEntry(master=div, font=self.LABEL_FONT)
         confirmPasswordEntry.pack(pady=(10, 0))
 
-        tk.Button(master=div, text="SUBMIT", font=("Arial", 17),
-                  command=lambda: self.registerNewAccount(usernameEntry.get(), passwordEntry.get(), confirmPasswordEntry.get()), background=BUTTON_BG, foreground=BUTTON_FG).pack(pady=(30, 0))
+        customtkinter.CTkButton(master=div, text="SUBMIT", font=self.LABEL_FONT,
+                  command=lambda: self.registerNewAccount(usernameEntry.get(), passwordEntry.get(), confirmPasswordEntry.get())).pack(pady=(30, 50))
 
     def buildKafkaFrame(self):
         self.cleanFrame()
 
-        div = tk.Frame(self, background=FRAME_BACKGROUND)
+        div = customtkinter.CTkFrame(self)
         if self.databaseProducer is None:
-            tk.Label(master=div, text="Address:", font=("Arial", 17), background=FRAME_BACKGROUND, fg=TEXT_COLOR).pack(pady=(30, 0), anchor=tk.CENTER)
-            entry = tk.Entry(master=div, background=FRAME_BACKGROUND, foreground="white", borderwidth=0, border=0, font=("Arial", 17))
+            customtkinter.CTkLabel(master=div, text="Address:", font=self.LABEL_FONT).pack(padx=(100, 100), pady=(50, 0), anchor=tk.CENTER)
+            entry = customtkinter.CTkEntry(master=div, font=self.LABEL_FONT, width=200)
             entry.pack(pady=(10, 0), anchor=tk.CENTER)
 
-            tk.Button(master=div, text="CONNECT", font=("Arial", 17), background=BUTTON_BG, foreground=BUTTON_FG, border=0,
-                      command=lambda: self.getKafkaConnection(entry.get() if entry.get() != "" else "localhost:9092")).pack(pady=(30, 0))
+            customtkinter.CTkButton(master=div, text="CONNECT", font=self.LABEL_FONT,
+                      command=lambda: self.getKafkaConnection(entry.get() if entry.get() != "" else "localhost:9092")).pack(pady=(30, 50))
         else:
-            tk.Label(master=div, text=f"Connected to {self.kafkaAddress}", fg=TEXT_COLOR).pack(pady=(30, 0), anchor=tk.CENTER)
-            tk.Button(master=div, text="DISCONNECT", font=("Arial", 17), command=lambda: self.buttonDisconnectFromKafka(), background=BUTTON_BG, foreground=BUTTON_FG).pack(pady=(30, 0), anchor=tk.CENTER)
+            customtkinter.CTkLabel(master=div, text=f"Connected to {self.kafkaAddress}").pack(pady=(50, 10), anchor=tk.CENTER)
+            customtkinter.CTkButton(master=div, text="DISCONNECT", font=self.LABEL_FONT, command=lambda: self.buttonDisconnectFromKafka()).pack(pady=(30, 50), padx=50, anchor=tk.CENTER)
 
         div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
     def buildNotConnectedToKafkaFrame(self):
-        tk.Label(master=self, text="Connect to kafka", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack(anchor=tk.CENTER)
+        customtkinter.CTkLabel(master=self, text="Connect to kafka", font=self.LABEL_FONT).pack(anchor=tk.CENTER)
 
     def buildNotLoggedInFrame(self):
-        tk.Label(master=self, text="Log In", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack(anchor=tk.CENTER)
+        customtkinter.CTkLabel(master=self, text="Log In", font=self.LABEL_FONT).pack(anchor=tk.CENTER)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def startSharing(self):
         msg = self.databaseCall(topic=MY_TOPIC, operation="CREATE_SESSION", message=json.dumps({

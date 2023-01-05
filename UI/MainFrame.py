@@ -6,9 +6,12 @@ from start import *
 from typing import Optional
 from ControlWindow import TkinterVideo
 from User import User
-import threading
 
-WHITE = "white"
+BACKGROUND = "#161616"
+FRAME_BACKGROUND = "#1c1c1c"
+TEXT_COLOR = "#FFFFFF"
+BUTTON_BG = "#d5f372"
+BUTTON_FG = "#000000"
 DATABASE_TOPIC = "DATABASE"
 MY_TOPIC = f"{uuid.uuid1()}"
 
@@ -38,45 +41,48 @@ class MainFrame(tk.Frame):
             self.buildNotLoggedInFrame()
             return
 
-        leftFrame = tk.Frame(self, background=WHITE, borderwidth=0.5, relief="solid")
+        leftFrame = tk.Frame(self, background=BACKGROUND, borderwidth=0.5, relief="solid")
         leftFrame.pack(expand=True, fill=tk.BOTH, side=tk.LEFT)
         leftFrame.pack_propagate(False)
 
-        tk.Label(master=leftFrame, text="Allow Remote Control", background=WHITE, font=("Arial", 17)).place(relx=0.5, rely=0.25, anchor=tk.CENTER)
+        tk.Label(master=leftFrame, text="Allow Remote Control", background=BACKGROUND, font=("Arial", 17), fg=TEXT_COLOR).place(relx=0.5, rely=0.25, anchor=tk.CENTER)
 
-        div = tk.Frame(leftFrame, background=WHITE)
+        div = tk.Frame(leftFrame, background=BACKGROUND)
         div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-        tk.Label(master=div, text="YOUR ID:", font=("Arial", 17), background=WHITE).grid(row=0, column=0, padx=(0, 20))
-        tk.Label(master=div, text=str(self.user.callKey), font=("Arial", 17),background=WHITE).grid(row=1, column=0)
+        tk.Label(master=div, text="YOUR ID:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=0, column=0, padx=(0, 20))
+        tk.Label(master=div, text=str(self.user.callKey), font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=1, column=0)
 
-        tk.Label(master=div, text="PASSWORD:", font=("Arial", 17), background=WHITE).grid(row=2, column=0, pady=(30, 0), padx=(0, 20))
-        tk.Label(master=div, text=str(self.user.callPassword), font=("Arial", 17), background=WHITE).grid(row=3, column=0)
+        tk.Label(master=div, text="PASSWORD:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=2, column=0, pady=(30, 0), padx=(0, 20))
+        tk.Label(master=div, text=str(self.user.callPassword), font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=3, column=0)
 
-        if self.user.sessionId is None:
-            tk.Button(master=div, text="START SHARING", command=self.buttonStartSharing).grid(row=4, column=0, pady=(30, 0))
-        elif self.videoPlayerWindow is not None:
+        if self.user.sessionId is None and self.videoPlayerWindow is None:
+            tk.Button(master=div, text="START SHARING", command=self.buttonStartSharing, background=BUTTON_BG, foreground=BUTTON_FG).grid(row=4, column=0, pady=(30, 0))
+        if self.videoPlayerWindow is not None:
             tk.Button(master=div, text="START SHARING", state=tk.DISABLED).grid(row=4, column=0, pady=(30, 0))
         else:
-            tk.Button(master=div, text="STOP SHARING", command=self.buttonStopSharing).grid(row=4, column=0, pady=(30, 0))
+            tk.Button(master=div, text="STOP SHARING", command=self.buttonStopSharing, background=BUTTON_BG, foreground=BUTTON_FG).grid(row=4, column=0, pady=(30, 0))
 
-        rightFrame = tk.Frame(self, background=WHITE, borderwidth=0.5, relief="solid")
+        rightFrame = tk.Frame(self, background=BACKGROUND, borderwidth=0.5, relief="solid")
         rightFrame.pack(expand=True, fill=tk.BOTH, side=tk.RIGHT)
         rightFrame.pack_propagate(False)
 
-        tk.Label(master=rightFrame, text="Control Remote Computer", background=WHITE, font=("Arial", 17)).place(relx=0.5, rely=0.25, anchor=tk.CENTER)
+        tk.Label(master=rightFrame, text="Control Remote Computer", background=BACKGROUND, font=("Arial", 17), fg=TEXT_COLOR).place(relx=0.5, rely=0.25, anchor=tk.CENTER)
 
-        divRight = tk.Frame(rightFrame, background=WHITE)
+        divRight = tk.Frame(rightFrame, background=BACKGROUND)
         divRight.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-        tk.Label(master=divRight, text="USER ID:", font=("Arial", 17), background=WHITE).grid(row=0, column=0, padx=(0, 20))
+        tk.Label(master=divRight, text="USER ID:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=0, column=0, padx=(0, 20))
         idEntry = tk.Entry(master=divRight, font=("Arial", 17))
         idEntry.grid(row=0, column=2)
 
-        tk.Label(master=divRight, text="PASSWORD:", font=("Arial", 17), background=WHITE).grid(row=1, column=0, pady=(30, 0), padx=(0, 20))
+        tk.Label(master=divRight, text="PASSWORD:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).grid(row=1, column=0, pady=(30, 0), padx=(0, 20))
         passwordEntry = tk.Entry(master=divRight, font=("Arial", 17))
         passwordEntry.grid(row=1, column=2, pady=(30, 0))
 
-        tk.Button(master=divRight, text="SUBMIT", font=("Arial", 17), command=lambda: self.buttonStartCall(idEntry.get(), passwordEntry.get())).grid(row=2, column=1, pady=(30, 0))
+        if self.videoPlayerWindow is not None:
+            tk.Button(master=divRight, text="SUBMIT", font=("Arial", 17), state=tk.DISABLED, background=BUTTON_BG, foreground=BUTTON_FG).grid(row=2, column=1, pady=(30, 0))
+        else:
+            tk.Button(master=divRight, text="SUBMIT", font=("Arial", 17), command=lambda: self.buttonStartCall(idEntry.get(), passwordEntry.get()), background=BUTTON_BG, foreground=BUTTON_FG).grid(row=2, column=1, pady=(30, 0))
 
     def buttonStartCall(self, callKey: str, callPassword: str):
         self.startCall(callKey, callPassword)
@@ -101,16 +107,17 @@ class MainFrame(tk.Frame):
             self.buildNotLoggedInFrame()
             return
 
-        div = tk.Frame(self, background=WHITE)
+        div = tk.Frame(self, background=BACKGROUND)
         div.pack()
 
         msg = self.databaseCall(MY_TOPIC, "GET_VIDEOS_BY_USER", json.dumps({"ID": self.user.id}).encode())
         data = json.loads(msg.value())
 
         for i, video in enumerate(data):
-            tk.Label(master=div, text=video.get("CreatedAt")).grid(row=i, column=0)
+            tk.Label(master=div, text=video.get("CreatedAt"), fg=TEXT_COLOR).grid(row=i, column=0)
             tk.Button(master=div, text="Download",
-                      command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)).grid(row=i, column=1)
+                      command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)
+                      , background=BUTTON_BG, foreground=BUTTON_FG).grid(row=i, column=1)
 
     def buildLoginFrame(self):
         self.cleanFrame()
@@ -120,21 +127,21 @@ class MainFrame(tk.Frame):
             return
 
         if self.user is None:
-            div = tk.Frame(self, background=WHITE)
+            div = tk.Frame(self, background=BACKGROUND)
             div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-            tk.Label(master=div, text="Username:", font=("Arial", 17), background=WHITE).pack()
+            tk.Label(master=div, text="Username:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack()
             usernameEntry = tk.Entry(master=div, font=("Arial", 17))
             usernameEntry.pack(anchor=tk.CENTER, pady=(10, 0))
 
-            tk.Label(master=div, text="Password:", font=("Arial", 17), background=WHITE).pack(pady=(30, 0))
+            tk.Label(master=div, text="Password:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack(pady=(30, 0))
             passwordEntry = tk.Entry(master=div, font=("Arial", 17))
             passwordEntry.pack(pady=(10, 0))
 
-            tk.Button(master=div, text="SUBMIT", font=("Arial", 17), command=lambda: self.login(usernameEntry.get(), passwordEntry.get())).pack(pady=(30, 0))
+            tk.Button(master=div, text="SUBMIT", font=("Arial", 17), command=lambda: self.login(usernameEntry.get(), passwordEntry.get()), background=BUTTON_BG, foreground=BUTTON_FG).pack(pady=(30, 0))
         else:
-            tk.Label(master=self, text=f"Logged in as {self.user.name}", font=("Arial", 17), background=WHITE).pack()
-            tk.Button(master=self, text="DISCONNECT", font=("Arial", 17), command=lambda: self.disconnect()).pack()
+            tk.Label(master=self, text=f"Logged in as {self.user.name}", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack()
+            tk.Button(master=self, text="DISCONNECT", font=("Arial", 17), command=lambda: self.disconnect(), background=BUTTON_BG, foreground=BUTTON_FG).pack()
 
     def buildRegisterFrame(self):
         self.cleanFrame()
@@ -143,43 +150,46 @@ class MainFrame(tk.Frame):
             self.buildNotConnectedToKafkaFrame()
             return
 
-        div = tk.Frame(self, background=WHITE)
+        div = tk.Frame(self, background=BACKGROUND)
         div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-        tk.Label(master=div, text="Username:", font=("Arial", 17), background=WHITE).pack()
+        tk.Label(master=div, text="Username:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack()
         usernameEntry = tk.Entry(master=div, font=("Arial", 17))
         usernameEntry.pack(anchor=tk.CENTER, pady=(10, 0))
 
-        tk.Label(master=div, text="Password:", font=("Arial", 17), background=WHITE).pack(pady=(30, 0))
+        tk.Label(master=div, text="Password:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack(pady=(30, 0))
         passwordEntry = tk.Entry(master=div, font=("Arial", 17))
         passwordEntry.pack(pady=(10, 0))
 
-        tk.Label(master=div, text="Confirm password:", font=("Arial", 17), background=WHITE).pack(pady=(30, 0))
+        tk.Label(master=div, text="Confirm password:", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack(pady=(30, 0))
         confirmPasswordEntry = tk.Entry(master=div, font=("Arial", 17))
         confirmPasswordEntry.pack(pady=(10, 0))
 
         tk.Button(master=div, text="SUBMIT", font=("Arial", 17),
-                  command=lambda: self.registerNewAccount(usernameEntry.get(), passwordEntry.get(), confirmPasswordEntry.get())).pack(pady=(30, 0))
+                  command=lambda: self.registerNewAccount(usernameEntry.get(), passwordEntry.get(), confirmPasswordEntry.get()), background=BUTTON_BG, foreground=BUTTON_FG).pack(pady=(30, 0))
 
     def buildKafkaFrame(self):
         self.cleanFrame()
 
+        div = tk.Frame(self, background=FRAME_BACKGROUND)
         if self.databaseProducer is None:
-            tk.Label(master=self, text="Address:", font=("Arial", 17), background=WHITE).pack(pady=(30, 0))
-            entry = tk.Entry(master=self, font=("Arial", 17))
-            entry.pack(pady=(10, 0))
+            tk.Label(master=div, text="Address:", font=("Arial", 17), background=FRAME_BACKGROUND, fg=TEXT_COLOR).pack(pady=(30, 0), anchor=tk.CENTER)
+            entry = tk.Entry(master=div, background=FRAME_BACKGROUND, foreground="white", borderwidth=0, border=0, font=("Arial", 17))
+            entry.pack(pady=(10, 0), anchor=tk.CENTER)
 
-            tk.Button(master=self, text="CONNECT", font=("Arial", 17),
+            tk.Button(master=div, text="CONNECT", font=("Arial", 17), background=BUTTON_BG, foreground=BUTTON_FG, border=0,
                       command=lambda: self.getKafkaConnection(entry.get() if entry.get() != "" else "localhost:9092")).pack(pady=(30, 0))
         else:
-            tk.Label(master=self, text=f"Connected to {self.kafkaAddress}").pack(pady=(30, 0))
-            tk.Button(master=self, text="DISCONNECT", font=("Arial", 17), command=lambda: self.buttonDisconnectFromKafka()).pack(pady=(30, 0))
+            tk.Label(master=div, text=f"Connected to {self.kafkaAddress}", fg=TEXT_COLOR).pack(pady=(30, 0), anchor=tk.CENTER)
+            tk.Button(master=div, text="DISCONNECT", font=("Arial", 17), command=lambda: self.buttonDisconnectFromKafka(), background=BUTTON_BG, foreground=BUTTON_FG).pack(pady=(30, 0), anchor=tk.CENTER)
+
+        div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
     def buildNotConnectedToKafkaFrame(self):
-        tk.Label(master=self, text="Connect to kafka", font=("Arial", 17), background=WHITE).pack(anchor=tk.CENTER)
+        tk.Label(master=self, text="Connect to kafka", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack(anchor=tk.CENTER)
 
     def buildNotLoggedInFrame(self):
-        tk.Label(master=self, text="Log In", font=("Arial", 17), background=WHITE).pack(anchor=tk.CENTER)
+        tk.Label(master=self, text="Log In", font=("Arial", 17), background=BACKGROUND, fg=TEXT_COLOR).pack(anchor=tk.CENTER)
 
     def startSharing(self):
         msg = self.databaseCall(topic=MY_TOPIC, operation="CREATE_SESSION", message=json.dumps({

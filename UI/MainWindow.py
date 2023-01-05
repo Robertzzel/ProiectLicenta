@@ -2,7 +2,7 @@ import tkinter as tk
 from MenuFrame import MenuFrame
 from MainFrame import MainFrame
 
-WHITE = "white"
+BACKGROUND = "#161616"
 
 
 class MainWindow(tk.Tk):
@@ -15,12 +15,12 @@ class MainWindow(tk.Tk):
         self.minsize(windowWidth, windowHeight)
 
         self.geometry(f"{windowWidth}x{windowHeight}")
-        self.config(background=WHITE)
+        self.config(background=BACKGROUND)
 
         self.menuFrame = MenuFrame(self, background="lightgray", width=windowWidth // 8, height=windowHeight)
         self.menuFrame.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
         self.menuFrame.pack_propagate(False)
-        self.mainFrame = MainFrame(self, background=WHITE, width=windowWidth // 8 * 7, height=windowHeight)
+        self.mainFrame = MainFrame(self, background=BACKGROUND, width=windowWidth // 8 * 7, height=windowHeight)
         self.mainFrame.pack(fill=tk.BOTH, expand=True, side=tk.RIGHT)
         self.mainFrame.pack_propagate(False)
 

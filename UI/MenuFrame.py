@@ -1,7 +1,7 @@
 import tkinter as tk
 import customtkinter
 
-BACKGROUND = "#161616"
+BACKGROUND = "#222222"
 MENU_TEXT_COLOR = "#FFFFFF"
 
 

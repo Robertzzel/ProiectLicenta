@@ -64,7 +64,6 @@ func getStartTime(ctx context.Context, consumer *Kafka.Consumer) (string, error)
 }
 
 func main() {
-	defer log.Println("All done")
 	if len(os.Args) < 3 {
 		fmt.Println("No broker address given")
 		return
@@ -82,8 +81,6 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("waiting for message")
-
 	startTimestamp, err := getStartTime(ctx, startConsumer)
 	if err != nil {
 		panic(err)
@@ -93,8 +90,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	fmt.Println("Starting..")
 
 	videoRecorder, err := NewRecorder(ctx, 15)
 	if err != nil {

@@ -77,7 +77,7 @@ class Merger:
 
                 self.videosQueue.put(message.value())
 
-                if self.videosQueue.qsize() > 10:
+                if self.videosQueue.qsize() > 20:
                     self.aggregateVideosFromQueue()
         except BaseException as ex:
             print(ex)

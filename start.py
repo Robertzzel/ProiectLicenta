@@ -32,7 +32,7 @@ class Merger:
         #self.process.send_signal(signal.SIGINT)
 
         try:
-            self.process.wait(timeout=10)
+            self.process.wait(timeout=30)
         except subprocess.TimeoutExpired as ex:
             self.process.kill()
         finally:

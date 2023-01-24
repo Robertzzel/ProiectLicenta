@@ -32,7 +32,7 @@ class Recorder:
         self.process_thread: Optional[threading.Thread] = None
         self.running = True
 
-    def start(self, start_time: time.time, chunk_size_seconds: int):
+    def start(self, start_time: time.time, chunk_size_seconds: float):
         while start_time - 1 - time.time() > 0:
             time.sleep(start_time - time.time())
 

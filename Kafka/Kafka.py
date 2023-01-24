@@ -57,8 +57,12 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
             return msg
 
-    def receiveBigMessage(self) -> Optional[kafka.Message | CustomKafkaMessage]:
-        message = self.consumeMessage()
+    def receiveBigMessage(self, timeoutSeconds: float = None) -> Optional[kafka.Message | CustomKafkaMessage]:
+        endTime = None if timeoutSeconds is None else time.time() + timeoutSeconds
+
+        message = self.consumeMessage(None if endTime is None else endTime - time.time())
+        if message is None:
+            return None
 
         headersToBeReturned: List[str, bytes] = list(
             filter(lambda h: h[0] not in ("number-of-messages", "message-number"), message.headers()))
@@ -74,7 +78,10 @@ class KafkaConsumerWrapper(kafka.Consumer):
         messages: List[bytes] = [b""] * numberOfMessages
         messages[currentMessageNumber] = message.value()
         for i in range(numberOfMessages - 1):
-            message = self.consumeMessage()
+            message = self.consumeMessage(None if endTime is None else endTime - time.time())
+            if message is None:
+                return None
+
             for header in message.headers():
                 if header[0] == "message-number":
                     currentMessageNumber = int(header[1].decode())
@@ -111,11 +118,16 @@ class KafkaConsumerWrapper(kafka.Consumer):
         return None
 
 
-def createTopic(brokerAddress: str, topic: str, partitions: int = 1):
+def createTopic(brokerAddress: str, topic: str, partitions: int = 1, timeoutSeconds: float = 5):
     adminClient = AdminClient({"bootstrap.servers": brokerAddress})
     s = adminClient.create_topics(new_topics=[kafka.admin.NewTopic(topic, partitions, 1)])
-    while not s[topic].done():
-        time.sleep(0.01)
+
+    endTime = time.time() + timeoutSeconds
+    while not s[topic].done() and endTime > time.time():
+        time.sleep(0.02)
+
+    if not s[topic].done():
+        raise Exception(f"Cannot create topic {topic}")
 
 
 def deleteTopic(brokerAddress: str, topic: str):

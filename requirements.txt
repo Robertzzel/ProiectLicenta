@@ -1,5 +1,8 @@
 av==10.0.0
 cffi==1.15.1
+confluent-kafka==1.9.2
+customtkinter==5.0.3
+darkdetect==0.8.0
 evdev==1.6.0
 kafka-python==2.0.2
 MouseInfo==0.1.3

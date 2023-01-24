@@ -4,10 +4,14 @@ import (
 	"Licenta/Kafka"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"os"
+	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -16,44 +20,6 @@ const (
 	topic            = "DATABASE"
 )
 
-type User struct {
-	gorm.Model
-	Name     string `gorm:"unique;not null"`
-	Password string
-	Videos   []*Video `gorm:"many2many:user_videos;"`
-}
-
-type InputUser struct {
-	ID       uint   `json:"ID"`
-	Name     string `json:"Name"`
-	Password string `json:"Password"`
-}
-
-func (inputUser InputUser) ToUser() User {
-	return User{Name: inputUser.Name, Password: inputUser.Password, Model: gorm.Model{ID: inputUser.ID}}
-}
-
-type Video struct {
-	gorm.Model
-	FilePath string  `gorm:"unique;not null"`
-	Users    []*User `gorm:"many2many:user_videos;"`
-}
-
-type InputVideo struct {
-	FilePath string      `json:"FilePath"`
-	Users    []InputUser `json:"Users"`
-	ID       uint        `json:"ID"`
-}
-
-func (inputVideo InputVideo) ToVideo() Video {
-	users := make([]*User, 0)
-	for _, inputUser := range inputVideo.Users {
-		user := inputUser.ToUser()
-		users = append(users, &user)
-	}
-	return Video{FilePath: inputVideo.FilePath, Users: users, Model: gorm.Model{ID: inputVideo.ID}}
-}
-
 func doesFileExist(fileName string) bool {
 	_, err := os.Stat(fileName)
 
@@ -61,40 +27,18 @@ func doesFileExist(fileName string) bool {
 	return !os.IsNotExist(err)
 }
 
-func addUser() *Kafka.ConsumerMessage {
-	return &Kafka.ConsumerMessage{
-		Headers: []Kafka.Header{
-			{"topic", []byte("UI")},
-			{"operation", []byte("CREATE")},
-			{"table", []byte("users")},
-			{"input", []byte(`{"Name": "admin","Password": "admin"}`)},
-		},
+func deleteSession(db *gorm.DB, sessionId uint) error {
+	var foundSession Session
+	if err := db.Where(&Session{Model: gorm.Model{ID: sessionId}}).First(&foundSession).Error; err != nil { // TODO VERIFICA SI DACA A FOST STEARSA
+		return err
 	}
+	if err := db.Delete(&foundSession).Error; err != nil {
+		return err
+	}
+	return nil
 }
 
-func addVideo() *Kafka.ConsumerMessage {
-	return &Kafka.ConsumerMessage{
-		Headers: []Kafka.Header{
-			{"topic", []byte("none")},
-			{"operation", []byte("CREATE")},
-			{"table", []byte("videos")},
-			{"input", []byte(`{"Users": [{"ID": 1}]}`)},
-		},
-	}
-}
-
-func getVideosByUser() *Kafka.ConsumerMessage {
-	return &Kafka.ConsumerMessage{
-		Headers: []Kafka.Header{
-			{"topic", []byte("none")},
-			{"operation", []byte("READ_VIDEOS")},
-			{"table", []byte("users")},
-			{"input", []byte(`{"ID": 1}`)},
-		},
-	}
-}
-
-func getNewFile(data []byte) (string, error) {
+func WriteNewFile(data []byte) (string, error) {
 	i := 0
 	for {
 		path := fmt.Sprintf("./video%d.mp4", i)
@@ -114,101 +58,410 @@ func hash(password string) string {
 	return fmt.Sprintf("%x", hash)
 }
 
-func handleUserRequest(db *gorm.DB, operation string, input []byte) (*Kafka.ProducerMessage, error) {
-	var inputUser InputUser
-	if err := json.Unmarshal(input, &inputUser); err != nil {
-		return nil, err
+func getUserFromMessage(message []byte) (User, error) {
+	var jsonUser JsonUser
+	if err := json.Unmarshal(message, &jsonUser); err != nil {
+		return User{}, err
 	}
-	user := inputUser.ToUser()
-	user.Password = hash(user.Password)
-
-	switch operation {
-	case "CREATE":
-		if err := db.Create(&user).Error; err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
-		}
-	case "READ": // check
-		if err := db.Where("name = ? and password = ?", user.Name, user.Password).First(&user).Error; err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, nil
-		}
-		return &Kafka.ProducerMessage{Message: []byte(fmt.Sprint(user.ID)), Headers: []Kafka.Header{{Key: "status", Value: []byte("OK")}}}, nil
-	case "READ_VIDEOS":
-		var foundVideos []Video
-
-		if err := db.Table("users").Where("id = ?", user.ID).First(&user).Error; err != nil { //.Association("Videos").Find(&foundVideos)
-			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, nil
-		}
-		if err := db.Model(&user).Association("Videos").Find(&foundVideos); err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, nil
-		}
-
-		result, err := json.Marshal(foundVideos)
-		if err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(err.Error()), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, err
-		}
-		return &Kafka.ProducerMessage{Message: result, Headers: []Kafka.Header{{Key: "status", Value: []byte("OK")}}}, nil
-	case "DELETE":
-		if err := db.Delete(&user); err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
-		}
-	case "UPDATE":
-		if err := db.Where("name = ?", user.Name).Update("password", user.Password); err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(err.Error.Error())}, nil
-		}
-	}
-
-	return &Kafka.ProducerMessage{Message: []byte("OK")}, nil
+	return jsonUser.ToUser(), nil
 }
 
-func handleVideoRequest(db *gorm.DB, operation string, input []byte, data []byte) (*Kafka.ProducerMessage, error) {
-	var inputVideo InputVideo
-	if err := json.Unmarshal(input, &inputVideo); err != nil {
+func handleLogin(db *gorm.DB, message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
 		return nil, err
 	}
-	video := inputVideo.ToVideo()
-	users := video.Users
-	video.Users = nil
 
-	switch operation {
-	case "CREATE":
-		// create file
-		var err error
-		video.FilePath, err = getNewFile(data)
-		if err != nil {
-			return &Kafka.ProducerMessage{Message: []byte("FAILED")}, nil
-		}
+	name, nameExists := input["Name"]
+	password, passwordExists := input["Password"]
 
-		if db.Create(&video).Error != nil {
-			return &Kafka.ProducerMessage{Message: []byte(db.Error.Error())}, nil
-		}
+	if !(nameExists && passwordExists) {
+		return nil, errors.New("name, password and topic needed")
+	}
 
-		foundUsers := make([]*User, 0)
-		for _, user := range users {
-			if db.Where("id = ?", user.ID).First(user).Error == nil {
-				foundUsers = append(foundUsers, user)
-			}
-		}
+	var user User
+	if err := db.First(&user, "name = ? and password = ?", name, hash(password)).Error; err != nil {
+		return nil, err
+	}
 
-		if err := db.Model(&video).Where("id = ?", video.ID).Association("Users").Append(&foundUsers); err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(err.Error())}, nil
-		}
-	case "READ": // check
-		// TODO SEND VIDEO CONTENTS
-		video = Video{Model: gorm.Model{ID: inputVideo.ID}}
-		if err := db.Where("id=?", video.ID).First(&video).Error; err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(err.Error())}, nil
-		}
-		videoContents, err := os.ReadFile(video.FilePath)
-		if err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(""), Headers: []Kafka.Header{{Key: "status", Value: []byte("FAILED")}}}, err
-		}
-		return &Kafka.ProducerMessage{Message: videoContents, Headers: []Kafka.Header{{Key: "status", Value: []byte("OK")}}}, nil
-	case "DELETE":
-		if err := db.Delete(&video).Error; err != nil {
-			return &Kafka.ProducerMessage{Message: []byte(err.Error())}, nil
+	if err := db.Model(&user).Update("call_password", uuid.NewString()[:4]).Error; err != nil {
+		return nil, err
+	}
+
+	if err := db.Model(&user).Update("session_id", nil).Error; err != nil {
+		return nil, err
+	}
+
+	user.SessionId = nil
+	return json.Marshal(&user)
+}
+
+func handleRegister(db *gorm.DB, message []byte) ([]byte, error) {
+	user, err := getUserFromMessage(message)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(user.Password) <= 4 || !regexp.MustCompile(`\d`).MatchString(user.Password) {
+		return nil, errors.New("password mush have a number, a character and be at least the size of 4")
+	}
+
+	user.Password = hash(user.Password)
+	user.CallKey = uuid.NewString() // PANICS
+
+	if err = db.Create(&user).Error; err != nil {
+		return nil, err
+	}
+
+	return []byte("Successfully created"), nil
+}
+
+func handleAddVideo(db *gorm.DB, message []byte, sessionId int) ([]byte, error) {
+	var err error
+	video := Video{}
+	session := Session{}
+
+	video.FilePath, err = WriteNewFile(message)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = db.Create(&video).Error; err != nil {
+		return nil, err
+	}
+
+	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
+		return nil, err
+	}
+
+	var associatedUsers []User
+	if err = db.Where("session_id = ?", uint(sessionId)).Find(&associatedUsers).Error; err != nil {
+		return nil, err
+	}
+
+	var foundUsers []User
+	if err = db.Model(&session).Association("Users").Find(&foundUsers); err != nil {
+		return nil, err
+	}
+
+	if err = db.Model(&video).Where("id = ?", video.ID).Association("Users").Append(&foundUsers); err != nil {
+		return nil, err
+	}
+
+	return []byte("video added"), nil
+}
+
+func handleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	key, keyExists := input["Key"]
+	password, passwordExists := input["Password"]
+	callerIdString, hasCallerId := input["CallerId"]
+
+	callerId, err := strconv.Atoi(callerIdString)
+	if err != nil {
+		return nil, err
+	}
+
+	if !keyExists || !passwordExists || !hasCallerId {
+		return nil, errors.New("password AND key needed")
+	}
+
+	var sharerUser User
+	if err = db.Where(&User{CallKey: key, CallPassword: password}).First(&sharerUser).Error; err != nil {
+		return nil, err
+	}
+
+	var callerUser User
+	if err = db.First(&callerUser, "id = ?", uint(callerId)).Error; err != nil {
+		return nil, err
+	}
+
+	if sharerUser.SessionId == nil {
+		return []byte("NOT ACTIVE"), nil
+	}
+
+	var session Session
+	if err = db.Where(&Session{Model: gorm.Model{ID: *sharerUser.SessionId}}).First(&session).Error; err != nil {
+		return nil, err
+	}
+
+	result, err := json.Marshal(map[string]string{"AggregatorTopic": session.TopicAggregator, "InputsTopic": session.TopicInputs})
+	if err != nil {
+		return nil, err
+	}
+
+	if err = db.Model(&callerUser).Update("session_id", session.ID).Error; err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func handleGetVideoByUser(db *gorm.DB, message []byte) ([]byte, error) {
+	user, err := getUserFromMessage(message)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = db.First(&user, "id = ?", user.ID).Error; err != nil {
+		return nil, err
+	}
+
+	var foundVideos []Video
+	if err = db.Model(&user).Association("Videos").Find(&foundVideos); err != nil {
+		return nil, err
+	}
+
+	result, err := json.Marshal(foundVideos)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func handleDownloadVideoById(db *gorm.DB, message []byte) ([]byte, error) {
+	id, err := strconv.Atoi(string(message))
+	if err != nil {
+		return nil, err
+	}
+
+	video := Video{}
+	if err = db.Where("id=?", uint(id)).First(&video).Error; err != nil {
+		return nil, err
+	}
+
+	videoContents, err := os.ReadFile(video.FilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return videoContents, nil
+}
+
+func handleDisconnect(db *gorm.DB, message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	idString, idExists := input["ID"]
+	if !idExists {
+		return nil, errors.New("id not given")
+	}
+
+	id, err := strconv.Atoi(idString)
+	if err != nil {
+		return nil, err
+	}
+
+	var user User
+	if err = db.First(&user, "id = ?", uint(id)).Error; err != nil {
+		return nil, err
+	}
+
+	if user.SessionId != nil {
+		if err = deleteSession(db, *user.SessionId); err != nil {
+			return nil, err
 		}
 	}
-	return &Kafka.ProducerMessage{Message: []byte("OK")}, nil
+	return []byte("success"), nil
+}
+
+func handleUsersInSession(db *gorm.DB, message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	sessionIdString, idExists := input["ID"]
+	if !idExists {
+		return nil, errors.New("sessionId not given")
+	}
+
+	sessionId, err := strconv.Atoi(sessionIdString)
+	if err != nil {
+		return nil, err
+	}
+
+	var session Session
+	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
+		return nil, err
+	}
+
+	var associatedUsers []User
+	if err = db.Where("session_id = ?", uint(sessionId)).Find(&associatedUsers).Error; err != nil {
+		return nil, err
+	}
+
+	return []byte(strconv.Itoa(len(associatedUsers))), nil
+}
+
+func handleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	aggregatorTopic, hasAggregatorTopic := input["AggregatorTopic"]
+	inputsTopic, hasInputsTopic := input["InputsTopic"]
+	mergerTopic, hasMergerTopic := input["MergerTopic"]
+	userIdString, hasUserId := input["UserID"]
+
+	if !(hasAggregatorTopic && hasMergerTopic && hasInputsTopic && hasUserId) {
+		return nil, errors.New("not enough topics")
+	}
+
+	userId, err := strconv.Atoi(userIdString)
+	if err != nil {
+		return nil, err
+	}
+
+	session := Session{TopicAggregator: aggregatorTopic, TopicInputs: inputsTopic, MergerTopic: mergerTopic}
+	if err = db.Create(&session).Error; err != nil {
+		return nil, err
+	}
+
+	var user User
+	if err = db.First(&user, "id = ?", uint(userId)).Error; err != nil {
+		return nil, err
+	}
+
+	if err = db.Model(&session).Association("Users").Append(&user); err != nil {
+		return nil, err
+	}
+
+	if err = db.Model(&user).Update("session_id", session.ID).Error; err != nil {
+		return nil, err
+	}
+
+	return []byte(strconv.Itoa(int(session.ID))), nil
+}
+
+func handleDeleteSession(db *gorm.DB, message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	sessionIdString, hasSessionId := input["SessionId"]
+	userIdString, hasUserId := input["SessionId"]
+	if !(hasSessionId && hasUserId) {
+		return nil, errors.New("not id given")
+	}
+
+	sessionId, err := strconv.Atoi(sessionIdString)
+	if err != nil {
+		return nil, err
+	}
+
+	userId, err := strconv.Atoi(userIdString)
+	if err != nil {
+		return nil, err
+	}
+
+	var user User
+	if err = db.First(&user, "id = ?", uint(userId)).Error; err != nil {
+		return nil, err
+	}
+
+	if err = db.Model(&user).Update("session_id", nil).Error; err != nil {
+		return nil, err
+	}
+
+	var session Session
+	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
+		return nil, err
+	}
+
+	if err = db.Delete(&session).Error; err != nil {
+		return nil, err
+	}
+
+	return []byte("success"), nil
+}
+
+func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.Producer) {
+	var sendTopic, operation []byte
+	for _, header := range message.Headers {
+		switch header.Key {
+		case "topic":
+			sendTopic = header.Value
+		case "operation":
+			operation = header.Value
+		}
+	}
+
+	var err error
+	var response []byte
+	var responseMessage *Kafka.ProducerMessage
+	switch string(operation) {
+	case "LOGIN":
+		response, err = handleLogin(db, message.Message)
+	case "REGISTER":
+		response, err = handleRegister(db, message.Message)
+	case "ADD_VIDEO":
+		var sessionId int
+		for _, header := range message.Headers {
+			switch header.Key {
+			case "sessionId":
+				sessionIdString := string(header.Value)
+				sessionId, err = strconv.Atoi(sessionIdString)
+			}
+		}
+		if err != nil {
+			break
+		}
+
+		response, err = handleAddVideo(db, message.Message, sessionId)
+	case "GET_CALL_BY_KEY":
+		response, err = handleGetCallByKeyAndPassword(db, message.Message)
+	case "GET_VIDEOS_BY_USER":
+		response, err = handleGetVideoByUser(db, message.Message)
+	case "DOWNLOAD_VIDEO_BY_ID":
+		response, err = handleDownloadVideoById(db, message.Message)
+	case "DISCONNECT":
+		response, err = handleDisconnect(db, message.Message)
+	case "USERS_IN_SESSION":
+		response, err = handleUsersInSession(db, message.Message)
+	case "CREATE_SESSION":
+		response, err = handleCreateSession(db, message.Message)
+	case "DELETE_SESSION":
+		response, err = handleDeleteSession(db, message.Message)
+	default:
+		err = errors.New("operation not permitted")
+	}
+	if err != nil {
+		responseMessage = &Kafka.ProducerMessage{
+			Message: []byte(err.Error()),
+			Topic:   string(sendTopic),
+			Headers: []Kafka.Header{
+				{`status`, []byte("FAILED")},
+			},
+		}
+	} else {
+		responseMessage = &Kafka.ProducerMessage{
+			Message: response,
+			Topic:   string(sendTopic),
+			Headers: []Kafka.Header{
+				{`status`, []byte("OK")},
+			},
+		}
+	}
+
+	if err = producer.Publish(responseMessage); err != nil {
+		fmt.Println(err)
+	} else {
+		if len(responseMessage.Message) < 250 {
+			fmt.Println("Sent response... ", string(responseMessage.Message))
+		} else {
+			fmt.Println("Sent response... ", len(responseMessage.Message), "bytes")
+		}
+	}
 }
 
 func main() {
@@ -223,7 +476,7 @@ func main() {
 		panic("cannot open the database")
 	}
 
-	if err := db.AutoMigrate(&User{}, &Video{}); err != nil {
+	if err = db.AutoMigrate(&Session{}, &User{}, &Video{}); err != nil {
 		panic(err)
 	}
 
@@ -236,12 +489,14 @@ func main() {
 	if err := consumer.SetOffsetToNow(); err != nil {
 		panic(err)
 	}
+
 	producer := Kafka.NewProducer(brokerAddress)
 	defer func() {
 		if err := producer.Close(); err != nil {
 			fmt.Println(err)
 		}
 	}()
+
 	for {
 		kafkaMessage, err := consumer.Consume(time.Second * 2)
 		if err != nil {
@@ -249,37 +504,6 @@ func main() {
 		}
 		fmt.Println("Message...")
 
-		var sendTopic, table, operation string
-		var input []byte
-		for _, header := range kafkaMessage.Headers {
-			switch header.Key {
-			case "topic":
-				sendTopic = string(header.Value)
-			case "operation":
-				operation = string(header.Value)
-			case "table":
-				table = string(header.Value)
-			case "input":
-				input = header.Value
-			}
-		}
-
-		var resultMessage *Kafka.ProducerMessage
-
-		switch table {
-		case "users":
-			resultMessage, err = handleUserRequest(db, operation, input)
-		case "videos":
-			resultMessage, err = handleVideoRequest(db, operation, input, kafkaMessage.Message)
-		}
-		if err != nil {
-			break
-		}
-
-		resultMessage.Topic = sendTopic
-		if err = producer.Publish(resultMessage); err != nil {
-			fmt.Println(err)
-			continue
-		}
+		go handleRequest(db, kafkaMessage, producer)
 	}
 }

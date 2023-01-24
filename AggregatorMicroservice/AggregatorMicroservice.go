@@ -11,32 +11,23 @@ import (
 	"os/exec"
 	"os/signal"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 )
 
-const (
-	VideoTopic           = "video"
-	VideoStartTopic      = "svideo"
-	AudioTopic           = "audio"
-	AudioStartTopic      = "saudio"
-	AggregatorTopic      = "aggregator"
-	AggregatorStartTopic = "saggregator"
-	MergeTopic           = "MERGER"
+var (
+	AggregatorTopic      string
+	AggregatorStartTopic string
+	VideoTopic           string
+	VideoStartTopic      string
+	AudioTopic           string
+	AudioStartTopic      string
+	MergeTopic           string
 )
 
 type AudioVideoPair struct {
 	Video string
 	Audio string
-}
-
-func Map[A any, B any](input []A, f func(A) B) []B {
-	result := make([]B, len(input))
-	for i, value := range input {
-		result[i] = f(value)
-	}
-	return result
 }
 
 func (avp *AudioVideoPair) Delete() error {
@@ -80,15 +71,12 @@ func CombineAndCompressFiles(files AudioVideoPair, bitrate string, output string
 	return result, nil
 }
 
-func SendVideo(producer *Kafka.Producer, video []byte, users []int) error {
+func SendVideo(producer *Kafka.Producer, video []byte) error {
 	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: AggregatorTopic}); err != nil {
 		return err
 	}
 
-	parsedUsersList := Map(users, func(a int) string { return strconv.Itoa(a) })
-	jsonString := strings.Join(parsedUsersList, ",")
-	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: MergeTopic, Headers: []Kafka.Header{
-		{"users", []byte(jsonString)}}}); err != nil {
+	if err := producer.Publish(&Kafka.ProducerMessage{Message: video, Topic: MergeTopic}); err != nil {
 		return err
 	}
 
@@ -164,7 +152,7 @@ func CollectAudioAndVideoFiles(ctx context.Context, videoConsumer, audioConsumer
 	return nil
 }
 
-func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair, users []int) error {
+func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair) error {
 	defer files.Delete()
 	s := time.Now()
 
@@ -173,7 +161,7 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair, users 
 		return err
 	}
 
-	if err = SendVideo(producer, video, users); err != nil {
+	if err = SendVideo(producer, video); err != nil {
 		return err
 	}
 
@@ -181,66 +169,54 @@ func CompressAndSendFiles(producer *Kafka.Producer, files AudioVideoPair, users 
 	return nil
 }
 
-func captureConnectedUsers(ctx context.Context, brokerAddress string, users *[]int) error {
-	if err := Kafka.CreateTopic(brokerAddress, AggregatorStartTopic); err != nil {
-		return err
-	}
-	defer Kafka.DeleteTopic(brokerAddress, AggregatorStartTopic)
-
+func waitForAUser(ctx context.Context, brokerAddress string) error {
 	uiConsumer := Kafka.NewConsumer(brokerAddress, AggregatorStartTopic)
-	defer uiConsumer.Close()
 
 	if err := uiConsumer.SetOffsetToNow(); err != nil {
-		return err
+		panic(err)
 	}
 
-	var newUserMessage *Kafka.ConsumerMessage
-	var err error
 	for ctx.Err() == nil {
-		newUserMessage, err = uiConsumer.Consume(time.Second * 2)
+		_, err := uiConsumer.Consume(time.Second * 2)
 		if errors.Is(err, context.DeadlineExceeded) {
 			continue
 		} else if err != nil {
 			return err
 		}
-
-		userId, err := strconv.Atoi(string(newUserMessage.Message))
-		if err != nil {
-			return err
-		}
-
-		*users = append(*users, userId)
+		return nil
 	}
-
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	return nil
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("No broker address given")
+	if len(os.Args) < 6 {
+		fmt.Println("No broker address and topics given")
 		return
 	}
 	brokerAddress := os.Args[1]
+	AggregatorTopic = os.Args[2]
+	AggregatorStartTopic = "s" + AggregatorTopic
+	VideoTopic = os.Args[3]
+	VideoStartTopic = "s" + VideoTopic
+	AudioTopic = os.Args[4]
+	AudioStartTopic = "s" + AudioTopic
+	MergeTopic = os.Args[5]
+
 	// initialize
-	if err := Kafka.CreateTopic(brokerAddress, AggregatorTopic); err != nil {
-		panic(err)
-	}
 
 	producer := Kafka.NewProducer(brokerAddress)
-	defer producer.Close()
 
 	errG, ctx := errgroup.WithContext(NewCtx())
 
-	// wait for start
-	fmt.Println("Waiting for signal")
-
-	var usersConnected []int
-	errG.Go(func() error { return captureConnectedUsers(ctx, brokerAddress, &usersConnected) })
-	for len(usersConnected) == 0 {
-		time.Sleep(time.Second / 2)
+	fmt.Println("Waiting for a signal")
+	if err := waitForAUser(ctx, brokerAddress); err != nil {
+		panic(err)
 	}
+	fmt.Println("Starting aggregator...")
 
-	fmt.Println("Starting...")
 	ts := fmt.Sprint(time.Now().UnixMilli()/1000 + 1)
 	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte(ts), Topic: AudioStartTopic}); err != nil {
 		panic(err)
@@ -250,10 +226,8 @@ func main() {
 	}
 
 	videoConsumer := Kafka.NewConsumer(brokerAddress, VideoTopic)
-	defer videoConsumer.Close()
 
 	audioConsumer := Kafka.NewConsumer(brokerAddress, AudioTopic)
-	defer audioConsumer.Close()
 
 	// start
 	filesChannel := make(chan AudioVideoPair, 5)
@@ -262,8 +236,7 @@ func main() {
 		for {
 			select {
 			case filesPair := <-filesChannel:
-				fmt.Println(len(usersConnected))
-				errG.Go(func() error { return CompressAndSendFiles(producer, filesPair, usersConnected) })
+				errG.Go(func() error { return CompressAndSendFiles(producer, filesPair) })
 			case <-ctx.Done():
 				return nil
 			}
@@ -277,6 +250,8 @@ func main() {
 	if err := producer.Publish(&Kafka.ProducerMessage{Message: []byte("quit"), Topic: MergeTopic}); err != nil {
 		log.Println(err)
 	}
+	producer.Close()
+
 	fmt.Println("Quit signal sent")
 
 	defer fmt.Println("Cleanup Done")

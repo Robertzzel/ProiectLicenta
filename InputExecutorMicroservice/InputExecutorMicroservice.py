@@ -5,7 +5,6 @@ from TkPynputKeyCodes import KeyTranslator
 from pyautogui import size
 import sys
 
-INPUTS_TOPIC = "inputs"
 MOVE = 1
 CLICK = 2
 SCROLL = 3
@@ -19,16 +18,16 @@ SCROLL_DOWN = 5
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("No broker address given")
-        return
+    if len(sys.argv) < 3:
+        raise Exception("No broker address and topic given")
 
     brokerAddress = sys.argv[1]
+    topic = sys.argv[2]
 
     width, height = size()
     keyboard_controller: pynput.keyboard.Controller = pynput.keyboard.Controller()
     mouse_controller: pynput.mouse.Controller = pynput.mouse.Controller()
-    consumer = kafka.KafkaConsumer(INPUTS_TOPIC, bootstrap_servers=brokerAddress)
+    consumer = kafka.KafkaConsumer(topic, bootstrap_servers=brokerAddress)
 
     for msg in consumer:
         for command in msg.value.decode().split(";"):
@@ -60,4 +59,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt as ex:
+        print(ex)
+    except Exception as ex:
+        print(ex)

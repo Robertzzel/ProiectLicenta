@@ -70,20 +70,19 @@ func (r *Recorder) startRecording() error {
 
 	for r.ctx.Err() == nil {
 		<-ticker.C
-		r.errorGroup.Go(func() error {
+		go func() {
 			img, err := r.screenshotTool.Get()
 			if err != nil {
-				return err
+				panic(err)
 			}
 
 			var encodedImageBuffer bytes.Buffer
-			if err := img.Compress(&encodedImageBuffer, 100); err != nil {
-				return err
+			if err = img.Compress(&encodedImageBuffer, 100); err != nil {
+				panic(err)
 			}
 
 			r.imageBuffer <- encodedImageBuffer.Bytes()
-			return nil
-		})
+		}()
 	}
 
 	return nil
@@ -101,21 +100,17 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 		if err != nil {
 			return err
 		}
-		i := 0
 
-		for time.Now().Before(nextChunkEndTime) && r.ctx.Err() == nil {
-			if err := video.AddFrame(<-r.imageBuffer); err != nil {
+		for r.ctx.Err() == nil && time.Now().Before(nextChunkEndTime) {
+			if err = video.AddFrame(<-r.imageBuffer); err != nil {
 				log.Println("Error adding frame to video file ", err)
 				return err
 			}
-			i++
 		}
-
-		fmt.Printf("Frames: %d\n", i)
 
 		r.VideoBuffer <- videoFileName
 
-		if err := video.Close(); err != nil {
+		if err = video.Close(); err != nil {
 			return err
 		}
 	}

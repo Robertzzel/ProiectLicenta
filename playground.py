@@ -13,11 +13,4 @@ def delayedSend(producer):
 
 
 if __name__ == "__main__":
-    consumer: KafkaConsumerWrapper = KafkaConsumerWrapper(TOPIC, bootstrap_servers="localhost:9092")
-    producer: KafkaProducerWrapper = KafkaProducerWrapper(bootstrap_servers="localhost:9092", acks=1)
-
-    threading.Thread(target=delayedSend, args=(producer, )).start()
-    message, header = consumer.receiveBigMessage()
-
-    with open("file.txt", "w") as f:
-        f.write(message.decode())
+    pass

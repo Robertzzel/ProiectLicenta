@@ -109,7 +109,7 @@ class MainFrame(customtkinter.CTkFrame):
             self.buildNotLoggedInFrame()
             return
 
-        msg = self.kafkaContainer.databaseCall(MY_TOPIC, "GET_VIDEOS_BY_USER", json.dumps({"ID": self.user.id}).encode())
+        msg = self.kafkaContainer.databaseCall(MY_TOPIC, "GET_VIDEOS_BY_USER", json.dumps({"ID": self.user.id}).encode(), timeoutSeconds=1)
         data = json.loads(msg.value())
 
         if len(data) == 0:

@@ -1,8 +1,0 @@
-#!/bin/sh
-
-# shellcheck disable=SC2006
-./build
-xterm -hold -T "Merger" -e ./MergerMicroservice/MergerMicroservice &
-xterm -hold -T "Database" -e ./DatabaseMicroservice/DatabaseMicroservice &
-xterm -hold -T "InputExecutor" -e venv/bin/python3 InputListenerMicroservice/InputListenerMicroservice.py &
-xterm -hold -T "UI" -e ./UI/UI

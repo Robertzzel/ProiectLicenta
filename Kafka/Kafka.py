@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from typing import *
 import confluent_kafka as kafka
 from confluent_kafka.admin import AdminClient
@@ -141,9 +140,9 @@ def deleteTopic(brokerAddress: str, topic: str):
 
 
 def checkKafkaActive(brokerAddress: str) -> bool:
-    import kafka
+    import kafka as kafka_python
     try:
-        kafka.KafkaConsumer(bootstrap_servers=[brokerAddress])
+        kafka_python.KafkaConsumer(bootstrap_servers=[brokerAddress])
     except BaseException:
         return False
     return True

@@ -99,15 +99,7 @@ func (this *AggregatorMicroserviceConsumer) ConsumeAggregatorStart(timeout ...ti
 	return this.ConsumeFullMessage(ctx, AggregatorMicroserviceStartPartition)
 }
 
-func (this *AggregatorMicroserviceConsumer) ConsumeAggregator(timeout ...time.Duration) ([]byte, int, error) { // to receive video/audio
-	var ctx context.Context
-
-	if len(timeout) > 0 {
-		ctx, _ = context.WithTimeout(context.Background(), timeout[0])
-	} else {
-		ctx = context.Background()
-	}
-
+func (this *AggregatorMicroserviceConsumer) ConsumeAggregator(ctx context.Context) ([]byte, int, error) { // to receive video/audio
 	msg, headers, err := this.ConsumeFullMessage(ctx, AggregatorMicroservicePartition)
 	if ctx.Err() != nil {
 		return nil, 0, ctx.Err()

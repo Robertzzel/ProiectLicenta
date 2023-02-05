@@ -4,7 +4,6 @@ import pathlib
 import queue
 import tempfile
 import subprocess
-import uuid
 import signal
 
 import Kafka.partitions
@@ -126,7 +125,11 @@ class Merger:
     def compressFinalFile(self):
         self.i += 1
         nextFinalFile = f"final{self.i}.mp4"
-        process = subprocess.Popen(["ffmpeg", "-y", "-i", self.finalVideo, "-c:v", "libx264", "-b:v", "500k", nextFinalFile], stdout=subprocess.PIPE, stderr=sys.stderr)
+        process = subprocess.Popen(
+            ["ffmpeg", "-y", "-i", self.finalVideo, "-c:v", "libx264", "-b:v", "500k", nextFinalFile],
+            stdout=subprocess.PIPE,
+            stderr=sys.stderr
+        )
         process.wait()
         out, err = process.communicate()
         if err is not None and err != b"":

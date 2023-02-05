@@ -2,7 +2,6 @@ package main
 
 import (
 	"Licenta/Kafka"
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -22,29 +21,9 @@ const (
 	topic            = "DATABASE"
 )
 
-func createTopic() {
-	a, err := kafka.NewAdminClient(&kafka.ConfigMap{"bootstrap.servers": "localhost:9092"})
-	if err != nil {
-		panic(err)
-	}
-	_, err = a.DeleteTopics(
-		context.Background(),
-		[]string{topic},
-	)
-	time.Sleep(time.Second)
-	_, err = a.CreateTopics(
-		context.Background(),
-		[]kafka.TopicSpecification{{Topic: topic, NumPartitions: 1, ReplicationFactor: 1}},
-	)
-	if err != nil {
-		panic(err)
-	}
-}
-
 func doesFileExist(fileName string) bool {
 	_, err := os.Stat(fileName)
 
-	// check if error is "file not exists"
 	return !os.IsNotExist(err)
 }
 
@@ -408,7 +387,7 @@ func handleDeleteSession(db *gorm.DB, message []byte) ([]byte, error) {
 
 func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.DatabaseProducer) {
 	var sendTopic, operation string
-	var partition int = 0
+	var partition = 0
 	var err error
 	for _, header := range message.Headers {
 		switch header.Key {
@@ -422,7 +401,7 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 	}
 
 	var response []byte
-	switch string(operation) {
+	switch operation {
 	case "LOGIN":
 		response, err = handleLogin(db, message.Message)
 	case "REGISTER":
@@ -476,8 +455,6 @@ func main() {
 	}
 	brokerAddress := os.Args[1]
 
-	createTopic()
-
 	db, err := gorm.Open(mysql.Open(connectionString), &gorm.Config{})
 	if err != nil {
 		panic("cannot open the database")
@@ -493,7 +470,7 @@ func main() {
 			fmt.Println(err)
 		}
 	}()
-	if err := consumer.SetOffsetToNow(); err != nil {
+	if err = consumer.SetOffsetToNow(); err != nil {
 		panic(err)
 	}
 

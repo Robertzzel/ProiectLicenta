@@ -19,11 +19,6 @@ const (
 	VideoDuration = time.Second
 )
 
-var (
-	VideoTopic      string
-	VideoStartTopic string
-)
-
 func NewCtx() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -63,12 +58,13 @@ func getStartTime(ctx context.Context, brokerAddress, topic string) (string, err
 		return string(tsMessage), nil
 	}
 
+	_ = consumer.Close()
 	return "", ctx.Err()
 }
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("No broker address given")
+		log.Println("No broker address given")
 		return
 	}
 	brokerAddress := os.Args[1]
@@ -85,17 +81,15 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	println("starting")
 
 	timestamp, err := stringToTimestamp(startTimestamp)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(timestamp.UnixMilli(), time.Now().UnixMilli())
 
-	videoRecorder, err := NewRecorder(ctx, 10)
+	videoRecorder, err := NewRecorder(ctx, 20)
 	if err != nil {
-		log.Fatal("Recorder cannot be initiated: ", err)
+		panic(err)
 	}
 
 	videoRecorder.Start(timestamp, VideoDuration)
@@ -105,7 +99,6 @@ func main() {
 			if err = producer.Publish([]byte(<-videoRecorder.VideoBuffer), []kafka.Header{{"type", []byte("video")}}); err != nil {
 				return err
 			}
-			println("Sent video")
 		}
 		return nil
 	})

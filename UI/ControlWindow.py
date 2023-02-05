@@ -5,7 +5,7 @@ from queue import Queue
 import tkinter as tk
 from PIL import ImageTk, Image, ImageOps
 import sounddevice as sd
-from kafka import KafkaAdminClient
+import Kafka.partitions
 from Kafka.Kafka import *
 from io import BytesIO
 import numpy as np
@@ -24,13 +24,11 @@ DATABASE_TOPIC = "DATABASE"
 
 
 class TkinterVideo(tk.Label):
-    def __init__(self, master, aggregatorTopic: str, inputsTopic: str, kafkaAddress: str = "localhost:9092", keepAspect: bool = False, *args, **kwargs):
+    def __init__(self, master, topic: str, kafkaAddress: str = "localhost:9092", keepAspect: bool = False, *args, **kwargs):
         super(TkinterVideo, self).__init__(master, *args, **kwargs)
 
         self.kafkaAddress = kafkaAddress
-        self.aggregatorTopic = aggregatorTopic
-        self.aggregatorStartTopic = f"s{self.aggregatorTopic}"
-        self.inputsTopic = inputsTopic
+        self.topic = topic
         self.kafkaProducer = KafkaProducerWrapper({'bootstrap.servers': self.kafkaAddress})
 
         self.streamConsumer: Optional[KafkaConsumerWrapper] = None
@@ -83,12 +81,7 @@ class TkinterVideo(tk.Label):
             time.sleep(0.1)
             inputs = self.inputsBuffer.get()
             if inputs != "":
-                self.kafkaProducer.produce(topic=self.inputsTopic, value=inputs.encode())
-
-        try:
-            KafkaAdminClient(bootstrap_servers=self.kafkaAddress).delete_topics([self.inputsTopic])
-        except Exception as ex:
-            print(ex)
+                self.kafkaProducer.produce(topic=self.topic, value=inputs.encode(), partition=Kafka.partitions.InputPartition) # TODO partitie pentru inputuri
 
     def play(self):
         if self.streamReceiverThread is not None:
@@ -167,19 +160,20 @@ class TkinterVideo(tk.Label):
     def receiveStream(self):
         self.streamConsumer = KafkaConsumerWrapper({
             'bootstrap.servers': self.kafkaAddress,
-            'group.id': str(uuid.uuid1()),
+            'group.id': '-',
             'auto.offset.reset': 'latest',
             'allow.auto.create.topics': "true",
-        }, [self.aggregatorTopic])
+        }, [(self.topic, Kafka.partitions.ClientPartition)])
 
-        self.kafkaProducer.produce(topic=self.aggregatorStartTopic, value=b"")
+        self.kafkaProducer.produce(topic=self.topic, value=b"", partition=Kafka.partitions.AggregatorMicroserviceStartPartition)
         print("Signal sent")
 
         while self.streamRunning:
-            message = self.streamConsumer.consumeMessage(timeoutSeconds=1)
+            message = self.streamConsumer.consumeMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
             if message is None:
                 continue
 
+            print(len(message.value()))
             with av.open(BytesIO(message.value())) as container:
                 self.initVideoStream(container)
 
@@ -187,7 +181,7 @@ class TkinterVideo(tk.Label):
 
         try:
             while self.streamRunning:
-                message = self.streamConsumer.consumeMessage(timeoutSeconds=1)
+                message = self.streamConsumer.consumeMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
                 if message is None:
                     continue
 

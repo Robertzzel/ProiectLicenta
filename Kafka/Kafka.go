@@ -10,7 +10,7 @@ import (
 
 const (
 	brokerNetwork   = "tcp"
-	MaxMessageBytes = 1000000
+	MaxMessageBytes = 600_000
 )
 
 func min(a, b int) int {
@@ -52,6 +52,7 @@ func NewProducer(brokerAddress string) *Producer {
 		},
 	}
 }
+
 func (producer *Producer) Publish(producerMessage *ProducerMessage) error {
 	numberOfMessages := 0
 

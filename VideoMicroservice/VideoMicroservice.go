@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"golang.org/x/sync/errgroup"
 	"log"
 	"os"
@@ -45,53 +46,54 @@ func stringToTimestamp(s string) (time.Time, error) {
 	return time.Unix(timestamp, 0), nil
 }
 
-func getStartTime(ctx context.Context, consumer *Kafka.Consumer) (string, error) {
-	var tsMessage *Kafka.ConsumerMessage
-	var err error
+func getStartTime(ctx context.Context, brokerAddress, topic string) (string, error) {
+	consumer, err := Kafka.NewVideoMicroserviceConsumer(brokerAddress, topic)
+	if err != nil {
+		panic(err)
+	}
 
 	for ctx.Err() == nil {
-		tsMessage, err = consumer.Consume(time.Second / 4)
+		tsMessage, _, err := consumer.Consume(time.Second / 5)
 		if errors.Is(err, context.DeadlineExceeded) {
 			continue
 		} else if err != nil {
 			return "", err
 		}
 
-		return string(tsMessage.Message), nil
+		return string(tsMessage), nil
 	}
 
 	return "", ctx.Err()
 }
 
 func main() {
-	if len(os.Args) < 3 {
+	if len(os.Args) < 2 {
 		fmt.Println("No broker address given")
 		return
 	}
 	brokerAddress := os.Args[1]
-	VideoTopic = os.Args[2]
-	VideoStartTopic = "s" + VideoTopic
+	topic := os.Args[2]
 
 	errGroup, ctx := errgroup.WithContext(NewCtx())
 
-	producer := Kafka.NewProducer(brokerAddress)
-
-	startConsumer := Kafka.NewConsumer(brokerAddress, VideoStartTopic)
-	if err := startConsumer.SetOffsetToNow(); err != nil {
-		panic(err)
-	}
-
-	startTimestamp, err := getStartTime(ctx, startConsumer)
+	producer, err := Kafka.NewVideoMicroserviceProducer(brokerAddress, topic)
 	if err != nil {
 		panic(err)
 	}
+
+	startTimestamp, err := getStartTime(ctx, brokerAddress, topic)
+	if err != nil {
+		panic(err)
+	}
+	println("starting")
 
 	timestamp, err := stringToTimestamp(startTimestamp)
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println(timestamp.UnixMilli(), time.Now().UnixMilli())
 
-	videoRecorder, err := NewRecorder(ctx, 15)
+	videoRecorder, err := NewRecorder(ctx, 10)
 	if err != nil {
 		log.Fatal("Recorder cannot be initiated: ", err)
 	}
@@ -100,9 +102,10 @@ func main() {
 
 	errGroup.Go(func() error {
 		for ctx.Err() == nil {
-			if err = producer.Publish(&Kafka.ProducerMessage{Message: []byte(<-videoRecorder.VideoBuffer), Topic: VideoTopic}); err != nil {
+			if err = producer.Publish([]byte(<-videoRecorder.VideoBuffer), []kafka.Header{{"type", []byte("video")}}); err != nil {
 				return err
 			}
+			println("Sent video")
 		}
 		return nil
 	})

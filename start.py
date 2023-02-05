@@ -12,13 +12,12 @@ import Kafka.Kafka
 
 
 class Merger:
-    def __init__(self, brokerAddress: str):
+    def __init__(self, brokerAddress: str, topic: str):
         self.broker = brokerAddress
-        self.topic = str(uuid.uuid1())
+        self.topic = topic
         self.process: Optional[subprocess.Popen] = None
         self.path = str(pathlib.Path(os.getcwd()).parent)
         self.running = False
-        Kafka.Kafka.createTopic(self.broker, self.topic)
 
     def start(self, sessionId: str):
         self.process = subprocess.Popen(["venv/bin/python3", "MergerMicroservice/MergerMicroservice.py", self.broker, self.topic, str(sessionId)],
@@ -29,7 +28,7 @@ class Merger:
         if self.process is None:
             return
 
-        #self.process.send_signal(signal.SIGINT)
+        self.process.send_signal(signal.SIGINT)
 
         try:
             self.process.wait(timeout=30)
@@ -38,9 +37,7 @@ class Merger:
         finally:
             print("merger process closed")
 
-        Kafka.Kafka.deleteTopic(self.broker, self.topic)
         self.running = False
-
 
 class Sender:
     def __init__(self, brokerAddress: str):
@@ -53,12 +50,6 @@ class Sender:
         self.buildProcess = None
         self.path = str(pathlib.Path(os.getcwd()).parent)
         self.running = False
-
-        self.aggregatorTopic = str(uuid.uuid1())
-        self.inputsTopic = str(uuid.uuid1())
-        self.videoTopic = str(uuid.uuid1())
-        self.audioTopic = str(uuid.uuid1())
-        self.topics = [self.aggregatorTopic, self.inputsTopic, f"s{self.videoTopic}", self.videoTopic, f"s{self.audioTopic}", self.audioTopic]
 
     def build(self):
         self.buildProcess = subprocess.Popen(["/bin/sh", "./build"], cwd=self.path, stdout=sys.stdout, stderr=subprocess.PIPE)
@@ -77,20 +68,19 @@ class Sender:
 
         return True
 
-    def start(self, mergerTopic: str):
+    def start(self, topic: str):
         if not self.build() or platform.system().lower() == "windows":
             return
 
-        self.createTopics()
-
+        # TODO verifica la outputuri ce nu merge
         try:
-            self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress, self.videoTopic],
+            self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress, topic],
                                                  cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
-            self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress, self.audioTopic],
+            self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress, topic],
                                                  cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
-            self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress, self.aggregatorTopic, self.videoTopic, self.audioTopic, mergerTopic],
+            self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress, topic],
                                                       cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
-            self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, self.inputsTopic],
+            self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, topic],
                                                          cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
 
             self.running = True
@@ -105,11 +95,6 @@ class Sender:
         for thread in threads:
             if thread is not None:
                 thread.result()
-
-        try:
-            self.deleteTopics()
-        except BaseException as ex:
-            print(ex)
 
         self.running = False
 
@@ -171,9 +156,3 @@ class Sender:
             self.inputExecutorProcess.kill()
         finally:
             print("input process closed", time.time() - s)
-
-    def deleteTopics(self):
-        [Kafka.Kafka.deleteTopic(self.brokerAddress, topic) for topic in self.topics]
-
-    def createTopics(self):
-        [Kafka.Kafka.createTopic(self.brokerAddress, topic) for topic in self.topics]

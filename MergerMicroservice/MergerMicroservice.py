@@ -6,6 +6,8 @@ import tempfile
 import subprocess
 import uuid
 import signal
+
+import Kafka.partitions
 from Kafka.Kafka import *
 from typing import Optional
 
@@ -51,10 +53,10 @@ class Merger:
         self.sessionId = sessionId
         self.consumer = KafkaConsumerWrapper({
             'bootstrap.servers': self.broker,
-            'group.id': str(uuid.uuid1()),
+            'group.id': "-",
             'auto.offset.reset': 'latest',
             'allow.auto.create.topics': "true",
-        }, [self.topic])
+        }, [(self.topic, Kafka.partitions.MergerMicroservicePartition)])
         self.producer = KafkaProducerWrapper({'bootstrap.servers': self.broker})
         self.running = True
         self.videosQueue = queue.Queue()
@@ -63,19 +65,22 @@ class Merger:
 
     def start(self):
         signal.signal(signal.SIGINT, signal.default_int_handler)
+        print("STARTING MERGER")
         try:
             while self.running:
-                message = self.consumer.consumeMessage(timeoutSeconds=1)
+                message = self.consumer.receiveBigMessage(timeoutSeconds=2, partition=Kafka.partitions.MergerMicroservicePartition)
                 if message is None:
+                    print("MERGE NONE MESSAGE")
                     continue
-                print(f"goo msg {len(message.value())}", self.running)
 
+                print(f"goo msg {len(message.value())}", self.running)
                 if message.value() == b"quit":
                     print("Quitting")
                     self.stop()
                     break
 
                 self.videosQueue.put(message.value())
+                print("MERGER: MESSAGE RECEIVED")
 
                 if self.videosQueue.qsize() > 20:
                     self.aggregateVideosFromQueue()

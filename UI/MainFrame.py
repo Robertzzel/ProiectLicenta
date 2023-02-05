@@ -196,9 +196,9 @@ class MainFrame(customtkinter.CTkFrame):
 
     def startSharing(self):
         msg = self.kafkaContainer.databaseCall(topic=MY_TOPIC, operation="CREATE_SESSION", message=json.dumps({
-            "AggregatorTopic": self.sender.aggregatorTopic,
-            "InputsTopic": self.sender.inputsTopic,
-            "MergerTopic": self.merger.topic,
+            "AggregatorTopic": MY_TOPIC, # TODO SCHIMBA SA AI UN SINGUR TOPIC IN DB
+            "InputsTopic":MY_TOPIC,
+            "MergerTopic": MY_TOPIC,
             "UserID": str(self.user.id),
         }).encode())
 
@@ -211,7 +211,7 @@ class MainFrame(customtkinter.CTkFrame):
         self.user.sessionId = sessionId
 
         if self.sender is not None:
-            self.sender.start(self.merger.topic)
+            self.sender.start(MY_TOPIC)
 
         if self.merger is not None:
             self.merger.start(str(self.user.sessionId))
@@ -251,11 +251,10 @@ class MainFrame(customtkinter.CTkFrame):
             return
 
         responseValue = json.loads(responseMessage.value())
-        aggregatorTopic = responseValue["AggregatorTopic"]
-        inputsTopic = responseValue["InputsTopic"]
+        topic = responseValue["AggregatorTopic"]
 
         self.videoPlayerWindow = tk.Toplevel()
-        self.videoPlayer = TkinterVideo(master=self.videoPlayerWindow, aggregatorTopic=aggregatorTopic, inputsTopic=inputsTopic, kafkaAddress=self.kafkaContainer.address)
+        self.videoPlayer = TkinterVideo(master=self.videoPlayerWindow, topic=topic,kafkaAddress=self.kafkaContainer.address)
         self.videoPlayer.pack(expand=True, fill="both")
         self.videoPlayer.play()
         self.videoPlayerWindow.protocol("WM_DELETE_WINDOW", self.exitCallWindow)
@@ -336,7 +335,7 @@ class MainFrame(customtkinter.CTkFrame):
         self.user = User(message.get("ID", None), username, message.get("CallKey", None), message.get("CallPassword", None), message.get("SessionId", None))
 
         self.sender = Sender(self.kafkaContainer.address)
-        self.merger = Merger(self.kafkaContainer.address)
+        self.merger = Merger(self.kafkaContainer.address, MY_TOPIC)
 
         self.buildLoginFrame()
         self.mainWindow.title(f"RMI {self.user.name}")

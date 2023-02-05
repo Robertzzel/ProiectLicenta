@@ -2,10 +2,12 @@ package main
 
 import (
 	"Licenta/Kafka"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/google/uuid"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -19,6 +21,25 @@ const (
 	connectionString = "robert:robert@tcp(localhost:3306)/licenta?parseTime=true"
 	topic            = "DATABASE"
 )
+
+func createTopic() {
+	a, err := kafka.NewAdminClient(&kafka.ConfigMap{"bootstrap.servers": "localhost:9092"})
+	if err != nil {
+		panic(err)
+	}
+	_, err = a.DeleteTopics(
+		context.Background(),
+		[]string{topic},
+	)
+	time.Sleep(time.Second)
+	_, err = a.CreateTopics(
+		context.Background(),
+		[]kafka.TopicSpecification{{Topic: topic, NumPartitions: 1, ReplicationFactor: 1}},
+	)
+	if err != nil {
+		panic(err)
+	}
+}
 
 func doesFileExist(fileName string) bool {
 	_, err := os.Stat(fileName)
@@ -385,20 +406,22 @@ func handleDeleteSession(db *gorm.DB, message []byte) ([]byte, error) {
 	return []byte("success"), nil
 }
 
-func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.Producer) {
-	var sendTopic, operation []byte
+func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.DatabaseProducer) {
+	var sendTopic, operation string
+	var partition int = 0
+	var err error
 	for _, header := range message.Headers {
 		switch header.Key {
 		case "topic":
-			sendTopic = header.Value
+			sendTopic = string(header.Value)
 		case "operation":
-			operation = header.Value
+			operation = string(header.Value)
+		case "partition":
+			partition, err = strconv.Atoi(string(header.Value))
 		}
 	}
 
-	var err error
 	var response []byte
-	var responseMessage *Kafka.ProducerMessage
 	switch string(operation) {
 	case "LOGIN":
 		response, err = handleLogin(db, message.Message)
@@ -436,30 +459,12 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 		err = errors.New("operation not permitted")
 	}
 	if err != nil {
-		responseMessage = &Kafka.ProducerMessage{
-			Message: []byte(err.Error()),
-			Topic:   string(sendTopic),
-			Headers: []Kafka.Header{
-				{`status`, []byte("FAILED")},
-			},
+		if err = producer.Publish([]byte(err.Error()), []kafka.Header{{`status`, []byte("FAILED")}}, sendTopic, int32(partition)); err != nil {
+			fmt.Println(err)
 		}
 	} else {
-		responseMessage = &Kafka.ProducerMessage{
-			Message: response,
-			Topic:   string(sendTopic),
-			Headers: []Kafka.Header{
-				{`status`, []byte("OK")},
-			},
-		}
-	}
-
-	if err = producer.Publish(responseMessage); err != nil {
-		fmt.Println(err)
-	} else {
-		if len(responseMessage.Message) < 250 {
-			fmt.Println("Sent response... ", string(responseMessage.Message))
-		} else {
-			fmt.Println("Sent response... ", len(responseMessage.Message), "bytes")
+		if err = producer.Publish(response, []kafka.Header{{`status`, []byte("OK")}}, sendTopic, int32(partition)); err != nil {
+			fmt.Println(err)
 		}
 	}
 }
@@ -470,6 +475,8 @@ func main() {
 		return
 	}
 	brokerAddress := os.Args[1]
+
+	createTopic()
 
 	db, err := gorm.Open(mysql.Open(connectionString), &gorm.Config{})
 	if err != nil {
@@ -490,12 +497,11 @@ func main() {
 		panic(err)
 	}
 
-	producer := Kafka.NewProducer(brokerAddress)
-	defer func() {
-		if err := producer.Close(); err != nil {
-			fmt.Println(err)
-		}
-	}()
+	producer, err := Kafka.NewDatabaseProducer(brokerAddress)
+	if err != nil {
+		panic(err)
+	}
+	defer producer.Close()
 
 	for {
 		kafkaMessage, err := consumer.Consume(time.Second * 2)

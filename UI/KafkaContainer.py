@@ -1,9 +1,6 @@
 from dataclasses import dataclass
-
 import Kafka.partitions
 from Kafka.Kafka import *
-import uuid
-
 DATABASE_TOPIC = "DATABASE"
 
 

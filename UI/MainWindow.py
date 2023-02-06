@@ -33,8 +33,8 @@ class MainWindow(customtkinter.CTk):
         self.protocol("WM_DELETE_WINDOW", self.on_exit)
 
     def on_exit(self):
-        if self.mainFrame.videoPlayer is not None:
-            self.mainFrame.videoPlayer.stop()
+        if self.mainFrame.videoWindow is not None:
+            self.mainFrame.videoWindow = None
 
         if self.mainFrame.sender is not None:
             self.mainFrame.sender.stop()

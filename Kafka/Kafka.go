@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	brokerNetwork   = "tcp"
 	MaxMessageBytes = 600_000
 )
 
@@ -165,16 +164,16 @@ func (kc *Consumer) SetOffsetToNow() error {
 	return kc.kafkaReader.SetOffsetAt(context.Background(), time.Now().Add(-time.Second))
 }
 
-func CreateTopic(brokerAddress, name string) error {
-	_, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, name, 0)
-	return err
-}
-
-func DeleteTopic(brokerAddress string, names ...string) error {
-	conn, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, names[0], 0)
-	if err != nil {
-		return err
-	}
-
-	return conn.DeleteTopics(names...)
-}
+//func CreateTopic(brokerAddress, name string) error {
+//	_, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, name, 0)
+//	return err
+//}
+//
+//func DeleteTopic(brokerAddress string, names ...string) error {
+//	conn, err := kafkago.DialLeader(context.Background(), brokerNetwork, brokerAddress, names[0], 0)
+//	if err != nil {
+//		return err
+//	}
+//
+//	return conn.DeleteTopics(names...)
+//}

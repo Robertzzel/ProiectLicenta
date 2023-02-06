@@ -5,10 +5,8 @@ import sys
 import pathlib
 import time
 import platform
-import uuid
 from typing import *
 from concurrent.futures import ThreadPoolExecutor
-import Kafka.Kafka
 
 
 class Merger:
@@ -72,7 +70,6 @@ class Sender:
         if not self.build() or platform.system().lower() == "windows":
             return
 
-        # TODO verifica la outputuri ce nu merge
         try:
             self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress, topic],
                                                  cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)

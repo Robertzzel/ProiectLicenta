@@ -67,19 +67,16 @@ class Merger:
         print("STARTING MERGER")
         try:
             while self.running:
-                message = self.consumer.receiveBigMessage(timeoutSeconds=2, partition=Kafka.partitions.MergerMicroservicePartition)
+                message = self.consumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.MergerMicroservicePartition)
                 if message is None:
-                    print("MERGE NONE MESSAGE")
                     continue
 
                 print(f"goo msg {len(message.value())}", self.running)
                 if message.value() == b"quit":
-                    print("Quitting")
                     self.stop()
                     break
 
                 self.videosQueue.put(message.value())
-                print("MERGER: MESSAGE RECEIVED")
 
                 if self.videosQueue.qsize() > 20:
                     self.aggregateVideosFromQueue()
@@ -89,23 +86,29 @@ class Merger:
         self.aggregateVideosFromQueue()
         self.compressFinalFile()
 
-        with open(self.finalVideo, "rb") as f:
-            videoContent = f.read()
+        try:
+            with open(self.finalVideo, "rb") as f:
+                videoContent = f.read()
+        except Exception as ex:
+            return
 
         self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=videoContent, headers=[
             ("topic", self.topic.encode()),
             ("operation", b"ADD_VIDEO"),
             ("sessionId", str(self.sessionId).encode())
         ])
-
-        print(f"MERGER: message sent at {DATABASE_TOPIC}, {self.broker} ---")
         self.producer.flush(timeout=5)
+        os.remove(self.finalVideo)
+        print(f"MERGER: message sent at {DATABASE_TOPIC}, {self.broker} ---")
 
     def aggregateVideosFromQueue(self):
         videos = []
 
         while self.videosQueue.qsize() > 0:
             videos.append(TempFile(self.videosQueue.get(block=True)))
+
+        if videos == 0:
+            return
 
         fileNames = list(map(lambda f: f.name, videos))
         if self.finalVideo:
@@ -123,6 +126,9 @@ class Merger:
         videos.clear()
 
     def compressFinalFile(self):
+        if self.i == 0:  # no file created
+            return
+
         self.i += 1
         nextFinalFile = f"final{self.i}.mp4"
         process = subprocess.Popen(

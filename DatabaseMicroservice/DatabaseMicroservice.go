@@ -189,7 +189,7 @@ func handleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) 
 		return nil, err
 	}
 
-	result, err := json.Marshal(map[string]string{"AggregatorTopic": session.TopicAggregator, "InputsTopic": session.TopicInputs})
+	result, err := json.Marshal(map[string]string{"Topic": session.Topic})
 	if err != nil {
 		return nil, err
 	}
@@ -307,12 +307,10 @@ func handleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	aggregatorTopic, hasAggregatorTopic := input["AggregatorTopic"]
-	inputsTopic, hasInputsTopic := input["InputsTopic"]
-	mergerTopic, hasMergerTopic := input["MergerTopic"]
+	topic, hasTopic := input["Topic"]
 	userIdString, hasUserId := input["UserID"]
 
-	if !(hasAggregatorTopic && hasMergerTopic && hasInputsTopic && hasUserId) {
+	if !(hasTopic && hasUserId) {
 		return nil, errors.New("not enough topics")
 	}
 
@@ -321,7 +319,7 @@ func handleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	session := Session{TopicAggregator: aggregatorTopic, TopicInputs: inputsTopic, MergerTopic: mergerTopic}
+	session := Session{Topic: topic}
 	if err = db.Create(&session).Error; err != nil {
 		return nil, err
 	}
@@ -349,7 +347,7 @@ func handleDeleteSession(db *gorm.DB, message []byte) ([]byte, error) {
 	}
 
 	sessionIdString, hasSessionId := input["SessionId"]
-	userIdString, hasUserId := input["SessionId"]
+	userIdString, hasUserId := input["UserId"]
 	if !(hasSessionId && hasUserId) {
 		return nil, errors.New("not id given")
 	}

@@ -66,7 +66,7 @@ class Merger:
         signal.signal(signal.SIGINT, signal.default_int_handler)
         print("STARTING MERGER")
         try:
-            while self.running:
+            while self.running: # TODO sa nu trimiti de 2 ori videoul, mergerul poate sa fie din grup diferit si sa cietsca de la client
                 message = self.consumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.MergerMicroservicePartition)
                 if message is None:
                     continue
@@ -95,7 +95,8 @@ class Merger:
         self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=videoContent, headers=[
             ("topic", self.topic.encode()),
             ("operation", b"ADD_VIDEO"),
-            ("sessionId", str(self.sessionId).encode())
+            ("partition", str(Kafka.partitions.MergerMicroservicePartition).encode()),
+            ("sessionId", str(self.sessionId).encode()),
         ])
         self.producer.flush(timeout=5)
         os.remove(self.finalVideo)

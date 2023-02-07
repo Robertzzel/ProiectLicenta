@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import Kafka.partitions
+import confluent_kafka
 from Kafka.Kafka import *
 DATABASE_TOPIC = "DATABASE"
 
@@ -28,8 +29,10 @@ class KafkaContainer:
         self.producer.produce(topic=DATABASE_TOPIC, headers=[
             ("topic", topic.encode()), ("partition", str(Kafka.partitions.ClientPartition).encode()), ("operation", operation.encode()),
         ], value=message)
+        self.producer.flush(timeout=1)
 
-        return self.consumer.receiveBigMessage(timeoutSeconds, partition=Kafka.partitions.ClientPartition) if bigFile else self.consumer.consumeMessage(timeoutSeconds, partition=Kafka.partitions.ClientPartition)
+        return self.consumer.receiveBigMessage(timeoutSeconds, partition=Kafka.partitions.ClientPartition)
+        #return self.consumer.receiveBigMessage(timeoutSeconds, partition=Kafka.partitions.ClientPartition) if bigFile else self.consumer.consumeMessage(timeoutSeconds, partition=Kafka.partitions.ClientPartition)
 
     @staticmethod
     def checkBrokerExists(address) -> bool:
@@ -44,6 +47,10 @@ class KafkaContainer:
                 status = header[1].decode()
 
         return status
+
+    def clearPartition(self):
+        while self.consumer.consumeMessage(timeoutSeconds=1) is not None:
+            pass
 
     def __del__(self):
         deleteTopic(self.address, self.topic)

@@ -333,10 +333,6 @@ func handleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if err = db.Model(&user).Update("session_id", session.ID).Error; err != nil {
-		return nil, err
-	}
-
 	return []byte(strconv.Itoa(int(session.ID))), nil
 }
 
@@ -369,7 +365,7 @@ func handleDeleteSession(db *gorm.DB, message []byte) ([]byte, error) {
 
 	if err = db.Model(&user).Update("session_id", nil).Error; err != nil {
 		return nil, err
-	}
+	} // TODO reseteaza session id urile tuturor iuserilor din conversatie
 
 	var session Session
 	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
@@ -435,15 +431,15 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 	default:
 		err = errors.New("operation not permitted")
 	}
+	status := "OK"
 	if err != nil {
-		if err = producer.Publish([]byte(err.Error()), []kafka.Header{{`status`, []byte("FAILED")}}, sendTopic, int32(partition)); err != nil {
-			fmt.Println(err)
-		}
-	} else {
-		if err = producer.Publish(response, []kafka.Header{{`status`, []byte("OK")}}, sendTopic, int32(partition)); err != nil {
-			fmt.Println(err)
-		}
+		response = []byte(err.Error())
+		status = "FAILED"
 	}
+	if err = producer.Publish(response, []kafka.Header{{`status`, []byte(status)}}, sendTopic, int32(partition)); err != nil {
+		fmt.Println(err)
+	}
+	producer.Flush(100)
 }
 
 func main() {
@@ -483,7 +479,7 @@ func main() {
 		if err != nil {
 			continue
 		}
-		fmt.Println("Message...")
+		fmt.Print("Message ")
 
 		go handleRequest(db, kafkaMessage, producer)
 	}

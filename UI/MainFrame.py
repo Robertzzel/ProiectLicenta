@@ -20,7 +20,6 @@ class MainFrame(customtkinter.CTkFrame):
         self.user: Optional[User] = None
         self.kafkaContainer: Optional[KafkaContainer] = None
         self.threadPool = ThreadPoolExecutor(4)
-
         self.sender: Optional[Sender] = None
         self.videoWindow: Optional[VideoWindow] = None
         self.merger: Optional[Merger] = None
@@ -193,7 +192,7 @@ class MainFrame(customtkinter.CTkFrame):
         msg = self.kafkaContainer.databaseCall(topic=MY_TOPIC, operation="CREATE_SESSION", message=json.dumps({
             "Topic": MY_TOPIC,
             "UserID": str(self.user.id),
-        }).encode())
+        }).encode(), bigFile=True)
 
         status = KafkaContainer.getStatusFromMessage(msg)
         if status is None or status.lower() != "ok":
@@ -215,6 +214,9 @@ class MainFrame(customtkinter.CTkFrame):
         if self.merger is not None:
             self.merger.stop()
 
+        print("RESETING TOPIC")
+        self.kafkaContainer.clearPartition()
+        print("RESETED TOPIC")
         self.kafkaContainer.databaseCall(topic=MY_TOPIC, operation="DELETE_SESSION", message=json.dumps({
             "SessionId": str(self.user.sessionId),
             "UserId": str(self.user.id),

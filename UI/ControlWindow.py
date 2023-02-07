@@ -144,7 +144,6 @@ class TkinterVideo(tk.Label):
 
             rate = 1 / self.videoFramerate
             while self.streamRunning:
-                print("getting new image")
                 try:
                     start = time.time()
 
@@ -188,7 +187,7 @@ class TkinterVideo(tk.Label):
             self.kafkaProducer.produce(topic=self.topic, value=b"", partition=Kafka.partitions.AggregatorMicroserviceStartPartition)
 
             while self.streamRunning:
-                message = self.streamConsumer.consumeMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
+                message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
                 if message is None:
                     continue
 
@@ -201,7 +200,7 @@ class TkinterVideo(tk.Label):
                     break
 
             while self.streamRunning:
-                message = self.streamConsumer.consumeMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
+                message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
                 if message is None:
                     continue
 
@@ -235,6 +234,7 @@ class TkinterVideo(tk.Label):
 
     def stop(self):
         self.streamRunning = False
+        self.kafkaProducer.flush(timeout=5)
         self.streamConsumer.close()
 
         print("Stopping inputs thread")

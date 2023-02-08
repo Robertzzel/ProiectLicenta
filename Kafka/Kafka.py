@@ -56,6 +56,11 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
             return msg
 
+    def seekToEnd(self, topic: str, partition: int):
+        tp = kafka.TopicPartition(topic, partition)
+        _, high = self.get_watermark_offsets(tp)
+        self.seek(kafka.TopicPartition(topic, partition, high))
+
     def receiveBigMessage(self, timeoutSeconds: float = None, partition = 0) -> Optional[kafka.Message | CustomKafkaMessage]:
         endTime = None if timeoutSeconds is None else time.time() + timeoutSeconds
 

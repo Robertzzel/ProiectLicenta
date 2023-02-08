@@ -214,9 +214,7 @@ class MainFrame(customtkinter.CTkFrame):
         if self.merger is not None:
             self.merger.stop()
 
-        print("RESETING TOPIC")
-        self.kafkaContainer.clearPartition()
-        print("RESETED TOPIC")
+        self.kafkaContainer.seekToEnd()
         self.kafkaContainer.databaseCall(topic=MY_TOPIC, operation="DELETE_SESSION", message=json.dumps({
             "SessionId": str(self.user.sessionId),
             "UserId": str(self.user.id),

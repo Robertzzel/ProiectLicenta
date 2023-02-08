@@ -13,6 +13,7 @@ from typing import Optional
 from Kafka.Kafka import KafkaConsumerWrapper
 from UI.InputsBuffer import InputsBuffer
 import threading
+from asyncio import Event
 
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
 MOVE = 1
@@ -59,7 +60,7 @@ class TkinterVideo(tk.Label):
         self.audioSamplerate = 0
         self.audioBlockSize = 0
         self.keepAspectRatio = keepAspect
-        self.streamRunning = True
+        self.stopEvent = Event()
         self.inputsBuffer: InputsBuffer = InputsBuffer()
         self.currentTkImage: Optional[ImageTk.PhotoImage] = None
 
@@ -93,10 +94,10 @@ class TkinterVideo(tk.Label):
 
     def sendInputs(self):
         try:
-            while self.streamRunning:
+            while not self.stopEvent.is_set():
                 time.sleep(0.1)
                 inputs = self.inputsBuffer.get()
-                if inputs != "":
+                if inputs != "" and not self.stopEvent.is_set():
                     self.kafkaProducer.produce(topic=self.topic, value=inputs.encode(), partition=Kafka.partitions.InputPartition)
         except BaseException as ex:
             print(ex)
@@ -132,7 +133,7 @@ class TkinterVideo(tk.Label):
 
     def displayContent(self):
         try:
-            while self.streamRunning:
+            while not self.stopEvent.is_set():
                 try:
                     self.currentImage = self.videoFramesQueue.get(block=True, timeout=1)  # wait for the stream to init
                     if self.audioStream:
@@ -143,14 +144,13 @@ class TkinterVideo(tk.Label):
                     break
 
             rate = 1 / self.videoFramerate
-            while self.streamRunning:
+            while not self.stopEvent.is_set():
                 try:
                     start = time.time()
-
                     self.currentImage = self.videoFramesQueue.get(timeout=1).to_image()
-                    self.event_generate("<<FrameGenerated>>")
-
-                    time.sleep(max(rate - (time.time() - start) % rate, 0))
+                    if not self.stopEvent.is_set():
+                        self.event_generate("<<FrameGenerated>>")
+                        time.sleep(max(rate - (time.time() - start) % rate, 0))
                 except queue.Empty:
                     continue
 
@@ -181,12 +181,10 @@ class TkinterVideo(tk.Label):
             self.streamConsumer = KafkaConsumerWrapper({
                 'bootstrap.servers': self.kafkaAddress,
                 'group.id': '-',
-                'auto.offset.reset': 'latest',
-                'allow.auto.create.topics': "true",
             }, [(self.topic, Kafka.partitions.ClientPartition)])
             self.kafkaProducer.produce(topic=self.topic, value=b"", partition=Kafka.partitions.AggregatorMicroserviceStartPartition)
 
-            while self.streamRunning:
+            while not self.stopEvent.is_set():
                 message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
                 if message is None:
                     continue
@@ -199,7 +197,7 @@ class TkinterVideo(tk.Label):
                 else:
                     break
 
-            while self.streamRunning:
+            while not self.stopEvent.is_set():
                 message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
                 if message is None:
                     continue
@@ -233,7 +231,7 @@ class TkinterVideo(tk.Label):
         self.config(image=self.currentTkImage)
 
     def stop(self):
-        self.streamRunning = False
+        self.stopEvent.set()
         self.kafkaProducer.flush(timeout=5)
         self.streamConsumer.close()
 

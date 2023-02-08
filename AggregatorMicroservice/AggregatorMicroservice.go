@@ -46,7 +46,6 @@ func NewContextCancelableBySignals() context.Context {
 }
 
 func GetFileTimestamp(file string) (int, error) {
-	println("!!!!!!! ", file, " !!!!!!!")
 	return strconv.Atoi(file[len(file)-17 : len(file)-4])
 }
 
@@ -60,18 +59,6 @@ func CombineAndCompressFiles(files AudioVideoPair, bitrate string, output string
 	}
 
 	return result, nil
-}
-
-func SendVideo(producer *Kafka.AggregatorMicroserviceProducer, video []byte) error {
-	if err := producer.PublishClient(video, nil); err != nil {
-		return err
-	}
-
-	if err := producer.PublishMerger(video, nil); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func GetNextAudioAndVideo(ctx context.Context, consumer *Kafka.AggregatorMicroserviceConsumer) (AudioVideoPair, error) {
@@ -199,7 +186,7 @@ func CompressAndSendFiles(producer *Kafka.AggregatorMicroserviceProducer, files 
 		return err
 	}
 
-	if err = SendVideo(producer, video); err != nil {
+	if err = producer.PublishClient(video, nil); err != nil {
 		return err
 	}
 
@@ -268,7 +255,7 @@ func main() {
 		log.Println(err)
 	}
 
-	if err = producer.PublishMerger([]byte("quit"), nil); err != nil {
+	if err = producer.PublishClient([]byte("quit"), nil); err != nil {
 		log.Println(err)
 	}
 	producer.Flush(1000)

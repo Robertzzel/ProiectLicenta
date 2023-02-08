@@ -215,6 +215,8 @@ class TkinterVideo(tk.Label):
         except BaseException as ex:
             print(ex)
 
+        self.stopEvent.set()
+
     def clearAudioAndVideoQueues(self):
         with self.videoFramesQueue.mutex:
             self.videoFramesQueue.queue.clear()

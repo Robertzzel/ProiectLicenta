@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/xgb v0.0.0-20210121224620-deaf085860bc
 	github.com/go-vgo/robotgo v1.0.0-beta5.3
 	github.com/google/uuid v1.3.0
+	github.com/gordonklaus/portaudio v0.0.0-20221027163845-7c3b689db3cc
 	github.com/icza/mjpeg v0.0.0-20220812133530-f79265a232f2
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
 	github.com/segmentio/kafka-go v0.4.35
@@ -15,6 +16,7 @@ require (
 )
 
 require (
+	github.com/confluentinc/confluent-kafka-go v1.9.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
@@ -40,4 +42,5 @@ require (
 	golang.org/x/net v0.0.0-20220927171203-f486391704dc // indirect
 	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	gopkg.in/confluentinc/confluent-kafka-go.v1 v1.8.2 // indirect
 )

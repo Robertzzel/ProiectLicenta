@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/google/uuid"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -23,7 +24,6 @@ const (
 func doesFileExist(fileName string) bool {
 	_, err := os.Stat(fileName)
 
-	// check if error is "file not exists"
 	return !os.IsNotExist(err)
 }
 
@@ -189,7 +189,7 @@ func handleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) 
 		return nil, err
 	}
 
-	result, err := json.Marshal(map[string]string{"AggregatorTopic": session.TopicAggregator, "InputsTopic": session.TopicInputs})
+	result, err := json.Marshal(map[string]string{"Topic": session.Topic})
 	if err != nil {
 		return nil, err
 	}
@@ -307,12 +307,10 @@ func handleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	aggregatorTopic, hasAggregatorTopic := input["AggregatorTopic"]
-	inputsTopic, hasInputsTopic := input["InputsTopic"]
-	mergerTopic, hasMergerTopic := input["MergerTopic"]
+	topic, hasTopic := input["Topic"]
 	userIdString, hasUserId := input["UserID"]
 
-	if !(hasAggregatorTopic && hasMergerTopic && hasInputsTopic && hasUserId) {
+	if !(hasTopic && hasUserId) {
 		return nil, errors.New("not enough topics")
 	}
 
@@ -321,7 +319,7 @@ func handleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	session := Session{TopicAggregator: aggregatorTopic, TopicInputs: inputsTopic, MergerTopic: mergerTopic}
+	session := Session{Topic: topic}
 	if err = db.Create(&session).Error; err != nil {
 		return nil, err
 	}
@@ -335,10 +333,6 @@ func handleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if err = db.Model(&user).Update("session_id", session.ID).Error; err != nil {
-		return nil, err
-	}
-
 	return []byte(strconv.Itoa(int(session.ID))), nil
 }
 
@@ -349,7 +343,7 @@ func handleDeleteSession(db *gorm.DB, message []byte) ([]byte, error) {
 	}
 
 	sessionIdString, hasSessionId := input["SessionId"]
-	userIdString, hasUserId := input["SessionId"]
+	userIdString, hasUserId := input["UserId"]
 	if !(hasSessionId && hasUserId) {
 		return nil, errors.New("not id given")
 	}
@@ -371,7 +365,7 @@ func handleDeleteSession(db *gorm.DB, message []byte) ([]byte, error) {
 
 	if err = db.Model(&user).Update("session_id", nil).Error; err != nil {
 		return nil, err
-	}
+	} // TODO reseteaza session id urile tuturor iuserilor din conversatie
 
 	var session Session
 	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
@@ -385,21 +379,23 @@ func handleDeleteSession(db *gorm.DB, message []byte) ([]byte, error) {
 	return []byte("success"), nil
 }
 
-func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.Producer) {
-	var sendTopic, operation []byte
+func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.DatabaseProducer) {
+	var sendTopic, operation string
+	var partition = 0
+	var err error
 	for _, header := range message.Headers {
 		switch header.Key {
 		case "topic":
-			sendTopic = header.Value
+			sendTopic = string(header.Value)
 		case "operation":
-			operation = header.Value
+			operation = string(header.Value)
+		case "partition":
+			partition, err = strconv.Atoi(string(header.Value))
 		}
 	}
 
-	var err error
 	var response []byte
-	var responseMessage *Kafka.ProducerMessage
-	switch string(operation) {
+	switch operation {
 	case "LOGIN":
 		response, err = handleLogin(db, message.Message)
 	case "REGISTER":
@@ -435,33 +431,15 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 	default:
 		err = errors.New("operation not permitted")
 	}
+	status := "OK"
 	if err != nil {
-		responseMessage = &Kafka.ProducerMessage{
-			Message: []byte(err.Error()),
-			Topic:   string(sendTopic),
-			Headers: []Kafka.Header{
-				{`status`, []byte("FAILED")},
-			},
-		}
-	} else {
-		responseMessage = &Kafka.ProducerMessage{
-			Message: response,
-			Topic:   string(sendTopic),
-			Headers: []Kafka.Header{
-				{`status`, []byte("OK")},
-			},
-		}
+		response = []byte(err.Error())
+		status = "FAILED"
 	}
-
-	if err = producer.Publish(responseMessage); err != nil {
+	if err = producer.Publish(response, []kafka.Header{{`status`, []byte(status)}}, sendTopic, int32(partition)); err != nil {
 		fmt.Println(err)
-	} else {
-		if len(responseMessage.Message) < 250 {
-			fmt.Println("Sent response... ", string(responseMessage.Message))
-		} else {
-			fmt.Println("Sent response... ", len(responseMessage.Message), "bytes")
-		}
 	}
+	producer.Flush(100)
 }
 
 func main() {
@@ -486,23 +464,22 @@ func main() {
 			fmt.Println(err)
 		}
 	}()
-	if err := consumer.SetOffsetToNow(); err != nil {
+	if err = consumer.SetOffsetToNow(); err != nil {
 		panic(err)
 	}
 
-	producer := Kafka.NewProducer(brokerAddress)
-	defer func() {
-		if err := producer.Close(); err != nil {
-			fmt.Println(err)
-		}
-	}()
+	producer, err := Kafka.NewDatabaseProducer(brokerAddress)
+	if err != nil {
+		panic(err)
+	}
+	defer producer.Close()
 
 	for {
 		kafkaMessage, err := consumer.Consume(time.Second * 2)
 		if err != nil {
 			continue
 		}
-		fmt.Println("Message...")
+		fmt.Print("Message ")
 
 		go handleRequest(db, kafkaMessage, producer)
 	}

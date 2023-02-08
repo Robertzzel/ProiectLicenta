@@ -1,9 +1,10 @@
-import kafka
+import Kafka.partitions
+from Kafka.partitions import InputPartition
 import pynput
-import time
 from TkPynputKeyCodes import KeyTranslator
 from pyautogui import size
 import sys
+from Kafka.Kafka import *
 
 MOVE = 1
 CLICK = 2
@@ -27,10 +28,16 @@ def main():
     width, height = size()
     keyboard_controller: pynput.keyboard.Controller = pynput.keyboard.Controller()
     mouse_controller: pynput.mouse.Controller = pynput.mouse.Controller()
-    consumer = kafka.KafkaConsumer(topic, bootstrap_servers=brokerAddress)
+    consumer = KafkaConsumerWrapper({
+        'bootstrap.servers': brokerAddress,
+        'group.id': "-",
+        'auto.offset.reset': 'latest',
+        'allow.auto.create.topics': "true",
+    }, [(topic, InputPartition)])
 
-    for msg in consumer:
-        for command in msg.value.decode().split(";"):
+    while True:
+        msg = consumer.consumeMessage(timeoutSeconds=None, partition=Kafka.partitions.InputPartition)
+        for command in msg.value().decode().split(";"):
             components = command.split(",")
             action = int(components[0])
 

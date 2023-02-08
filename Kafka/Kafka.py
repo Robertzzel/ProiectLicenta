@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from typing import *
 import confluent_kafka as kafka
 from confluent_kafka.admin import AdminClient
@@ -42,9 +41,9 @@ class KafkaProducerWrapper(kafka.Producer):
 
 
 class KafkaConsumerWrapper(kafka.Consumer):
-    def __init__(self, config, topics: List[str]):
+    def __init__(self, config: Dict, topics: List[Tuple[str, int]]):
         super().__init__(config)
-        self.subscribe(topics)
+        self.assign([kafka.TopicPartition(topic=pair[0], partition=pair[1]) for pair in topics])
 
     def __next__(self) -> kafka.Message:
         while True:
@@ -57,10 +56,15 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
             return msg
 
-    def receiveBigMessage(self, timeoutSeconds: float = None) -> Optional[kafka.Message | CustomKafkaMessage]:
+    def seekToEnd(self, topic: str, partition: int):
+        tp = kafka.TopicPartition(topic, partition)
+        _, high = self.get_watermark_offsets(tp)
+        self.seek(kafka.TopicPartition(topic, partition, high))
+
+    def receiveBigMessage(self, timeoutSeconds: float = None, partition = 0) -> Optional[kafka.Message | CustomKafkaMessage]:
         endTime = None if timeoutSeconds is None else time.time() + timeoutSeconds
 
-        message = self.consumeMessage(None if endTime is None else endTime - time.time())
+        message = self.consumeMessage(None if endTime is None else endTime - time.time(), partition=partition)
         if message is None:
             return None
 
@@ -78,7 +82,7 @@ class KafkaConsumerWrapper(kafka.Consumer):
         messages: List[bytes] = [b""] * numberOfMessages
         messages[currentMessageNumber] = message.value()
         for i in range(numberOfMessages - 1):
-            message = self.consumeMessage(None if endTime is None else endTime - time.time())
+            message = self.consumeMessage(None if endTime is None else endTime - time.time(), partition=partition)
             if message is None:
                 return None
 
@@ -93,21 +97,24 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
         return CustomKafkaMessage(value=finalMessage, headers=headersToBeReturned)
 
-    def consumeMessage(self, timeoutSeconds: int = None) -> Optional[kafka.Message]:
+    def consumeMessage(self, timeoutSeconds: int = None, partition=0) -> Optional[kafka.Message]:
         if timeoutSeconds is None:
             while True:
-                msg = self.poll(0.25)
+                msg = self.poll(0.2)
 
-                if msg is None:
+                if msg is None or msg.partition() != partition:
                     continue
                 if msg.error():
                     raise Exception(f"Consumer error: {msg.error()}")
-
+                if msg.partition() is None:
+                    raise Exception(f"partition does not exist")
+                if msg.partition() != partition:
+                    continue
                 return msg
 
         s = time.time() + timeoutSeconds
         while time.time() < s:
-            msg = self.poll(0.5)
+            msg = self.poll(0.2)
 
             if msg is None:
                 continue
@@ -138,9 +145,9 @@ def deleteTopic(brokerAddress: str, topic: str):
 
 
 def checkKafkaActive(brokerAddress: str) -> bool:
-    import kafka
+    import kafka as kafka_python
     try:
-        kafka.KafkaConsumer(bootstrap_servers=[brokerAddress])
+        kafka_python.KafkaConsumer(bootstrap_servers=[brokerAddress])
     except BaseException:
         return False
     return True

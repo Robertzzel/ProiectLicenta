@@ -5,15 +5,15 @@ from queue import Queue
 import tkinter as tk
 from PIL import ImageTk, Image, ImageOps
 import sounddevice as sd
-from kafka import KafkaAdminClient
+import Kafka.partitions
 from Kafka.Kafka import *
 from io import BytesIO
 import numpy as np
 from typing import Optional
 from Kafka.Kafka import KafkaConsumerWrapper
 from UI.InputsBuffer import InputsBuffer
-import uuid
 import threading
+from asyncio import Event
 
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
 MOVE = 1
@@ -23,14 +23,28 @@ RELEASE = 5
 DATABASE_TOPIC = "DATABASE"
 
 
+class VideoWindow(tk.Toplevel):
+    def __init__(self, topic: str, kafkaAddress: str):
+        super().__init__()
+        self.player = TkinterVideo(master=self, topic=topic, kafkaAddress=kafkaAddress)
+        self.player.pack(expand=True, fill="both")
+        self.player.play()
+
+    def stop(self):
+        self.player.stop()
+        self.destroy()
+
+    def __del__(self):
+        self.player.stop()
+        self.destroy()
+
+
 class TkinterVideo(tk.Label):
-    def __init__(self, master, aggregatorTopic: str, inputsTopic: str, kafkaAddress: str = "localhost:9092", keepAspect: bool = False, *args, **kwargs):
+    def __init__(self, master, topic: str, kafkaAddress: str = "localhost:9092", keepAspect: bool = False, *args, **kwargs):
         super(TkinterVideo, self).__init__(master, *args, **kwargs)
 
         self.kafkaAddress = kafkaAddress
-        self.aggregatorTopic = aggregatorTopic
-        self.aggregatorStartTopic = f"s{self.aggregatorTopic}"
-        self.inputsTopic = inputsTopic
+        self.topic = topic
         self.kafkaProducer = KafkaProducerWrapper({'bootstrap.servers': self.kafkaAddress})
 
         self.streamConsumer: Optional[KafkaConsumerWrapper] = None
@@ -46,7 +60,7 @@ class TkinterVideo(tk.Label):
         self.audioSamplerate = 0
         self.audioBlockSize = 0
         self.keepAspectRatio = keepAspect
-        self.streamRunning = True
+        self.stopEvent = Event()
         self.inputsBuffer: InputsBuffer = InputsBuffer()
         self.currentTkImage: Optional[ImageTk.PhotoImage] = None
 
@@ -79,15 +93,13 @@ class TkinterVideo(tk.Label):
         self.inputsBuffer.add(f"{RELEASE},{event.keysym_num}")
 
     def sendInputs(self):
-        while self.streamRunning:
-            time.sleep(0.1)
-            inputs = self.inputsBuffer.get()
-            if inputs != "":
-                self.kafkaProducer.produce(topic=self.inputsTopic, value=inputs.encode())
-
         try:
-            KafkaAdminClient(bootstrap_servers=self.kafkaAddress).delete_topics([self.inputsTopic])
-        except Exception as ex:
+            while not self.stopEvent.is_set():
+                time.sleep(0.1)
+                inputs = self.inputsBuffer.get()
+                if inputs != "" and not self.stopEvent.is_set():
+                    self.kafkaProducer.produce(topic=self.topic, value=inputs.encode(), partition=Kafka.partitions.InputPartition)
+        except BaseException as ex:
             print(ex)
 
     def play(self):
@@ -120,32 +132,32 @@ class TkinterVideo(tk.Label):
                                            blocksize=audioStream.codec_context.frame_size)
 
     def displayContent(self):
-        while self.streamRunning:
-            try:
-                self.currentImage = self.videoFramesQueue.get(block=True, timeout=2)  # wait for the stream to init
-                break
-            except queue.Empty:
-                continue
+        try:
+            while not self.stopEvent.is_set():
+                try:
+                    self.currentImage = self.videoFramesQueue.get(block=True, timeout=1)  # wait for the stream to init
+                    if self.audioStream:
+                        self.audioStream.start()
+                except queue.Empty:
+                    continue
+                else:
+                    break
 
-        if self.audioStream:
-            self.audioStream.start()
+            rate = 1 / self.videoFramerate
+            while not self.stopEvent.is_set():
+                try:
+                    start = time.time()
+                    self.currentImage = self.videoFramesQueue.get(timeout=1).to_image()
+                    if not self.stopEvent.is_set():
+                        self.event_generate("<<FrameGenerated>>")
+                        time.sleep(max(rate - (time.time() - start) % rate, 0))
+                except queue.Empty:
+                    continue
 
-        rate = 1 / self.videoFramerate
-
-        while self.streamRunning:
-            try:
-                start = time.time()
-
-                self.currentImage = self.videoFramesQueue.get(timeout=2).to_image()
-                self.event_generate("<<FrameGenerated>>")
-
-                time.sleep(max(rate - (time.time() - start) % rate, 0))
-            except queue.Empty:
-                continue
-
-        self.videoFramesQueue.queue.clear()
-        self.audioBlocksQueue.queue.clear()
-        print("DISPLAYED THREAD: I AM STOPPED")
+            self.videoFramesQueue.queue.clear()
+            self.audioBlocksQueue.queue.clear()
+        except BaseException as ex:
+            print(ex)
 
     def audioCallback(self, outdata: np.ndarray, frames: int, timet, status):
         try:
@@ -165,29 +177,28 @@ class TkinterVideo(tk.Label):
         outdata[:] = data
 
     def receiveStream(self):
-        self.streamConsumer = KafkaConsumerWrapper({
-            'bootstrap.servers': self.kafkaAddress,
-            'group.id': str(uuid.uuid1()),
-            'auto.offset.reset': 'latest',
-            'allow.auto.create.topics': "true",
-        }, [self.aggregatorTopic])
-
-        self.kafkaProducer.produce(topic=self.aggregatorStartTopic, value=b"")
-        print("Signal sent")
-
-        while self.streamRunning:
-            message = self.streamConsumer.consumeMessage(timeoutSeconds=1)
-            if message is None:
-                continue
-
-            with av.open(BytesIO(message.value())) as container:
-                self.initVideoStream(container)
-
-            break
-
         try:
-            while self.streamRunning:
-                message = self.streamConsumer.consumeMessage(timeoutSeconds=1)
+            self.streamConsumer = KafkaConsumerWrapper({
+                'bootstrap.servers': self.kafkaAddress,
+                'group.id': '-',
+            }, [(self.topic, Kafka.partitions.ClientPartition)])
+            self.kafkaProducer.produce(topic=self.topic, value=b"", partition=Kafka.partitions.AggregatorMicroserviceStartPartition)
+
+            while not self.stopEvent.is_set():
+                message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
+                if message is None:
+                    continue
+
+                try:
+                    with av.open(BytesIO(message.value())) as container:
+                        self.initVideoStream(container)
+                except Exception:
+                    continue
+                else:
+                    break
+
+            while not self.stopEvent.is_set():
+                message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
                 if message is None:
                     continue
 
@@ -195,7 +206,6 @@ class TkinterVideo(tk.Label):
                     container.fast_seek, container.discard_corrupt = True, True
 
                     self.clearAudioAndVideoQueues()
-
                     for packet in container.demux():
                         for frame in packet.decode():
                             if isinstance(frame, av.VideoFrame):
@@ -204,6 +214,8 @@ class TkinterVideo(tk.Label):
                                 self.audioBlocksQueue.put(item=frame.to_ndarray(), block=True)
         except BaseException as ex:
             print(ex)
+
+        self.stopEvent.set()
 
     def clearAudioAndVideoQueues(self):
         with self.videoFramesQueue.mutex:
@@ -221,21 +233,26 @@ class TkinterVideo(tk.Label):
         self.config(image=self.currentTkImage)
 
     def stop(self):
-        self.streamRunning = False
+        self.stopEvent.set()
+        self.kafkaProducer.flush(timeout=5)
         self.streamConsumer.close()
 
         print("Stopping inputs thread")
         if self.sendInputsThread:
             self.sendInputsThread.join()
+        print("Stopped inputs thread")
 
         print("Stopping audio stream")
         if self.audioStream:
             self.audioStream.stop()
+        print("Stopped audio stream")
 
         print("Stopping diplay thread")
         if self.displayContentThread:
             self.displayContentThread.join()
+        print("Stopped diplay thread")
 
         print("Stopping receiver thread")
         if self.streamReceiverThread:
             self.streamReceiverThread.join()
+        print("Stopped receiver thread")

@@ -3,17 +3,13 @@ import tkinter as tk
 from tkinter import filedialog
 from start import *
 import customtkinter
-from ControlWindow import TkinterVideo
+from ControlWindow import VideoWindow
 from User import User
 from KafkaContainer import KafkaContainer
 from typing import *
 from concurrent.futures import ThreadPoolExecutor
+import uuid
 
-BACKGROUND = "#161616"
-FRAME_BACKGROUND = "#1c1c1c"
-TEXT_COLOR = "#FFFFFF"
-BUTTON_BG = "#d5f372"
-BUTTON_FG = "#000000"
 MY_TOPIC = f"{uuid.uuid1()}"
 
 
@@ -24,10 +20,8 @@ class MainFrame(customtkinter.CTkFrame):
         self.user: Optional[User] = None
         self.kafkaContainer: Optional[KafkaContainer] = None
         self.threadPool = ThreadPoolExecutor(4)
-
         self.sender: Optional[Sender] = None
-        self.videoPlayer: Optional[TkinterVideo] = None
-        self.videoPlayerWindow: Optional[tk.Toplevel] = None
+        self.videoWindow: Optional[VideoWindow] = None
         self.merger: Optional[Merger] = None
 
         self.LABEL_FONT = customtkinter.CTkFont(size=20, family="Arial")
@@ -58,9 +52,9 @@ class MainFrame(customtkinter.CTkFrame):
         customtkinter.CTkLabel(master=div, text="PASSWORD:", font=self.LABEL_FONT, ).grid(row=2, column=0, pady=(30, 20), padx=(0, 20))
         customtkinter.CTkLabel(master=div, text=str(self.user.callPassword), font=self.LABEL_FONT, ).grid(row=3, column=0)
 
-        if self.user.sessionId is None and self.videoPlayerWindow is None:
+        if self.user.sessionId is None and self.videoWindow is None:
             customtkinter.CTkButton(master=div, text="START SHARING", command=self.buttonStartSharing).grid(row=4, column=0, pady=(30, 50))
-        elif self.videoPlayerWindow is not None:
+        elif self.videoWindow is not None:
             customtkinter.CTkButton(master=div, text="START SHARING", state=tk.DISABLED).grid(row=4, column=0, pady=(30, 50))
         else:
             customtkinter.CTkButton(master=div, text="STOP SHARING", command=self.buttonStopSharing).grid(row=4, column=0, pady=(30, 50))
@@ -81,7 +75,7 @@ class MainFrame(customtkinter.CTkFrame):
         passwordEntry = customtkinter.CTkEntry(master=divRight, font=self.LABEL_FONT)
         passwordEntry.grid(row=1, column=2, pady=(30, 0))
 
-        if self.videoPlayerWindow is not None:
+        if self.videoWindow is not None:
             customtkinter.CTkButton(master=divRight, text="SUBMIT", font=self.LABEL_FONT, state=tk.DISABLED).grid(row=2, column=1, pady=(30, 0))
         else:
             customtkinter.CTkButton(master=divRight, text="SUBMIT", font=self.LABEL_FONT, command=lambda: self.buttonStartCall(idEntry.get(), passwordEntry.get())).grid(row=2, column=1, pady=(30, 0))
@@ -196,22 +190,19 @@ class MainFrame(customtkinter.CTkFrame):
 
     def startSharing(self):
         msg = self.kafkaContainer.databaseCall(topic=MY_TOPIC, operation="CREATE_SESSION", message=json.dumps({
-            "AggregatorTopic": self.sender.aggregatorTopic,
-            "InputsTopic": self.sender.inputsTopic,
-            "MergerTopic": self.merger.topic,
+            "Topic": MY_TOPIC,
             "UserID": str(self.user.id),
-        }).encode())
+        }).encode(), bigFile=True)
 
         status = KafkaContainer.getStatusFromMessage(msg)
         if status is None or status.lower() != "ok":
             self.setStatusMessage("Cannot start sharing")
             return
 
-        sessionId = int(msg.value().decode())
-        self.user.sessionId = sessionId
+        self.user.sessionId = int(msg.value().decode())
 
         if self.sender is not None:
-            self.sender.start(self.merger.topic)
+            self.sender.start(MY_TOPIC)
 
         if self.merger is not None:
             self.merger.start(str(self.user.sessionId))
@@ -223,6 +214,7 @@ class MainFrame(customtkinter.CTkFrame):
         if self.merger is not None:
             self.merger.stop()
 
+        self.kafkaContainer.seekToEnd()
         self.kafkaContainer.databaseCall(topic=MY_TOPIC, operation="DELETE_SESSION", message=json.dumps({
             "SessionId": str(self.user.sessionId),
             "UserId": str(self.user.id),
@@ -251,23 +243,15 @@ class MainFrame(customtkinter.CTkFrame):
             return
 
         responseValue = json.loads(responseMessage.value())
-        aggregatorTopic = responseValue["AggregatorTopic"]
-        inputsTopic = responseValue["InputsTopic"]
+        topic = responseValue["Topic"]
 
-        self.videoPlayerWindow = tk.Toplevel()
-        self.videoPlayer = TkinterVideo(master=self.videoPlayerWindow, aggregatorTopic=aggregatorTopic, inputsTopic=inputsTopic, kafkaAddress=self.kafkaContainer.address)
-        self.videoPlayer.pack(expand=True, fill="both")
-        self.videoPlayer.play()
-        self.videoPlayerWindow.protocol("WM_DELETE_WINDOW", self.exitCallWindow)
+        self.videoWindow = VideoWindow(topic=topic, kafkaAddress=self.kafkaContainer.address)
+        self.videoWindow.protocol("WM_DELETE_WINDOW", self.stopCall)
 
     def stopCall(self):
-        if self.videoPlayer is not None:
-            self.videoPlayer.stop()
-        self.videoPlayer = None
-
-        if self.videoPlayerWindow is not None:
-            self.videoPlayerWindow.destroy()
-        self.videoPlayerWindow = None
+        if self.videoWindow is not None:
+            self.videoWindow.stop()
+            self.videoWindow = None
 
     def cleanFrame(self):
         for widget in self.winfo_children():
@@ -280,7 +264,6 @@ class MainFrame(customtkinter.CTkFrame):
                 'allow.auto.create.topics': "true",
             }, MY_TOPIC)
             self.setStatusMessage("Connected to Kafka")
-
         except Exception as ex:
             self.setStatusMessage(f"Cannot connect to kafka, {ex}")
 
@@ -295,9 +278,6 @@ class MainFrame(customtkinter.CTkFrame):
 
     def setStatusMessage(self, message: str):
         self.mainWindow.setStatusMessage(message)
-
-    def exitCallWindow(self):
-        self.stopCall()
 
     def downloadVideoButtonPressed(self, videoId: int):
         if self.threadPool._work_queue.qsize() > 0:
@@ -336,7 +316,7 @@ class MainFrame(customtkinter.CTkFrame):
         self.user = User(message.get("ID", None), username, message.get("CallKey", None), message.get("CallPassword", None), message.get("SessionId", None))
 
         self.sender = Sender(self.kafkaContainer.address)
-        self.merger = Merger(self.kafkaContainer.address)
+        self.merger = Merger(self.kafkaContainer.address, MY_TOPIC)
 
         self.buildLoginFrame()
         self.mainWindow.title(f"RMI {self.user.name}")

@@ -1,11 +1,10 @@
-import os
 import sys
-import pathlib
 import queue
 import tempfile
 import subprocess
-import uuid
 import signal
+
+import Kafka.partitions
 from Kafka.Kafka import *
 from typing import Optional
 
@@ -35,8 +34,8 @@ class VideoAggregator:
 
 
 class TempFile:
-    def __init__(self, fileContents: str):
-        self.file = tempfile.NamedTemporaryFile()
+    def __init__(self, fileContents: bytes):
+        self.file = tempfile.NamedTemporaryFile(suffix=".mp4")
         self.file.write(fileContents)
         self.name = self.file.name
 
@@ -51,33 +50,30 @@ class Merger:
         self.sessionId = sessionId
         self.consumer = KafkaConsumerWrapper({
             'bootstrap.servers': self.broker,
-            'group.id': str(uuid.uuid1()),
+            'group.id': "-",
             'auto.offset.reset': 'latest',
-            'allow.auto.create.topics': "true",
-        }, [self.topic])
+        }, [(self.topic, Kafka.partitions.ClientPartition)])
         self.producer = KafkaProducerWrapper({'bootstrap.servers': self.broker})
         self.running = True
         self.videosQueue = queue.Queue()
-        self.finalVideo: Optional[str] = None
-        self.i = 0
+        self.finalVideo: Optional[TempFile] = None
 
     def start(self):
         signal.signal(signal.SIGINT, signal.default_int_handler)
+        self.consumer.seekToEnd(topic=self.topic, partition=Kafka.partitions.ClientPartition)
         try:
             while self.running:
-                message = self.consumer.consumeMessage(timeoutSeconds=1)
+                message = self.consumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
                 if message is None:
                     continue
-                print(f"goo msg {len(message.value())}", self.running)
 
                 if message.value() == b"quit":
-                    print("Quitting")
                     self.stop()
                     break
 
-                self.videosQueue.put(message.value())
+                self.videosQueue.put(TempFile(message.value()))
 
-                if self.videosQueue.qsize() > 20:
+                if self.videosQueue.qsize() > 50:
                     self.aggregateVideosFromQueue()
         except BaseException as ex:
             print(ex)
@@ -85,47 +81,58 @@ class Merger:
         self.aggregateVideosFromQueue()
         self.compressFinalFile()
 
-        with open(self.finalVideo, "rb") as f:
-            videoContent = f.read()
+        if self.finalVideo is None:
+            print("not a file")
+            return
 
-        self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=videoContent, headers=[
+        print("Sending")
+        self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=self.finalVideo.file.read(), headers=[
             ("topic", self.topic.encode()),
             ("operation", b"ADD_VIDEO"),
-            ("sessionId", str(self.sessionId).encode())
+            ("partition", str(Kafka.partitions.MergerMicroservicePartition).encode()),
+            ("sessionId", str(self.sessionId).encode()),
         ])
-
-        print(f"MERGER: message sent at {DATABASE_TOPIC}, {self.broker} ---")
         self.producer.flush(timeout=5)
+        self.finalVideo.close()
+        print(f"MERGER: message sent at {DATABASE_TOPIC}, {self.broker} ---")
 
     def aggregateVideosFromQueue(self):
         videos = []
+        try:
+            while True:
+                videos.append(self.videosQueue.get_nowait())
+        except queue.Empty:
+            pass
 
-        while self.videosQueue.qsize() > 0:
-            videos.append(TempFile(self.videosQueue.get(block=True)))
+        if len(videos) == 0:
+            return
 
-        fileNames = list(map(lambda f: f.name, videos))
-        if self.finalVideo:
-            fileNames.insert(0, self.finalVideo)
-
-        VideoAggregator.aggregateVideos(fileNames, f"{self.i}.mp4")
-
+        fileNames: List[str] = [file.name for file in videos]
         if self.finalVideo is not None:
-            os.remove(self.finalVideo)
+            fileNames.insert(0, self.finalVideo.name)
 
-        self.finalVideo = f"{pathlib.Path(os.getcwd())}/{self.i}.mp4"
+        newFile = TempFile(b"")
+        VideoAggregator.aggregateVideos(fileNames, newFile.name)
+        self.finalVideo = newFile
+
         [file.close() for file in videos]
 
-        self.i += 1
-        videos.clear()
-
     def compressFinalFile(self):
-        self.i += 1
-        nextFinalFile = f"final{self.i}.mp4"
-        process = subprocess.Popen(["ffmpeg", "-y", "-i", self.finalVideo, "-c:v", "libx264", "-b:v", "500k", nextFinalFile], stdout=subprocess.PIPE, stderr=sys.stderr)
+        if self.finalVideo is None:  # no file created
+            return
+
+        nextFile = TempFile(b"")
+        process = subprocess.Popen(
+            ["ffmpeg", "-y", "-i", self.finalVideo.name, "-c:v", "libx264", "-b:v", "500k", nextFile.name],
+            stdout=subprocess.PIPE,
+            stderr=sys.stderr
+        )
         process.wait()
         out, err = process.communicate()
         if err is not None and err != b"":
             raise Exception("CONCAT ERROR:\n" + err.decode())
+        self.finalVideo.close()
+        self.finalVideo = nextFile
 
     def stop(self):
         self.running = False

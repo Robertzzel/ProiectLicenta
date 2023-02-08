@@ -31,10 +31,8 @@ type Video struct {
 
 type Session struct {
 	gorm.Model
-	TopicAggregator string  `gorm:"not null"`
-	TopicInputs     string  `gorm:"not null"`
-	MergerTopic     string  `gorm:"not null"`
-	Users           []*User `gorm:"foreignKey:SessionId"`
+	Topic string  `gorm:"not null"`
+	Users []*User `gorm:"foreignKey:SessionId"`
 }
 
 type JsonUser struct {

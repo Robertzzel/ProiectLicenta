@@ -6,7 +6,6 @@ import numpy as np
 import queue
 from typing import *
 import time
-import pickle
 
 SAMPLERATE = 44100
 CHANNELS = 1
@@ -54,6 +53,7 @@ class Recorder:
     def process_buffer(self, start_time: time.time, chunk_size_seconds: float):
         next_chunk_end = start_time + chunk_size_seconds
         cwd = os.getcwd()
+        number_of_bytes_needed = int(SAMPLERATE * chunk_size_seconds)
 
         while self.running:
             while next_chunk_end - time.time() > 0:
@@ -65,17 +65,14 @@ class Recorder:
             self.buffer = np.array([], dtype=np.int16)
             self.lock.release()
 
-            number_of_bytes_needed = int(SAMPLERATE * chunk_size_seconds)
-            if len(audio_chunk) > number_of_bytes_needed:
-                audio_chunk = audio_chunk[len(audio_chunk) - number_of_bytes_needed:]
-            elif len(audio_chunk) < number_of_bytes_needed:
-                audio_chunk = np.append(audio_chunk, np.array([0] * int(number_of_bytes_needed - len(audio_chunk)), dtype=np.int16))
+            bytes_difference = len(audio_chunk) - number_of_bytes_needed
+            if bytes_difference > 0:
+                audio_chunk = audio_chunk[bytes_difference:]
+            elif bytes_difference < 0:
+                audio_chunk = np.append(audio_chunk, np.array([0] * -bytes_difference, dtype=np.int16))
 
             audio_file_name = cwd + "/audio/" + str(int((next_chunk_end - chunk_size_seconds) * 1000)) + ".wav"
             create_audio_file(audio_file_name, audio_chunk, SAMPLERATE)
-            # with open(audio_file_name, "wb") as f:
-            #     f.write(pickle.dumps(np.array(audio_chunk, dtype=np.int16)))
-
             self.audio_queue.put_nowait(audio_file_name)
 
             next_chunk_end = next_chunk_end + chunk_size_seconds

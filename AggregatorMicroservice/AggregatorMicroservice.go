@@ -195,16 +195,16 @@ func CompressAndSendFiles(producer *Kafka.AggregatorMicroserviceProducer, files 
 }
 
 func waitForAUser(ctx context.Context, consumer *Kafka.AggregatorMicroserviceConsumer) error {
+	var err error
+	var messageType int
 	for ctx.Err() == nil {
-		_, _, err := consumer.ConsumeAggregatorStart(time.Second * 2)
-		if errors.Is(err, context.DeadlineExceeded) {
-			continue
-		} else if err != nil {
-			return err
+		_, messageType, err = consumer.ConsumeAggregator(ctx)
+		fmt.Println("Message type", messageType)
+		if messageType == Kafka.StartMessage || err != nil {
+			break
 		}
-		return nil
 	}
-	return ctx.Err()
+	return err
 }
 
 func main() {
@@ -215,6 +215,7 @@ func main() {
 	brokerAddress := os.Args[1]
 	topic := os.Args[2]
 
+	fmt.Println("STARTED")
 	producer, err := Kafka.NewAggregatorMicroserviceProducer(brokerAddress, topic)
 	if err != nil {
 		panic(err)
@@ -225,9 +226,11 @@ func main() {
 	}
 
 	errorGroup, ctx := errgroup.WithContext(NewContextCancelableBySignals())
+	fmt.Println("waiting for user")
 	if err = waitForAUser(ctx, consumer); err != nil {
 		panic(err)
 	}
+	fmt.Println("User online")
 
 	ts := fmt.Sprint(time.Now().UnixMilli()/1000 + 1)
 	if err = producer.PublishAudioStart([]byte(ts), nil); err != nil {
@@ -244,6 +247,7 @@ func main() {
 		for {
 			select {
 			case filesPair := <-filesChannel:
+				fmt.Println("sent")
 				errorGroup.Go(func() error { return CompressAndSendFiles(producer, filesPair) })
 			case <-ctx.Done():
 				return nil

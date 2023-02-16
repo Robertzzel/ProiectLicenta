@@ -3,14 +3,15 @@ package Kafka
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"strconv"
-	"time"
 )
 
 const (
 	VideoMessage = 0
 	AudioMessage = 1
+	StartMessage = 2
 )
 
 type AggregatorMicroserviceConsumer struct {
@@ -19,15 +20,17 @@ type AggregatorMicroserviceConsumer struct {
 
 func (this *AggregatorMicroserviceConsumer) Consume(ctx context.Context, partition int32) (*kafka.Message, error) {
 	for ctx.Err() == nil { // context activ
-		ev := this.Poll(100)
+		ev := this.Poll(200)
 		switch e := ev.(type) {
 		case *kafka.Message:
 			if e.TopicPartition.Partition == partition {
 				return e, nil
 			}
+			fmt.Println("Not my topic")
 		case kafka.Error:
 			return nil, e
 		default:
+			fmt.Println("Nope")
 		}
 	}
 	return nil, ctx.Err()
@@ -87,18 +90,6 @@ func (this *AggregatorMicroserviceConsumer) ConsumeFullMessage(ctx context.Conte
 	return fullMessage, message.Headers, nil
 }
 
-func (this *AggregatorMicroserviceConsumer) ConsumeAggregatorStart(timeout ...time.Duration) ([]byte, []kafka.Header, error) { // to start the aggregator
-	var ctx context.Context
-
-	if len(timeout) > 0 {
-		ctx, _ = context.WithTimeout(context.Background(), timeout[0])
-	} else {
-		ctx = context.Background()
-	}
-
-	return this.ConsumeFullMessage(ctx, AggregatorMicroserviceStartPartition)
-}
-
 func (this *AggregatorMicroserviceConsumer) ConsumeAggregator(ctx context.Context) ([]byte, int, error) { // to receive video/audio
 	msg, headers, err := this.ConsumeFullMessage(ctx, AggregatorMicroservicePartition)
 	if ctx.Err() != nil {
@@ -112,12 +103,14 @@ func (this *AggregatorMicroserviceConsumer) ConsumeAggregator(ctx context.Contex
 		}
 	}
 
-	println("#", msgType, "# ", len(msg))
-	if msgType == "video" {
+	switch msgType {
+	case "video":
 		return msg, VideoMessage, err
-	} else if msgType == "audio" {
+	case "audio":
 		return msg, AudioMessage, err
-	} else {
+	case "start":
+		return msg, StartMessage, err
+	default:
 		return nil, 0, errors.New("no header")
 	}
 }
@@ -134,7 +127,7 @@ func NewAggregatorMicroserviceConsumer(brokerAddress, topic string) (*Aggregator
 
 	if err = consumer.Assign([]kafka.TopicPartition{
 		{Topic: &topic, Partition: AggregatorMicroservicePartition},
-		{Topic: &topic, Partition: AggregatorMicroserviceStartPartition},
+		//{Topic: &topic, Partition: AggregatorMicroserviceStartPartition},
 	}); err != nil {
 		panic(err)
 	}

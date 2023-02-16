@@ -25,8 +25,10 @@ type User struct {
 
 type Video struct {
 	gorm.Model
-	FilePath string  `gorm:"unique;not null"`
-	Users    []*User `gorm:"many2many:user_videos;"`
+	FilePath          string `gorm:"unique;not null"`
+	DurationInSeconds float64
+	Size              string
+	Users             []*User `gorm:"many2many:user_videos;"`
 }
 
 type Session struct {

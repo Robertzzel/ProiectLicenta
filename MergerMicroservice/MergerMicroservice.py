@@ -60,7 +60,10 @@ class Merger:
 
     def start(self):
         signal.signal(signal.SIGINT, signal.default_int_handler)
-        self.consumer.seekToEnd(topic=self.topic, partition=Kafka.partitions.ClientPartition)
+        try:
+            self.consumer.seekToEnd(topic=self.topic, partition=Kafka.partitions.ClientPartition)
+        except Exception as ex:
+            pass
         try:
             while self.running:
                 message = self.consumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)

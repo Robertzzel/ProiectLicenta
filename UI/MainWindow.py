@@ -11,8 +11,8 @@ class MainWindow(customtkinter.CTk):
         super().__init__(*args, **kwargs)
         self.title("RMI")
 
-        windowWidth = int(self.winfo_screenwidth() * 2 / 3)
-        windowHeight = int(self.winfo_screenheight() * 2 / 3)
+        windowWidth = 1000
+        windowHeight = 800
         self.minsize(windowWidth, windowHeight)
 
         self.geometry(f"{windowWidth}x{windowHeight}")

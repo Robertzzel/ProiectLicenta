@@ -2,12 +2,14 @@ package main
 
 import (
 	"Licenta/Kafka"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/google/uuid"
+	"gopkg.in/vansante/go-ffprobe.v2"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"os"
@@ -125,6 +127,14 @@ func handleAddVideo(db *gorm.DB, message []byte, sessionId int) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
+
+	videoDetails, err := ffprobe.ProbeURL(context.Background(), video.FilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	video.DurationInSeconds = videoDetails.Format.DurationSeconds
+	video.Size = videoDetails.Format.Size
 
 	if err = db.Create(&video).Error; err != nil {
 		return nil, err

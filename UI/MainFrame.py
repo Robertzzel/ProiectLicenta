@@ -46,11 +46,11 @@ class MainFrame(customtkinter.CTkFrame):
         div = customtkinter.CTkFrame(leftFrame)
         div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-        customtkinter.CTkLabel(master=div, text="YOUR ID:", font=self.LABEL_FONT, ).grid(row=0, column=0, padx=(50, 20), pady=(50, 0))
-        customtkinter.CTkLabel(master=div, text=str(self.user.callKey), font=self.LABEL_FONT, ).grid(row=1, column=0, padx=(0, 50))
+        customtkinter.CTkLabel(master=div, text="YOUR ID:", font=self.LABEL_FONT).grid(row=0, column=0, padx=(50, 20), pady=(50, 0))
+        customtkinter.CTkEntry(master=div, height=1, state="readonly", width=250, textvariable=tk.StringVar(value=str(self.user.callKey))).grid(row=1, column=0, padx=(50, 50))
 
         customtkinter.CTkLabel(master=div, text="PASSWORD:", font=self.LABEL_FONT, ).grid(row=2, column=0, pady=(30, 20), padx=(0, 20))
-        customtkinter.CTkLabel(master=div, text=str(self.user.callPassword), font=self.LABEL_FONT, ).grid(row=3, column=0)
+        customtkinter.CTkEntry(master=div, height=1, state="readonly", textvariable=tk.StringVar(value=str(self.user.callPassword))).grid(row=3, column=0)
 
         if self.user.sessionId is None and self.videoWindow is None:
             customtkinter.CTkButton(master=div, text="START SHARING", command=self.buttonStartSharing).grid(row=4, column=0, pady=(30, 50))
@@ -63,22 +63,22 @@ class MainFrame(customtkinter.CTkFrame):
         rightFrame.pack(expand=True, fill=tk.BOTH, side=tk.RIGHT)
         rightFrame.pack_propagate(False)
 
-        customtkinter.CTkLabel(master=rightFrame, text="Control Remote Computer", font=self.LABEL_FONT, ).place(relx=0.5, rely=0.25, anchor=tk.CENTER)
+        customtkinter.CTkLabel(master=rightFrame, text="Control Remote Computer", font=self.LABEL_FONT).place(relx=0.5, rely=0.25, anchor=tk.CENTER)
 
         divRight = customtkinter.CTkFrame(rightFrame)
         divRight.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-        customtkinter.CTkLabel(master=divRight, text="USER ID:", font=self.LABEL_FONT, ).grid(row=0, column=0, padx=(0, 20))
+        customtkinter.CTkLabel(master=divRight, text="USER ID:", font=self.LABEL_FONT).grid(row=0, column=0, padx=(0, 20), pady=(20, 0))
         idEntry = customtkinter.CTkEntry(master=divRight, font=self.LABEL_FONT)
-        idEntry.grid(row=0, column=2)
+        idEntry.grid(row=0, column=2, pady=(20, 0), padx=(0, 20))
 
-        customtkinter.CTkLabel(master=divRight, text="PASSWORD:", font=self.LABEL_FONT, ).grid(row=1, column=0, pady=(30, 0), padx=(0, 20))
+        customtkinter.CTkLabel(master=divRight, text="PASSWORD:", font=self.LABEL_FONT).grid(row=1, column=0, pady=(30, 0), padx=(20, 20))
         passwordEntry = customtkinter.CTkEntry(master=divRight, font=self.LABEL_FONT)
-        passwordEntry.grid(row=1, column=2, pady=(30, 0))
+        passwordEntry.grid(row=1, column=2, pady=(30, 0), padx=(0, 20))
 
         if self.videoWindow is not None:
-            customtkinter.CTkButton(master=divRight, text="SUBMIT", font=self.LABEL_FONT, state=tk.DISABLED).grid(row=2, column=1, pady=(30, 0))
+            customtkinter.CTkButton(master=divRight, text="SUBMIT", font=self.LABEL_FONT, state=tk.DISABLED).grid(row=2, column=1, pady=(30, 20))
         else:
-            customtkinter.CTkButton(master=divRight, text="SUBMIT", font=self.LABEL_FONT, command=lambda: self.buttonStartCall(idEntry.get(), passwordEntry.get())).grid(row=2, column=1, pady=(30, 0))
+            customtkinter.CTkButton(master=divRight, text="SUBMIT", font=self.LABEL_FONT, command=lambda: self.buttonStartCall(idEntry.get(), passwordEntry.get())).grid(row=2, column=1, pady=(30, 20))
 
     def buttonStartCall(self, callKey: str, callPassword: str):
         self.startCall(callKey, callPassword)
@@ -113,9 +113,12 @@ class MainFrame(customtkinter.CTkFrame):
         div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
         for i, video in enumerate(data):
-            customtkinter.CTkLabel(master=div, text=video.get("CreatedAt"), ).grid(row=i, column=0)
+            customtkinter.CTkLabel(master=div, text=f"DURATION: {video.get('DurationInSeconds')} secs").grid(row=i, column=0, padx=(0, 30))
+            customtkinter.CTkLabel(master=div, text=f"SIZE: {video.get('Size')} bytes").grid(row=i, column=1, padx=(0, 30))
+            date = video.get("CreatedAt")
+            customtkinter.CTkLabel(master=div, text=f"CREATED: {date[:10]} {date[11:-1]}").grid(row=i, column=2, padx=(0, 20))
             customtkinter.CTkButton(master=div, text="Download",
-                                    command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)).grid(row=i, column=1)
+                                    command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)).grid(row=i, column=3)
 
     def buildLoginFrame(self):
         self.cleanFrame()

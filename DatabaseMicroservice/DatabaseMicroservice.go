@@ -86,7 +86,7 @@ func handleLogin(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := db.Model(&user).Update("call_password", uuid.NewString()[:4]).Error; err != nil {
+	if err := db.Model(&user).Update("call_password", uuid.NewString()).Error; err != nil {
 		return nil, err
 	}
 

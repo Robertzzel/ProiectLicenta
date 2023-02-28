@@ -26,7 +26,7 @@ class Merger:
         if self.process is None:
             return
 
-        self.process.send_signal(signal.SIGINT)
+        #self.process.send_signal(signal.SIGINT)
 
         try:
             self.process.wait(timeout=30)

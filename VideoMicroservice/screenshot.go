@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	cursorRadius = 5
+	cursorRadius = 3
 )
 
 type Screenshot struct {
@@ -31,7 +31,7 @@ func (igs *Screenshot) Get() (*ByteImage, error) {
 		return nil, err
 	}
 
-	if err := igs.appendCursor(img); err != nil {
+	if err = igs.appendCursor(img); err != nil {
 		return nil, err
 	}
 

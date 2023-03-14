@@ -182,7 +182,6 @@ class TkinterVideo(tk.Label):
                 'bootstrap.servers': self.kafkaAddress,
                 'group.id': '-',
             }, [(self.topic, Kafka.partitions.ClientPartition)])
-            self.kafkaProducer.produce(topic=self.topic, value=b"", headers=[("type", b"start")], partition=Kafka.partitions.AggregatorMicroservicePartition)
 
             while not self.stopEvent.is_set():
                 message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)

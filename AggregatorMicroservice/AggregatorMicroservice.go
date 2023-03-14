@@ -179,7 +179,6 @@ func CompressAndSendFiles(producer *Kafka.AggregatorMicroserviceProducer, files 
 	defer func(files *AudioVideoPair) {
 		_ = files.Delete()
 	}(&files)
-	// s := time.Now()
 
 	video, err := CombineAndCompressFiles(files, "1M", "pipe:1")
 	if err != nil {
@@ -190,21 +189,7 @@ func CompressAndSendFiles(producer *Kafka.AggregatorMicroserviceProducer, files 
 		return err
 	}
 
-	// fmt.Println("video ", files.Video[len(files.Video)-17:len(files.Video)-4], "sent at ", time.Now().UnixMilli(), " ( ", time.Since(s), " ) ", len(video))
 	return nil
-}
-
-func waitForAUser(ctx context.Context, consumer *Kafka.AggregatorMicroserviceConsumer) error {
-	var err error
-	var messageType int
-	for ctx.Err() == nil {
-		_, messageType, err = consumer.ConsumeAggregator(ctx)
-		fmt.Println("Message type", messageType)
-		if messageType == Kafka.StartMessage || err != nil {
-			break
-		}
-	}
-	return err
 }
 
 func main() {
@@ -215,7 +200,6 @@ func main() {
 	brokerAddress := os.Args[1]
 	topic := os.Args[2]
 
-	fmt.Println("STARTED")
 	producer, err := Kafka.NewAggregatorMicroserviceProducer(brokerAddress, topic)
 	if err != nil {
 		panic(err)
@@ -226,11 +210,7 @@ func main() {
 	}
 
 	errorGroup, ctx := errgroup.WithContext(NewContextCancelableBySignals())
-	fmt.Println("waiting for user")
-	if err = waitForAUser(ctx, consumer); err != nil {
-		panic(err)
-	}
-	fmt.Println("User online")
+	time.Sleep(time.Second)
 
 	ts := fmt.Sprint(time.Now().UnixMilli()/1000 + 1)
 	if err = producer.PublishAudioStart([]byte(ts), nil); err != nil {

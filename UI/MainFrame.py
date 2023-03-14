@@ -8,13 +8,11 @@ from User import User
 from KafkaContainer import KafkaContainer
 from typing import *
 from concurrent.futures import ThreadPoolExecutor
-import uuid
 
 
 class MainFrame(customtkinter.CTkFrame):
     def __init__(self, parent=None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
-        self.myTopic = str(uuid.uuid1())
         self.mainWindow = parent
         self.user: Optional[User] = None
         self.kafkaContainer: Optional[KafkaContainer] = None
@@ -102,7 +100,7 @@ class MainFrame(customtkinter.CTkFrame):
             self.buildNotLoggedInFrame()
             return
 
-        msg = self.kafkaContainer.databaseCall(self.myTopic, "GET_VIDEOS_BY_USER", json.dumps({"ID": self.user.id}).encode(), timeoutSeconds=1)
+        msg = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "GET_VIDEOS_BY_USER", json.dumps({"ID": self.user.id}).encode(), timeoutSeconds=1)
         data = json.loads(msg.value())
 
         if len(data) == 0:
@@ -191,10 +189,10 @@ class MainFrame(customtkinter.CTkFrame):
         customtkinter.CTkLabel(master=self, text="Log In", font=self.LABEL_FONT).pack(anchor=tk.CENTER)
 
     def startSharing(self):
-        msg = self.kafkaContainer.databaseCall(topic=self.myTopic, operation="CREATE_SESSION", message=json.dumps({
-            "Topic": self.myTopic,
+        msg = self.kafkaContainer.databaseCall(topic=self.kafkaContainer.topic, operation="CREATE_SESSION", message=json.dumps({
+            "Topic": self.kafkaContainer.topic,
             "UserID": str(self.user.id),
-        }).encode(), bigFile=True)
+        }).encode())
 
         status = KafkaContainer.getStatusFromMessage(msg)
         if status is None or status.lower() != "ok":
@@ -204,10 +202,10 @@ class MainFrame(customtkinter.CTkFrame):
         self.user.sessionId = int(msg.value().decode())
 
         if self.sender is not None:
-            self.sender.start(self.myTopic)
+            self.sender.start(self.kafkaContainer.topic)
 
         if self.merger is not None:
-            self.merger.start(str(self.user.sessionId))
+            self.merger.start(str(self.user.sessionId), self.kafkaContainer.topic)
 
     def stopSharing(self):
         if self.sender is not None:
@@ -216,13 +214,13 @@ class MainFrame(customtkinter.CTkFrame):
         if self.merger is not None:
             self.merger.stop()
 
-        self.kafkaContainer.seekToEnd()
-        self.kafkaContainer.databaseCall(topic=self.myTopic, operation="DELETE_SESSION", message=json.dumps({
+        self.kafkaContainer.databaseCall(topic=self.kafkaContainer.topic, operation="DELETE_SESSION", message=json.dumps({
             "SessionId": str(self.user.sessionId),
             "UserId": str(self.user.id),
         }).encode())
 
         self.user.sessionId = None
+        self.kafkaContainer.resetTopic()
         self.setStatusMessage("Call stopped")
 
     def startCall(self, callKey: str, callPassword: str):
@@ -230,7 +228,7 @@ class MainFrame(customtkinter.CTkFrame):
             self.setStatusMessage("provide both key and password")
             return
 
-        responseMessage = self.kafkaContainer.databaseCall(self.myTopic, "GET_CALL_BY_KEY", json.dumps({"Key": callKey, "Password": callPassword, "CallerId": str(self.user.id)}).encode())
+        responseMessage = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "GET_CALL_BY_KEY", json.dumps({"Key": callKey, "Password": callPassword, "CallerId": str(self.user.id)}).encode())
 
         status: Optional[str] = None
         for header in responseMessage.headers():
@@ -264,7 +262,7 @@ class MainFrame(customtkinter.CTkFrame):
             self.kafkaContainer = KafkaContainer(address, {
                 'auto.offset.reset': 'latest',
                 'allow.auto.create.topics': "true",
-            }, self.myTopic)
+            })
             self.setStatusMessage("Connected to Kafka")
         except Exception as ex:
             self.setStatusMessage(f"Cannot connect to kafka, {ex}")
@@ -293,7 +291,7 @@ class MainFrame(customtkinter.CTkFrame):
         if file is None:
             return
 
-        msg = self.kafkaContainer.databaseCall(self.myTopic, "DOWNLOAD_VIDEO_BY_ID", str(videoId).encode(), bigFile=True)
+        msg = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "DOWNLOAD_VIDEO_BY_ID", str(videoId).encode())
         file.write(msg.value())
         file.close()
 
@@ -305,7 +303,7 @@ class MainFrame(customtkinter.CTkFrame):
             return
 
         loggInDetails = {"Name": username, "Password": password}
-        message = self.kafkaContainer.databaseCall(self.myTopic, "LOGIN", json.dumps(loggInDetails).encode(), timeoutSeconds=1.5)
+        message = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "LOGIN", json.dumps(loggInDetails).encode(), timeoutSeconds=1.5)
         if message is None:
             self.setStatusMessage("Cannot talk to the database")
             return
@@ -318,7 +316,7 @@ class MainFrame(customtkinter.CTkFrame):
         self.user = User(message.get("ID", None), username, message.get("CallKey", None), message.get("CallPassword", None), message.get("SessionId", None))
 
         self.sender = Sender(self.kafkaContainer.address)
-        self.merger = Merger(self.kafkaContainer.address, self.myTopic)
+        self.merger = Merger(self.kafkaContainer.address)
 
         self.buildLoginFrame()
         self.mainWindow.title(f"RMI {self.user.name}")
@@ -344,7 +342,7 @@ class MainFrame(customtkinter.CTkFrame):
             self.setStatusMessage("password and confirmation are not the same")
             return
 
-        message = self.kafkaContainer.databaseCall(self.myTopic, "REGISTER", json.dumps({"Name": username, "Password": password}).encode(), timeoutSeconds=1)
+        message = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "REGISTER", json.dumps({"Name": username, "Password": password}).encode(), timeoutSeconds=1)
         if message is None:
             self.setStatusMessage("Cannot talk with the database")
 

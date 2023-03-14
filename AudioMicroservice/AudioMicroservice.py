@@ -4,7 +4,7 @@ from recorder import Recorder
 from Kafka.Kafka import KafkaConsumerWrapper, KafkaProducerWrapper
 import sys
 
-VIDEO_LENGTH = 1
+VIDEO_LENGTH = 1 / 5
 SAMPLERATE = 44100
 MESSAGE_SIZE_LENGTH = 10
 

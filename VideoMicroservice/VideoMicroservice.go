@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	VideoDuration = time.Second
+	VideoDuration = time.Second / 5
 )
 
 func NewCtx() context.Context {
@@ -87,7 +87,7 @@ func main() {
 		panic(err)
 	}
 
-	videoRecorder, err := NewRecorder(ctx, 20)
+	videoRecorder, err := NewRecorder(ctx, 30)
 	if err != nil {
 		panic(err)
 	}

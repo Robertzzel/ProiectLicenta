@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import Kafka.partitions
 from Kafka.Kafka import *
 DATABASE_TOPIC = "DATABASE"
+import uuid
 
 
 @dataclass
@@ -10,28 +11,36 @@ class KafkaContainer:
     producer: KafkaProducerWrapper
     consumer: KafkaConsumerWrapper
 
-    def __init__(self, address: str, consumerConfigs: Dict, consumerTopic: str):
+    def __init__(self, address: str, consumerConfigs: Dict):
         if not KafkaContainer.checkBrokerExists(address):
             raise Exception("Broker does not exists")
 
-        createTopic(address, consumerTopic, partitions=7)
+        self.topic = str(uuid.uuid1())
+        createTopic(address, self.topic, partitions=7)
 
+        self.consumerConfigs = consumerConfigs
         self.address = address
-        self.topic = consumerTopic
         self.partition = Kafka.partitions.ClientPartition
         self.producer = KafkaProducerWrapper({'bootstrap.servers': self.address})
 
         consumerConfigs['bootstrap.servers'] = self.address
         consumerConfigs['group.id'] = "-"
-        self.consumer = KafkaConsumerWrapper(consumerConfigs, [(consumerTopic, self.partition)])
+        self.consumer = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.partition)])
 
-    def databaseCall(self, topic: str, operation: str, message: bytes, bigFile=False, timeoutSeconds: float = None) -> kafka.Message:
+    def databaseCall(self, topic: str, operation: str, message: bytes, timeoutSeconds: float = None) -> kafka.Message:
+        self.seekToEnd()
         self.producer.produce(topic=DATABASE_TOPIC, headers=[
             ("topic", topic.encode()), ("partition", str(self.partition).encode()), ("operation", operation.encode()),
         ], value=message)
         self.producer.flush(timeout=1)
 
         return self.consumer.receiveBigMessage(timeoutSeconds, partition=self.partition)
+
+    def resetTopic(self):
+        deleteTopic(self.address, self.topic)
+        self.topic = str(uuid.uuid1())
+        createTopic(self.address, self.topic, partitions=7)
+        self.consumer = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.partition)])
 
     @staticmethod
     def checkBrokerExists(address) -> bool:

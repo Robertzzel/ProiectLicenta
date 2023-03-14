@@ -10,14 +10,15 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 class Merger:
-    def __init__(self, brokerAddress: str, topic: str):
+    def __init__(self, brokerAddress: str):
         self.broker = brokerAddress
-        self.topic = topic
+        self.topic = None
         self.process: Optional[subprocess.Popen] = None
         self.path = str(pathlib.Path(os.getcwd()).parent)
         self.running = False
 
-    def start(self, sessionId: str):
+    def start(self, sessionId: str, topic: str):
+        self.topic = topic
         self.process = subprocess.Popen(["venv/bin/python3", "MergerMicroservice/MergerMicroservice.py", self.broker, self.topic, str(sessionId)],
                                         cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
         self.running = True
@@ -72,9 +73,9 @@ class Sender:
 
         try:
             self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress, topic],
-                                                 cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
+                                                 cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
             self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress, topic],
-                                                 cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
+                                                 cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
             self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress, topic],
                                                       cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
             self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, topic],
@@ -94,6 +95,7 @@ class Sender:
                 thread.result()
 
         self.running = False
+        print("Sharer Closed")
 
     def stopAudioProcess(self):
         if self.audioProcess is None:

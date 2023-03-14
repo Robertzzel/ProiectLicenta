@@ -13,14 +13,16 @@ import (
 )
 
 type Recorder struct {
-	screenshotTool *Screenshot
-	fps            int
-	width          int32
-	height         int32
-	imageBuffer    chan []byte
-	VideoBuffer    chan string
-	errorGroup     *errgroup.Group
-	ctx            context.Context
+	screenshotTool      *Screenshot
+	fps                 int
+	width               int32
+	height              int32
+	imageBuffer         chan []byte
+	VideoBuffer         chan string
+	errorGroup          *errgroup.Group
+	outContext          context.Context
+	ctx                 context.Context
+	contextCancellation context.CancelFunc
 }
 
 func NewRecorder(outContext context.Context, fps int) (*Recorder, error) {
@@ -38,21 +40,30 @@ func NewRecorder(outContext context.Context, fps int) (*Recorder, error) {
 		return nil, err
 	}
 
-	errGroup, ctx := errgroup.WithContext(outContext)
-
 	return &Recorder{
-		screenshotTool: screenshot,
-		fps:            fps,
-		width:          int32(img.Width),
-		height:         int32(img.Height),
-		imageBuffer:    make(chan []byte, 256),
-		VideoBuffer:    make(chan string, 10),
-		errorGroup:     errGroup,
-		ctx:            ctx,
+		screenshotTool:      screenshot,
+		fps:                 fps,
+		width:               int32(img.Width),
+		height:              int32(img.Height),
+		imageBuffer:         make(chan []byte, 256),
+		VideoBuffer:         make(chan string, 10),
+		errorGroup:          nil,
+		outContext:          outContext,
+		ctx:                 nil,
+		contextCancellation: nil,
 	}, nil
 }
 
+func (r *Recorder) Stop() {
+	if r.contextCancellation != nil {
+		r.contextCancellation()
+	}
+}
+
 func (r *Recorder) Start(startTime time.Time, chunkSize time.Duration) {
+	r.ctx, r.contextCancellation = context.WithCancel(r.outContext)
+	r.errorGroup, r.ctx = errgroup.WithContext(r.ctx)
+
 	r.errorGroup.Go(func() error {
 		for time.Now().Before(startTime) {
 			time.Sleep(time.Now().Sub(startTime))
@@ -68,21 +79,20 @@ func (r *Recorder) Start(startTime time.Time, chunkSize time.Duration) {
 func (r *Recorder) startRecording() error {
 	ticker := time.NewTicker(time.Duration(int64(time.Second) / int64(r.fps)))
 
+	var encodedImageBuffer = bytes.Buffer{}
 	for r.ctx.Err() == nil {
+		img, err := r.screenshotTool.Get()
+		if err != nil {
+			return err
+		}
+
+		encodedImageBuffer.Reset()
+		if err = img.Compress(&encodedImageBuffer, 100); err != nil {
+			return err
+		}
+
+		r.imageBuffer <- encodedImageBuffer.Bytes()
 		<-ticker.C
-		go func() {
-			img, err := r.screenshotTool.Get()
-			if err != nil {
-				panic(err)
-			}
-
-			var encodedImageBuffer bytes.Buffer
-			if err = img.Compress(&encodedImageBuffer, 100); err != nil {
-				panic(err)
-			}
-
-			r.imageBuffer <- encodedImageBuffer.Bytes()
-		}()
 	}
 
 	return nil
@@ -116,8 +126,4 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 	}
 
 	return nil
-}
-
-func (r *Recorder) Stop() {
-	r.ctx.Done()
 }

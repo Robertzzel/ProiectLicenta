@@ -127,7 +127,6 @@ func NewAggregatorMicroserviceConsumer(brokerAddress, topic string) (*Aggregator
 
 	if err = consumer.Assign([]kafka.TopicPartition{
 		{Topic: &topic, Partition: AggregatorMicroservicePartition},
-		//{Topic: &topic, Partition: AggregatorMicroserviceStartPartition},
 	}); err != nil {
 		panic(err)
 	}

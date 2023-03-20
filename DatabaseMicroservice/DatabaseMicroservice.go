@@ -2,14 +2,16 @@ package main
 
 import (
 	"Licenta/Kafka"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"os"
+	"os/signal"
 	"strconv"
-	"time"
+	"syscall"
 )
 
 const (
@@ -17,7 +19,20 @@ const (
 	topic            = "DATABASE"
 )
 
-func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.DatabaseProducer) {
+func NewContextCancelableBySignals() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+		cancel()
+	}()
+
+	return ctx
+}
+
+func handleRequest(db *gorm.DB, message *kafka.Message, producer *Kafka.DatabaseProducer) {
 	var sendTopic, operation string
 	var partition = 0
 	var err error
@@ -35,9 +50,9 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 	var response []byte
 	switch operation {
 	case "LOGIN":
-		response, err = HandleLogin(db, message.Message)
+		response, err = HandleLogin(db, message.Value)
 	case "REGISTER":
-		response, err = HandleRegister(db, message.Message)
+		response, err = HandleRegister(db, message.Value)
 	case "ADD_VIDEO":
 		var sessionId int
 		for _, header := range message.Headers {
@@ -51,21 +66,21 @@ func handleRequest(db *gorm.DB, message *Kafka.ConsumerMessage, producer *Kafka.
 			break
 		}
 
-		response, err = HandleAddVideo(db, message.Message, sessionId)
+		response, err = HandleAddVideo(db, message.Value, sessionId)
 	case "GET_CALL_BY_KEY":
-		response, err = HandleGetCallByKeyAndPassword(db, message.Message)
+		response, err = HandleGetCallByKeyAndPassword(db, message.Value)
 	case "GET_VIDEOS_BY_USER":
-		response, err = HandleGetVideoByUser(db, message.Message)
+		response, err = HandleGetVideoByUser(db, message.Value)
 	case "DOWNLOAD_VIDEO_BY_ID":
-		response, err = HandleDownloadVideoById(db, message.Message)
+		response, err = HandleDownloadVideoById(db, message.Value)
 	case "DISCONNECT":
-		response, err = HandleDisconnect(db, message.Message)
+		response, err = HandleDisconnect(db, message.Value)
 	case "USERS_IN_SESSION":
-		response, err = HandleUsersInSession(db, message.Message)
+		response, err = HandleUsersInSession(db, message.Value)
 	case "CREATE_SESSION":
-		response, err = HandleCreateSession(db, message.Message)
+		response, err = HandleCreateSession(db, message.Value)
 	case "DELETE_SESSION":
-		response, err = HandleDeleteSession(db, message.Message)
+		response, err = HandleDeleteSession(db, message.Value)
 	default:
 		err = errors.New("operation not permitted")
 	}
@@ -96,15 +111,15 @@ func main() {
 		panic(err)
 	}
 
-	consumer := Kafka.NewConsumer(brokerAddress, topic)
+	consumer, err := Kafka.NewDatabaseConsumer(brokerAddress, topic)
+	if err != nil {
+		panic(err)
+	}
 	defer func() {
-		if err := consumer.Close(); err != nil {
+		if err = consumer.Close(); err != nil {
 			fmt.Println(err)
 		}
 	}()
-	if err = consumer.SetOffsetToNow(); err != nil {
-		panic(err)
-	}
 
 	producer, err := Kafka.NewDatabaseProducer(brokerAddress)
 	if err != nil {
@@ -112,10 +127,11 @@ func main() {
 	}
 	defer producer.Close()
 
+	ctx := NewContextCancelableBySignals()
 	for {
-		kafkaMessage, err := consumer.Consume(time.Second * 2)
+		kafkaMessage, err := consumer.Consume(ctx)
 		if err != nil {
-			continue
+			return
 		}
 		fmt.Print("Message ")
 

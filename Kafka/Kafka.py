@@ -68,8 +68,11 @@ class KafkaConsumerWrapper(kafka.Consumer):
         if message is None:
             return None
 
-        headersToBeReturned: List[str, bytes] = list(
-            filter(lambda h: h[0] not in ("number-of-messages", "message-number"), message.headers()))
+        for header in message.headers():
+            if header == ("status", b"FAILED"):
+                return None
+
+        headersToBeReturned: List[str, bytes] = list(filter(lambda h: h[0] not in ("number-of-messages", "message-number"), message.headers()))
         numberOfMessages: int = 0
         currentMessageNumber: int = 0
 

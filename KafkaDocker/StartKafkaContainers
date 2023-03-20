@@ -32,3 +32,4 @@ volumes:
   kafka_data:
     driver: local
 END
+sudo docker-compose up -d

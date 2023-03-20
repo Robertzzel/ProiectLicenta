@@ -295,6 +295,10 @@ class MainFrame(customtkinter.CTkFrame):
             return
 
         msg = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "DOWNLOAD_VIDEO_BY_ID", str(videoId).encode())
+        if msg is None:
+            self.setStatusMessage("Failed to download the video")
+            return
+
         file.write(msg.value())
         file.close()
 

@@ -16,10 +16,6 @@ func (producer *AggregatorMicroserviceProducer) PublishAudioStart(message []byte
 	return producer.ProducerWrapper.Publish(message, headers, producer.topic, AudioMicroservicePartition, producer.deliverChannel)
 }
 
-//func (producer *AggregatorMicroserviceProducer) PublishMerger(message []byte, headers []kafka.Header) error {
-//	return producer.ProducerWrapper.Publish(message, headers, producer.topic, MergerMicroservicePartition, producer.deliverChannel)
-//}
-
 func (producer *AggregatorMicroserviceProducer) PublishClient(message []byte, headers []kafka.Header) error {
 	return producer.ProducerWrapper.Publish(message, headers, producer.topic, ClientPartition, producer.deliverChannel)
 }

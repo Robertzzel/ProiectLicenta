@@ -8,29 +8,10 @@ import (
 	"golang.org/x/sync/errgroup"
 	"log"
 	"os"
-	"os/exec"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 )
-
-type AudioVideoPair struct {
-	Video string
-	Audio string
-}
-
-func (avp *AudioVideoPair) Delete() error {
-	if err := os.Remove(avp.Video); err != nil {
-		return err
-	}
-
-	if err := os.Remove(avp.Audio); err != nil {
-		return err
-	}
-
-	return nil
-}
 
 func NewContextCancelableBySignals() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -43,22 +24,6 @@ func NewContextCancelableBySignals() context.Context {
 	}()
 
 	return ctx
-}
-
-func GetFileTimestamp(file string) (int, error) {
-	return strconv.Atoi(file[len(file)-17 : len(file)-4])
-}
-
-func CombineAndCompressFiles(files AudioVideoPair, bitrate string, output string) ([]byte, error) {
-	result, err := exec.Command("./CombineAndCompress", files.Video, files.Audio, bitrate, output).Output()
-	if err != nil {
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
-			return nil, errors.New(string(exitError.Stderr))
-		}
-	}
-
-	return result, nil
 }
 
 func GetNextAudioAndVideo(ctx context.Context, consumer *Kafka.AggregatorMicroserviceConsumer) (AudioVideoPair, error) {
@@ -124,36 +89,33 @@ func GetNextSyncedAudioAndVideo(ctx context.Context, consumer *Kafka.AggregatorM
 		return AudioVideoPair{}, err
 	}
 
-	videoTimestamp, err := GetFileTimestamp(files.Video)
+	videoTimestamp, err := files.GetVideoTimestamp()
 	if err != nil {
 		return AudioVideoPair{}, err
 	}
 
-	audioTimestamp, err := GetFileTimestamp(files.Audio)
+	audioTimestamp, err := files.GetAudioTimestamp()
 	if err != nil {
 		return AudioVideoPair{}, err
 	}
 
-	for videoTimestamp > audioTimestamp {
-
-		if err = UpdateNextAudio(ctx, consumer, &files); err != nil {
-			return AudioVideoPair{}, err
-		}
-
-		audioTimestamp, err = GetFileTimestamp(files.Audio)
-		if err != nil {
-			return AudioVideoPair{}, err
-		}
-	}
-
-	for videoTimestamp < audioTimestamp {
-		if err = UpdateNextVideo(ctx, consumer, &files); err != nil {
-			return AudioVideoPair{}, err
-		}
-
-		videoTimestamp, err = GetFileTimestamp(files.Video)
-		if err != nil {
-			return AudioVideoPair{}, err
+	for videoTimestamp != audioTimestamp {
+		if videoTimestamp > audioTimestamp {
+			if err = UpdateNextAudio(ctx, consumer, &files); err != nil {
+				return AudioVideoPair{}, err
+			}
+			audioTimestamp, err = files.GetAudioTimestamp()
+			if err != nil {
+				return AudioVideoPair{}, err
+			}
+		} else {
+			if err = UpdateNextVideo(ctx, consumer, &files); err != nil {
+				return AudioVideoPair{}, err
+			}
+			videoTimestamp, err = files.GetAudioTimestamp()
+			if err != nil {
+				return AudioVideoPair{}, err
+			}
 		}
 	}
 
@@ -180,7 +142,7 @@ func CompressAndSendFiles(producer *Kafka.AggregatorMicroserviceProducer, files 
 		_ = files.Delete()
 	}(&files)
 
-	video, err := CombineAndCompressFiles(files, "1M", "pipe:1")
+	video, err := files.CombineAndCompress("1000k", "pipe:1")
 	if err != nil {
 		return err
 	}
@@ -227,7 +189,6 @@ func main() {
 		for {
 			select {
 			case filesPair := <-filesChannel:
-				fmt.Println("sent")
 				errorGroup.Go(func() error { return CompressAndSendFiles(producer, filesPair) })
 			case <-ctx.Done():
 				return nil

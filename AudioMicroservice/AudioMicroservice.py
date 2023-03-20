@@ -10,7 +10,7 @@ MESSAGE_SIZE_LENGTH = 10
 
 
 def main():
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 3:
         print("No broker address and topic given")
         return
 
@@ -28,7 +28,7 @@ def main():
 
     try:
         ts = int(consumer.consumeMessage(None, AudioMicroservicePartition).value().decode())
-
+        del consumer
         audio_recorder.start(ts, VIDEO_LENGTH)
 
         while True:

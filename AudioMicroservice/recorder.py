@@ -12,7 +12,7 @@ CHANNELS = 1
 
 
 def create_audio_file(path, audio_buffer: np.ndarray, samplerate):
-    open(path, "w").close()  # create file
+    open(path, "w").close()
     sf.write(path, audio_buffer, samplerate=samplerate)
 
 

@@ -64,6 +64,7 @@ class Merger:
             self.consumer.seekToEnd(topic=self.topic, partition=Kafka.partitions.ClientPartition)
         except Exception as ex:
             pass
+
         try:
             while self.running:
                 message = self.consumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
@@ -88,7 +89,6 @@ class Merger:
             print("not a file")
             return
 
-        print("Sending")
         self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=self.finalVideo.file.read(), headers=[
             ("topic", self.topic.encode()),
             ("operation", b"ADD_VIDEO"),
@@ -97,7 +97,8 @@ class Merger:
         ])
         self.producer.flush(timeout=5)
         self.finalVideo.close()
-        print(f"MERGER: message sent at {DATABASE_TOPIC}, {self.broker} ---")
+
+        print("Sent")
 
     def aggregateVideosFromQueue(self):
         videos = []

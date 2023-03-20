@@ -3,7 +3,6 @@ package Kafka
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"strconv"
 )
@@ -26,11 +25,9 @@ func (this *AggregatorMicroserviceConsumer) Consume(ctx context.Context, partiti
 			if e.TopicPartition.Partition == partition {
 				return e, nil
 			}
-			fmt.Println("Not my topic")
 		case kafka.Error:
 			return nil, e
 		default:
-			fmt.Println("Nope")
 		}
 	}
 	return nil, ctx.Err()

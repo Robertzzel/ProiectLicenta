@@ -5,11 +5,11 @@ go build VideoMicroservice.go recorder.go resizer.go screenshot.go screen.go byt
 cd ..
 
 cd AggregatorMicroservice
-go build AggregatorMicroservice.go
+go build AggregatorMicroservice.go AudioVideoPair.go
 cd ..
 
 cd DatabaseMicroservice
-go build DatabaseMicroservice.go models.go
+go build DatabaseMicroservice.go models.go DatabaseManager.go FileOperations.go PasswordManager.go
 cd ..
 
 #cd PingMicroservice

@@ -8,6 +8,7 @@ from User import User
 from KafkaContainer import KafkaContainer
 from typing import *
 from concurrent.futures import ThreadPoolExecutor
+from tkinter import ttk
 
 
 class MainFrame(customtkinter.CTkFrame):
@@ -107,7 +108,9 @@ class MainFrame(customtkinter.CTkFrame):
             return
 
         div = customtkinter.CTkFrame(self)
-        div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        div.grid(row=0, column=0, sticky=tk.NSEW)
+        h = ttk.Scrollbar(self, orient=tk.VERTICAL)
+        h.grid(row=0, column=1, sticky='ns')
 
         for i, video in enumerate(data):
             customtkinter.CTkLabel(master=div, text=f"DURATION: {video.get('DurationInSeconds')} secs").grid(row=i, column=0, padx=(0, 30))

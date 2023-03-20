@@ -60,4 +60,7 @@ class KafkaContainer:
         self.consumer.seekToEnd(self.topic, self.partition)
 
     def __del__(self):
-        deleteTopic(self.address, self.topic)
+        try:
+            deleteTopic(self.address, self.topic)
+        except:
+            pass

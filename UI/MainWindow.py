@@ -10,9 +10,10 @@ class MainWindow(customtkinter.CTk):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.title("RMI")
+        self.resizable(False, False)
 
-        windowWidth = 1000
-        windowHeight = 800
+        windowWidth = 1280
+        windowHeight = 720
         self.minsize(windowWidth, windowHeight)
 
         self.geometry(f"{windowWidth}x{windowHeight}")

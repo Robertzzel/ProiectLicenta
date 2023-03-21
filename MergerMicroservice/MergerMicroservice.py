@@ -39,6 +39,9 @@ class TempFile:
         self.file.write(fileContents)
         self.name = self.file.name
 
+    def read(self):
+        return self.file.read()
+
     def close(self):
         self.file.close()
 
@@ -89,7 +92,7 @@ class Merger:
             print("not a file")
             return
 
-        self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=self.finalVideo.file.read(), headers=[
+        self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=self.finalVideo.read(), headers=[
             ("topic", self.topic.encode()),
             ("operation", b"ADD_VIDEO"),
             ("partition", str(Kafka.partitions.MergerMicroservicePartition).encode()),
@@ -97,8 +100,6 @@ class Merger:
         ])
         self.producer.flush(timeout=5)
         self.finalVideo.close()
-
-        print("Sent")
 
     def aggregateVideosFromQueue(self):
         videos = []

@@ -32,11 +32,11 @@ func NewContextCancelableBySignals() context.Context {
 	return ctx
 }
 
-func handleRequest(db *gorm.DB, message *kafka.Message, producer *Kafka.DatabaseProducer) {
+func handleRequest(db *gorm.DB, message []byte, headers []kafka.Header, producer *Kafka.DatabaseProducer) {
 	var sendTopic, operation string
 	var partition = 0
 	var err error
-	for _, header := range message.Headers {
+	for _, header := range headers {
 		switch header.Key {
 		case "topic":
 			sendTopic = string(header.Value)
@@ -50,12 +50,12 @@ func handleRequest(db *gorm.DB, message *kafka.Message, producer *Kafka.Database
 	var response []byte
 	switch operation {
 	case "LOGIN":
-		response, err = HandleLogin(db, message.Value)
+		response, err = HandleLogin(db, message)
 	case "REGISTER":
-		response, err = HandleRegister(db, message.Value)
+		response, err = HandleRegister(db, message)
 	case "ADD_VIDEO":
 		var sessionId int
-		for _, header := range message.Headers {
+		for _, header := range headers {
 			switch header.Key {
 			case "sessionId":
 				sessionIdString := string(header.Value)
@@ -66,21 +66,21 @@ func handleRequest(db *gorm.DB, message *kafka.Message, producer *Kafka.Database
 			break
 		}
 
-		response, err = HandleAddVideo(db, message.Value, sessionId)
+		response, err = HandleAddVideo(db, message, sessionId)
 	case "GET_CALL_BY_KEY":
-		response, err = HandleGetCallByKeyAndPassword(db, message.Value)
+		response, err = HandleGetCallByKeyAndPassword(db, message)
 	case "GET_VIDEOS_BY_USER":
-		response, err = HandleGetVideoByUser(db, message.Value)
+		response, err = HandleGetVideoByUser(db, message)
 	case "DOWNLOAD_VIDEO_BY_ID":
-		response, err = HandleDownloadVideoById(db, message.Value)
+		response, err = HandleDownloadVideoById(db, message)
 	case "DISCONNECT":
-		response, err = HandleDisconnect(db, message.Value)
+		response, err = HandleDisconnect(db, message)
 	case "USERS_IN_SESSION":
-		response, err = HandleUsersInSession(db, message.Value)
+		response, err = HandleUsersInSession(db, message)
 	case "CREATE_SESSION":
-		response, err = HandleCreateSession(db, message.Value)
+		response, err = HandleCreateSession(db, message)
 	case "DELETE_SESSION":
-		response, err = HandleDeleteSession(db, message.Value)
+		response, err = HandleDeleteSession(db, message)
 	default:
 		err = errors.New("operation not permitted")
 	}
@@ -129,12 +129,12 @@ func main() {
 
 	ctx := NewContextCancelableBySignals()
 	for {
-		kafkaMessage, err := consumer.Consume(ctx)
+		kafkaMessage, headers, err := consumer.ConsumeFullMessage(ctx)
 		if err != nil {
 			return
 		}
 		fmt.Print("Message ")
 
-		go handleRequest(db, kafkaMessage, producer)
+		go handleRequest(db, kafkaMessage, headers, producer)
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 func DoesFileExist(fileName string) bool {
@@ -11,11 +12,9 @@ func DoesFileExist(fileName string) bool {
 }
 
 func WriteNewFile(data []byte) (string, error) {
-	i := 0
 	for {
-		path := fmt.Sprintf("./video%d.mp4", i)
+		path := fmt.Sprintf("./DatabaseVideos/video_%d.mp4", time.Now().UnixMilli())
 		if DoesFileExist(path) {
-			i++
 			continue
 		}
 		if err := os.WriteFile(path, data, 0777); err != nil {

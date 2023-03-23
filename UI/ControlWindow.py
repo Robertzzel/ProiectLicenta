@@ -40,7 +40,7 @@ class VideoWindow(tk.Toplevel):
 
 
 class TkinterVideo(tk.Label):
-    def __init__(self, master, topic: str, kafkaAddress: str = "localhost:9092", keepAspect: bool = False, *args, **kwargs):
+    def __init__(self, master, topic: str, kafkaAddress: str = "localhost:9092", *args, **kwargs):
         super(TkinterVideo, self).__init__(master, *args, **kwargs)
 
         self.kafkaAddress = kafkaAddress
@@ -59,7 +59,6 @@ class TkinterVideo(tk.Label):
         self.videoFramerate = 0
         self.audioSamplerate = 0
         self.audioBlockSize = 0
-        self.keepAspectRatio = keepAspect
         self.stopEvent = Event()
         self.inputsBuffer: InputsBuffer = InputsBuffer()
         self.currentTkImage: Optional[ImageTk.PhotoImage] = None
@@ -95,9 +94,9 @@ class TkinterVideo(tk.Label):
     def sendInputs(self):
         try:
             while not self.stopEvent.is_set():
-                time.sleep(0.1)
+                time.sleep(0.05)
                 inputs = self.inputsBuffer.get()
-                if inputs != "" and not self.stopEvent.is_set():
+                if inputs != "":
                     self.kafkaProducer.produce(topic=self.topic, value=inputs.encode(), partition=Kafka.partitions.InputPartition)
         except BaseException as ex:
             print(ex)
@@ -162,11 +161,7 @@ class TkinterVideo(tk.Label):
     def audioCallback(self, outdata: np.ndarray, frames: int, timet, status):
         try:
             data: np.ndarray = self.audioBlocksQueue.get_nowait()
-
-            diff = 1024 - data.size
-            if diff > 0:
-                data = np.append(data, np.array([0] * diff, dtype=data.dtype))
-
+            data = np.append(data, np.array([0] * (1024 - data.size), dtype=data.dtype))
             data.shape = (1024, 1)
         except queue.Empty:
             data = np.zeros(shape=(1024, 1), dtype=self.audioStream.dtype)
@@ -188,20 +183,9 @@ class TkinterVideo(tk.Label):
                 if message is None:
                     continue
 
-                try:
-                    with av.open(BytesIO(message.value())) as container:
-                        self.initVideoStream(container)
-                except Exception:
-                    continue
-                else:
-                    break
-
-            while not self.stopEvent.is_set():
-                message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
-                if message is None:
-                    continue
-
                 with av.open(BytesIO(message.value())) as container:
+                    if self.videoFramerate == 0:
+                        self.initVideoStream(container)
                     container.fast_seek, container.discard_corrupt = True, True
 
                     self.clearAudioAndVideoQueues()
@@ -223,12 +207,7 @@ class TkinterVideo(tk.Label):
             self.audioBlocksQueue.queue.clear()
 
     def displayFrame(self, event):
-        if self.keepAspectRatio:
-            self.currentImage = ImageOps.contain(self.currentImage, self.currentDisplaySize, self._resampling_method)
-        else:
-            self.currentImage = self.currentImage.resize(self.currentDisplaySize, self._resampling_method)
-
-        self.currentTkImage.paste(self.currentImage)
+        self.currentTkImage.paste(self.currentImage.resize(self.currentDisplaySize, self._resampling_method))
         self.config(image=self.currentTkImage)
 
     def stop(self):

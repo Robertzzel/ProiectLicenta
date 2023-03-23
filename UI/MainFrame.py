@@ -108,17 +108,15 @@ class MainFrame(customtkinter.CTkFrame):
             return
 
         div = customtkinter.CTkFrame(self)
-        div.grid(row=0, column=0, sticky=tk.NSEW)
-        h = ttk.Scrollbar(self, orient=tk.VERTICAL)
-        h.grid(row=0, column=1, sticky='ns')
+        div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
         for i, video in enumerate(data):
-            customtkinter.CTkLabel(master=div, text=f"DURATION: {video.get('DurationInSeconds')} secs").grid(row=i, column=0, padx=(0, 30))
-            customtkinter.CTkLabel(master=div, text=f"SIZE: {video.get('Size')} bytes").grid(row=i, column=1, padx=(0, 30))
+            customtkinter.CTkLabel(master=div, text=f"DURATION: {video.get('DurationInSeconds')} secs").grid(row=i, column=0, padx=(0, 30), pady=(10, 10))
+            customtkinter.CTkLabel(master=div, text=f"SIZE: {video.get('Size')} bytes").grid(row=i, column=1, padx=(0, 30), pady=(10, 10))
             date = video.get("CreatedAt")
-            customtkinter.CTkLabel(master=div, text=f"CREATED: {date[:10]} {date[11:-1]}").grid(row=i, column=2, padx=(0, 20))
+            customtkinter.CTkLabel(master=div, text=f"CREATED: {date[:10]} {date[11:-1]}").grid(row=i, column=2, padx=(0, 20), pady=(10, 10))
             customtkinter.CTkButton(master=div, text="Download",
-                                    command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)).grid(row=i, column=3)
+                                    command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)).grid(row=i, column=3, pady=(10, 10))
 
     def buildLoginFrame(self):
         self.cleanFrame()

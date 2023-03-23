@@ -133,7 +133,6 @@ func main() {
 		if err != nil {
 			return
 		}
-		fmt.Print("Message ")
 
 		go handleRequest(db, kafkaMessage, headers, producer)
 	}

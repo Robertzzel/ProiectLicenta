@@ -23,20 +23,20 @@ class Merger:
                                         cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
         self.running = True
 
-    def stop(self):
-        if self.process is None:
-            return
-
-        #self.process.send_signal(signal.SIGINT)
-
-        try:
-            self.process.wait(timeout=30)
-        except subprocess.TimeoutExpired as ex:
-            self.process.kill()
-        finally:
-            print("merger process closed")
-
-        self.running = False
+    # def stop(self):
+    #     if self.process is None:
+    #         return
+    #
+    #     #self.process.send_signal(signal.SIGINT)
+    #
+    #     try:
+    #         self.process.wait(timeout=30)
+    #     except subprocess.TimeoutExpired as ex:
+    #         self.process.kill()
+    #     finally:
+    #         print("merger process closed")
+    #
+    #     self.running = False
 
 class Sender:
     def __init__(self, brokerAddress: str):

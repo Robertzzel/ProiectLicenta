@@ -1,6 +1,8 @@
 package Kafka
 
-import "github.com/confluentinc/confluent-kafka-go/kafka"
+import (
+	"github.com/confluentinc/confluent-kafka-go/kafka"
+)
 
 type DatabaseProducer struct {
 	*ProducerWrapper

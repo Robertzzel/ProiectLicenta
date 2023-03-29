@@ -8,7 +8,6 @@ from User import User
 from KafkaContainer import KafkaContainer
 from typing import *
 from concurrent.futures import ThreadPoolExecutor
-from tkinter import ttk
 
 
 class MainFrame(customtkinter.CTkFrame):
@@ -212,9 +211,6 @@ class MainFrame(customtkinter.CTkFrame):
         if self.sender is not None:
             self.sender.stop()
 
-        if self.merger is not None:
-            self.merger.stop()
-
         self.kafkaContainer.databaseCall(topic=self.kafkaContainer.topic, operation="DELETE_SESSION", message=json.dumps({
             "SessionId": str(self.user.sessionId),
             "UserId": str(self.user.id),
@@ -332,9 +328,6 @@ class MainFrame(customtkinter.CTkFrame):
 
         if self.sender is not None and self.sender.running:
             self.sender.stop()
-
-        if self.merger is not None and self.merger.running:
-            self.merger.stop()
 
         self.buildLoginFrame()
 

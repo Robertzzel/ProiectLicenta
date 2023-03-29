@@ -13,7 +13,7 @@ func DoesFileExist(fileName string) bool {
 
 func WriteNewFile(data []byte) (string, error) {
 	for {
-		path := fmt.Sprintf("./DatabaseVideos/video_%d.mp4", time.Now().UnixMilli())
+		path := fmt.Sprintf("./video_%d.mp4", time.Now().UnixMilli())
 		if DoesFileExist(path) {
 			continue
 		}

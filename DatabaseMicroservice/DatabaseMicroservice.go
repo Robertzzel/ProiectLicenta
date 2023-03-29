@@ -1,13 +1,14 @@
 package main
 
 import (
-	"Licenta/Kafka"
 	"context"
+	"database.microservice/Kafka"
 	"errors"
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"log"
 	"os"
 	"os/signal"
 	"strconv"
@@ -15,8 +16,7 @@ import (
 )
 
 const (
-	connectionString = "robert:robert@tcp(localhost:3306)/licenta?parseTime=true"
-	topic            = "DATABASE"
+	topic = "DATABASE"
 )
 
 func NewContextCancelableBySignals() context.Context {
@@ -88,26 +88,42 @@ func handleRequest(db *gorm.DB, message []byte, headers []kafka.Header, producer
 	if err != nil {
 		response = []byte(err.Error())
 		status = "FAILED"
+		log.Println("$", err, "$")
 	}
 	if err = producer.Publish(response, []kafka.Header{{`status`, []byte(status)}}, sendTopic, int32(partition)); err != nil {
 		fmt.Println(err)
 	}
 	producer.Flush(100)
+
+	log.Println(status)
+
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("No broker address given")
-		return
+	brokerAddress := os.Getenv("BROKER_ADDRESS")
+	databaseUser := os.Getenv("DATABASE_USER")
+	databasePassword := os.Getenv("DATABASE_PASSWORD")
+	databaseHost := os.Getenv("DATABASE_HOST")
+	databasePort := os.Getenv("DATABASE_PORT")
+	databaseName := os.Getenv("DATABASE_NAME")
+
+	if brokerAddress == "" || databaseUser == "" || databasePassword == "" || databaseHost == "" || databasePort == "" || databaseName == "" {
+		fmt.Println("Not all environment variables given")
+		os.Exit(1)
 	}
-	brokerAddress := os.Args[1]
+
+	connectionString := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", databaseUser, databasePassword, databaseHost, databasePort, databaseName)
 
 	db, err := gorm.Open(mysql.Open(connectionString), &gorm.Config{})
 	if err != nil {
-		panic("cannot open the database")
+		panic("cannot open the database " + err.Error())
 	}
 
 	if err = db.AutoMigrate(&Session{}, &User{}, &Video{}); err != nil {
+		panic(err)
+	}
+
+	if err = Kafka.CreateTopic(brokerAddress, "DATABASE"); err != nil {
 		panic(err)
 	}
 
@@ -128,12 +144,13 @@ func main() {
 	defer producer.Close()
 
 	ctx := NewContextCancelableBySignals()
-	for {
+	for ctx.Err() == nil {
 		kafkaMessage, headers, err := consumer.ConsumeFullMessage(ctx)
 		if err != nil {
 			return
 		}
 
+		log.Println("Message")
 		go handleRequest(db, kafkaMessage, headers, producer)
 	}
 }

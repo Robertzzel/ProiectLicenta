@@ -1,5 +1,5 @@
+import os
 import sys
-import queue
 import tempfile
 import subprocess
 import signal
@@ -14,33 +14,38 @@ DATABASE_TOPIC = "DATABASE"
 
 class VideoAggregator:
     @staticmethod
-    def aggregateVideos(files: List[str], resultFile: str):
-        infoFile = VideoAggregator.createFileWithVideoNames(files)
-        process = subprocess.Popen(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", infoFile.name, "-c", "copy", resultFile], stdout=subprocess.PIPE, stderr=sys.stderr)
+    def aggregateVideos(files: str, resultFile: str):
+        process = subprocess.Popen(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", files, "-c", "copy", resultFile], stdout=subprocess.PIPE, stderr=sys.stderr)
         out, err = process.communicate()
         if err is not None and err != b"":
             raise Exception("CONCAT ERROR:\n" + err.decode())
 
-    @staticmethod
-    def createFileWithVideoNames(files: List[str]):
-        contents = ""
-        for file in files:
-            contents += f"file {file}\n"
-
-        tempFile = tempfile.NamedTemporaryFile(mode="w+")
-        tempFile.write(contents)
-        tempFile.flush()
-        return tempFile
-
 
 class TempFile:
-    def __init__(self, fileContents: bytes):
-        self.file = tempfile.NamedTemporaryFile(suffix=".mp4")
-        self.file.write(fileContents)
+
+    def __init__(self, delete=True):
+        self.file = tempfile.NamedTemporaryFile(mode="w+", suffix=".mp4", delete=delete)
         self.name = self.file.name
 
-    def read(self):
-        return self.file.read()
+    def readStringLines(self):
+        with open(self.name, 'r') as f:
+            return f.readlines()
+
+    def readString(self):
+        with open(self.name, 'r') as f:
+            return f.read()
+
+    def readBytes(self):
+        with open(self.name, "rb") as f:
+            return f.read()
+
+    def write(self, text):
+        with open(self.name, "a+") as f:
+            f.write(text)
+
+    def writeBytes(self, text):
+        with open(self.name, "ab") as f:
+            f.write(text)
 
     def close(self):
         self.file.close()
@@ -58,86 +63,46 @@ class Merger:
         }, [(self.topic, Kafka.partitions.ClientPartition)])
         self.producer = KafkaProducerWrapper({'bootstrap.servers': self.broker})
         self.running = True
-        self.videosQueue = queue.Queue()
-        self.finalVideo: Optional[TempFile] = None
 
     def start(self):
-        signal.signal(signal.SIGINT, signal.default_int_handler)
-        try:
-            self.consumer.seekToEnd(topic=self.topic, partition=Kafka.partitions.ClientPartition)
-        except Exception as ex:
-            pass
+        makefile = TempFile(delete=False)
 
-        try:
-            while self.running:
-                message = self.consumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
-                if message is None:
-                    continue
+        while self.running:
+            message = self.consumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
+            if message is None:
+                continue
 
-                if message.value() == b"quit":
-                    self.stop()
-                    break
+            if message.value() == b"quit":
+                self.stop()
+                break
 
-                self.videosQueue.put(TempFile(message.value()))
+            file = TempFile(delete=False)
+            file.writeBytes(message.value())
+            makefile.write(f"file {file.name}\n")
 
-                if self.videosQueue.qsize() > 50:
-                    self.aggregateVideosFromQueue()
-        except BaseException as ex:
-            print(ex)
-
-        self.aggregateVideosFromQueue()
-        self.compressFinalFile()
-
-        if self.finalVideo is None:
-            print("not a file")
+        if makefile.readString().strip() == "":
+            print("No file received, closing...")
             return
 
-        self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=self.finalVideo.read(), headers=[
+        videoFile = TempFile(False)
+        VideoAggregator.aggregateVideos(makefile.name, videoFile.name)
+        print(f"generated file {videoFile.name}")
+
+        text = videoFile.readBytes()
+        self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=text, headers=[
             ("topic", self.topic.encode()),
             ("operation", b"ADD_VIDEO"),
             ("partition", str(Kafka.partitions.MergerMicroservicePartition).encode()),
             ("sessionId", str(self.sessionId).encode()),
         ])
+
+        print("cleaning...")
+        for line in makefile.readStringLines():
+            filename = line.split(" ")[1].strip()
+            print(filename)
+            os.remove(filename)
+
         self.producer.flush(timeout=5)
-        self.finalVideo.close()
-
-    def aggregateVideosFromQueue(self):
-        videos = []
-        try:
-            while True:
-                videos.append(self.videosQueue.get_nowait())
-        except queue.Empty:
-            pass
-
-        if len(videos) == 0:
-            return
-
-        fileNames: List[str] = [file.name for file in videos]
-        if self.finalVideo is not None:
-            fileNames.insert(0, self.finalVideo.name)
-
-        newFile = TempFile(b"")
-        VideoAggregator.aggregateVideos(fileNames, newFile.name)
-        self.finalVideo = newFile
-
-        [file.close() for file in videos]
-
-    def compressFinalFile(self):
-        if self.finalVideo is None:  # no file created
-            return
-
-        nextFile = TempFile(b"")
-        process = subprocess.Popen(
-            ["ffmpeg", "-y", "-i", self.finalVideo.name, "-c:v", "libx264", "-b:v", "500k", nextFile.name],
-            stdout=subprocess.PIPE,
-            stderr=sys.stderr
-        )
-        process.wait()
-        out, err = process.communicate()
-        if err is not None and err != b"":
-            raise Exception("CONCAT ERROR:\n" + err.decode())
-        self.finalVideo.close()
-        self.finalVideo = nextFile
 
     def stop(self):
         self.running = False
@@ -149,9 +114,14 @@ if __name__ == "__main__":
         print("No broker address, topic and sessionId given")
         sys.exit(1)
 
-    brokerAddress = sys.argv[1]
-    receiveTopic = sys.argv[2]
-    sessionId = sys.argv[3]
+    try:
+        brokerAddress = sys.argv[1]
+        receiveTopic = sys.argv[2]
+        sessionId = sys.argv[3]
 
-    m = Merger(brokerAddress, receiveTopic, int(sessionId))
-    m.start()
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        m = Merger(brokerAddress, receiveTopic, int(sessionId))
+        m.start()
+
+    except BaseException as ex:
+        print("Error:", ex)

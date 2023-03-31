@@ -138,7 +138,7 @@ func HandleGetCallByKeyAndPassword(db *sql.DB, message []byte) ([]byte, error) {
 
 	// gasese sesiunea
 	var sessionId *int
-	if err = db.QueryRow("select SessionId from User where CallKey = ? and CallPassword = ?", key, password).Scan(sessionId); err != nil {
+	if err = db.QueryRow("select SessionId from User where CallKey = ? and CallPassword = ?", key, password).Scan(&sessionId); err != nil {
 		return nil, err
 	}
 

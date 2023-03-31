@@ -24,10 +24,10 @@ func (this *DatabaseConsumer) Consume(ctx context.Context) (*kafka.Message, erro
 	return nil, ctx.Err()
 }
 
-func (this *DatabaseConsumer) ConsumeFullMessage(ctx context.Context) ([]byte, []kafka.Header, error) {
+func (this *DatabaseConsumer) ConsumeFullMessage(ctx context.Context) (*kafka.Message, error) {
 	message, err := this.Consume(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	var numberOfMessages, messageNumber int
@@ -35,18 +35,18 @@ func (this *DatabaseConsumer) ConsumeFullMessage(ctx context.Context) ([]byte, [
 		if header.Key == "number-of-messages" {
 			numberOfMessages, err = strconv.Atoi(string(header.Value))
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 		} else if header.Key == "message-number" {
 			messageNumber, err = strconv.Atoi(string(header.Value))
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 		}
 	}
 
 	if numberOfMessages == 0 {
-		return message.Value, message.Headers, nil
+		return message, nil
 	}
 
 	messages := make([][]byte, numberOfMessages)
@@ -55,14 +55,14 @@ func (this *DatabaseConsumer) ConsumeFullMessage(ctx context.Context) ([]byte, [
 	for i := 0; i < numberOfMessages-1; i++ {
 		message, err = this.Consume(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		for _, header := range message.Headers {
 			if header.Key == "message-number" {
 				messageNumber, err = strconv.Atoi(string(header.Value))
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 			}
 		}
@@ -75,7 +75,7 @@ func (this *DatabaseConsumer) ConsumeFullMessage(ctx context.Context) ([]byte, [
 		fullMessage = append(fullMessage, messageValues...)
 	}
 
-	return fullMessage, message.Headers, nil
+	return &kafka.Message{Headers: message.Headers, Value: fullMessage}, err
 }
 
 func NewDatabaseConsumer(brokerAddress, topic string) (*DatabaseConsumer, error) {

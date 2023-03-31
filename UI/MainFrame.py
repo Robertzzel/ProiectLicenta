@@ -100,7 +100,7 @@ class MainFrame(customtkinter.CTkFrame):
             self.buildNotLoggedInFrame()
             return
 
-        msg = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "GET_VIDEOS_BY_USER", json.dumps({"ID": self.user.id}).encode(), timeoutSeconds=1)
+        msg = self.kafkaContainer.databaseCall("GET_VIDEOS_BY_USER", str(self.user.id).encode(), timeoutSeconds=1)
         data = json.loads(msg.value())
 
         if len(data) == 0:
@@ -110,10 +110,10 @@ class MainFrame(customtkinter.CTkFrame):
         div.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
         for i, video in enumerate(data):
-            customtkinter.CTkLabel(master=div, text=f"DURATION: {video.get('DurationInSeconds')} secs").grid(row=i, column=0, padx=(0, 30), pady=(10, 10))
+            customtkinter.CTkLabel(master=div, text=f"DURATION: {video.get('Duration')} secs").grid(row=i, column=0, padx=(0, 30), pady=(10, 10))
             customtkinter.CTkLabel(master=div, text=f"SIZE: {video.get('Size')} bytes").grid(row=i, column=1, padx=(0, 30), pady=(10, 10))
-            date = video.get("CreatedAt")
-            customtkinter.CTkLabel(master=div, text=f"CREATED: {date[:10]} {date[11:-1]}").grid(row=i, column=2, padx=(0, 20), pady=(10, 10))
+            #date = video.get("CreatedAt")
+            #customtkinter.CTkLabel(master=div, text=f"CREATED: {date[:10]} {date[11:-1]}").grid(row=i, column=2, padx=(0, 20), pady=(10, 10))
             customtkinter.CTkButton(master=div, text="Download",
                                     command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)).grid(row=i, column=3, pady=(10, 10))
 
@@ -189,17 +189,21 @@ class MainFrame(customtkinter.CTkFrame):
         customtkinter.CTkLabel(master=self, text="Log In", font=self.LABEL_FONT).pack(anchor=tk.CENTER)
 
     def startSharing(self):
-        msg = self.kafkaContainer.databaseCall(topic=self.kafkaContainer.topic, operation="CREATE_SESSION", message=json.dumps({
+        msg = self.kafkaContainer.databaseCall(operation="CREATE_SESSION", message=json.dumps({
             "Topic": self.kafkaContainer.topic,
             "UserID": str(self.user.id),
-        }).encode())
+        }).encode(), timeoutSeconds=20)
+        if msg is None:
+            self.setStatusMessage("Cannot start sharing")
+            return
 
         status = KafkaContainer.getStatusFromMessage(msg)
         if status is None or status.lower() != "ok":
             self.setStatusMessage("Cannot start sharing")
             return
 
-        self.user.sessionId = int(msg.value().decode())
+        sId = msg.value().decode()
+        self.user.sessionId = int(sId)
 
         if self.sender is not None:
             self.sender.start(self.kafkaContainer.topic)
@@ -211,11 +215,6 @@ class MainFrame(customtkinter.CTkFrame):
         if self.sender is not None:
             self.sender.stop()
 
-        self.kafkaContainer.databaseCall(topic=self.kafkaContainer.topic, operation="DELETE_SESSION", message=json.dumps({
-            "SessionId": str(self.user.sessionId),
-            "UserId": str(self.user.id),
-        }).encode())
-
         self.user.sessionId = None
         self.kafkaContainer.resetTopic()
         self.setStatusMessage("Call stopped")
@@ -225,12 +224,13 @@ class MainFrame(customtkinter.CTkFrame):
             self.setStatusMessage("provide both key and password")
             return
 
-        responseMessage = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "GET_CALL_BY_KEY", json.dumps({"Key": callKey, "Password": callPassword, "CallerId": str(self.user.id)}).encode())
+        responseMessage = self.kafkaContainer.databaseCall("GET_CALL_BY_KEY", json.dumps({"Key": callKey, "Password": callPassword, "CallerId": str(self.user.id)}).encode())
 
         status: Optional[str] = None
         for header in responseMessage.headers():
             if header[0] == "status":
                 status = header[1].decode()
+
         if status is None or status.lower() != "ok":
             self.setStatusMessage("Cannot start call")
             return
@@ -288,7 +288,7 @@ class MainFrame(customtkinter.CTkFrame):
         if file is None:
             return
 
-        msg = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "DOWNLOAD_VIDEO_BY_ID", str(videoId).encode())
+        msg = self.kafkaContainer.databaseCall("DOWNLOAD_VIDEO_BY_ID", str(videoId).encode())
         if msg is None:
             self.setStatusMessage("Failed to download the video")
             return
@@ -304,7 +304,7 @@ class MainFrame(customtkinter.CTkFrame):
             return
 
         loggInDetails = {"Name": username, "Password": password}
-        message = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "LOGIN", json.dumps(loggInDetails).encode(), timeoutSeconds=1.5)
+        message = self.kafkaContainer.databaseCall("LOGIN", json.dumps(loggInDetails).encode(), timeoutSeconds=1.5)
         if message is None:
             self.setStatusMessage("Cannot talk to the database")
             return
@@ -314,7 +314,7 @@ class MainFrame(customtkinter.CTkFrame):
             return
 
         message = json.loads(message.value())
-        self.user = User(message.get("ID", None), username, message.get("CallKey", None), message.get("CallPassword", None), message.get("SessionId", None))
+        self.user = User(message.get("Id", None), username, message.get("CallKey", None), message.get("CallPassword", None), message.get("SessionId", None))
 
         self.sender = Sender(self.kafkaContainer.address)
         self.merger = Merger(self.kafkaContainer.address)
@@ -340,7 +340,7 @@ class MainFrame(customtkinter.CTkFrame):
             self.setStatusMessage("password and confirmation are not the same")
             return
 
-        message = self.kafkaContainer.databaseCall(self.kafkaContainer.topic, "REGISTER", json.dumps({"Name": username, "Password": password}).encode(), timeoutSeconds=1)
+        message = self.kafkaContainer.databaseCall("REGISTER", json.dumps({"Name": username, "Password": password}).encode(), timeoutSeconds=1)
         if message is None:
             self.setStatusMessage("Cannot talk with the database")
 

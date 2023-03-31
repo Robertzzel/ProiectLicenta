@@ -2,17 +2,18 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"gopkg.in/vansante/go-ffprobe.v2"
-	"gorm.io/gorm"
 	"os"
 	"regexp"
 	"strconv"
 )
 
-func HandleLogin(db *gorm.DB, message []byte) ([]byte, error) {
+func HandleLogin(db *sql.DB, message []byte) ([]byte, error) {
 	var input map[string]string
 	if err := json.Unmarshal(message, &input); err != nil {
 		return nil, err
@@ -25,87 +26,98 @@ func HandleLogin(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, errors.New("name, password and topic needed")
 	}
 
+	// cauta in functie de nume si parola
 	var user User
-	if err := db.First(&user, "name = ? and password = ?", name, Hash(password)).Error; err != nil {
-		return nil, err
-	}
-
-	if err := db.Model(&user).Update("call_password", uuid.NewString()).Error; err != nil {
-		return nil, err
-	}
-
-	if err := db.Model(&user).Update("session_id", nil).Error; err != nil {
-		return nil, err
-	}
-
-	user.SessionId = nil
-	return json.Marshal(&user)
-}
-
-func HandleRegister(db *gorm.DB, message []byte) ([]byte, error) {
-	user, err := getUserFromMessage(message)
+	err := db.QueryRow(`select * from User where Name = ? and Password = ? LIMIT 1`, name, Hash(password)).Scan(&user.Id, &user.Name, &user.Password,
+		&user.CallKey, &user.CallPassword, &user.SessionId)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(user.Password) <= 4 || !regexp.MustCompile(`\d`).MatchString(user.Password) {
+	user.CallPassword = uuid.NewString()
+	user.SessionId = nil
+	// creeaza parola noua de call
+	res, err := db.Exec(`update User set CallPassword = ?, SessionId = NULL where Id = ?`, user.CallPassword, user.Id)
+	if err != nil {
+		return nil, err
+	}
+	println(res.RowsAffected())
+
+	// returneaza user
+	return json.Marshal(user)
+}
+
+func HandleRegister(db *sql.DB, message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	name, nameExists := input["Name"]
+	password, passwordExists := input["Password"]
+
+	if !(nameExists && passwordExists) {
+		return nil, errors.New("name, password and topic needed")
+	}
+
+	if len(password) <= 4 || !regexp.MustCompile(`\d`).MatchString(password) {
 		return nil, errors.New("password mush have a number, a character and be at least the size of 4")
 	}
 
-	user.Password = Hash(user.Password)
-	user.CallKey = uuid.NewString()
-
-	if err = db.Create(&user).Error; err != nil {
-		return nil, err
-	}
-
-	return []byte("Successfully created"), nil
-}
-
-func HandleAddVideo(db *gorm.DB, message []byte, sessionId int) ([]byte, error) {
-	var err error
-	video := Video{}
-	session := Session{}
-
-	video.FilePath, err = WriteNewFile(message)
+	_, err := db.Exec("insert into User (Name, Password, CallKey, CallPassword, SessionId) values (?, ?, ?, ?, ?)", name, Hash(password), uuid.NewString(), uuid.NewString(), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	videoDetails, err := ffprobe.ProbeURL(context.Background(), video.FilePath)
+	return []byte("success"), nil
+}
+
+func HandleAddVideo(db *sql.DB, message []byte, sessionId int) ([]byte, error) {
+	// creaza fisierul
+	filePath, err := WriteNewFile(message)
 	if err != nil {
 		return nil, err
 	}
 
-	video.DurationInSeconds = videoDetails.Format.DurationSeconds
-	video.Size = videoDetails.Format.Size
-
-	if err = db.Create(&video).Error; err != nil {
+	//ia detaliile videoclipului
+	videoDetails, err := ffprobe.ProbeURL(context.Background(), filePath)
+	if err != nil {
 		return nil, err
 	}
 
-	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
+	duration := videoDetails.Format.DurationSeconds
+	size := videoDetails.Format.Size
+
+	//creeeaza linia in db
+	videoResult, err := db.Exec("insert into Video (FilePath, Duration, Size) VALUES (?,?,?)", filePath, duration, size)
+	if err != nil {
 		return nil, err
 	}
-
-	var associatedUsers []User
-	if err = db.Where("session_id = ?", uint(sessionId)).Find(&associatedUsers).Error; err != nil {
+	videoId, err := videoResult.LastInsertId()
+	if err != nil {
 		return nil, err
 	}
-
-	var foundUsers []User
-	if err = db.Model(&session).Association("Users").Find(&foundUsers); err != nil {
+	//pune toti userii care au dreptul la video
+	rows, err := db.Query("select Id from User where SessionId = ?", sessionId)
+	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	if err = db.Model(&video).Where("id = ?", video.ID).Association("Users").Append(&foundUsers); err != nil {
-		return nil, err
+	var uId int
+	for rows.Next() {
+		err = rows.Scan(&uId)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = db.Exec("insert into UserVideo (UserId, VideoId) values (?, ?)", uId, videoId); err != nil {
+			return nil, err
+		}
 	}
-
-	return []byte("video added"), nil
+	return []byte("successs"), nil
 }
 
-func HandleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) {
+func HandleGetCallByKeyAndPassword(db *sql.DB, message []byte) ([]byte, error) {
 	var input map[string]string
 	if err := json.Unmarshal(message, &input); err != nil {
 		return nil, err
@@ -124,72 +136,71 @@ func HandleGetCallByKeyAndPassword(db *gorm.DB, message []byte) ([]byte, error) 
 		return nil, errors.New("password AND key needed")
 	}
 
-	var sharerUser User
-	if err = db.Where(&User{CallKey: key, CallPassword: password}).First(&sharerUser).Error; err != nil {
+	// gasese sesiunea
+	var sessionId *int
+	if err = db.QueryRow("select SessionId from User where CallKey = ? and CallPassword = ?", key, password).Scan(sessionId); err != nil {
 		return nil, err
 	}
 
-	var callerUser User
-	if err = db.First(&callerUser, "id = ?", uint(callerId)).Error; err != nil {
-		return nil, err
-	}
-
-	if sharerUser.SessionId == nil {
+	// daca sharerul nu are sesiune atunci nu e activ, retueaza
+	if sessionId == nil {
 		return []byte("NOT ACTIVE"), nil
 	}
 
-	var session Session
-	if err = db.Where(&Session{Model: gorm.Model{ID: *sharerUser.SessionId}}).First(&session).Error; err != nil {
-		return nil, err
-	}
-
-	result, err := json.Marshal(map[string]string{"Topic": session.Topic})
+	// gaseste topicul sesinii si fa mesajul
+	var topic string
+	err = db.QueryRow("select Topic from Session where Id = ?", *sessionId).Scan(&topic)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = db.Model(&callerUser).Update("session_id", session.ID).Error; err != nil {
+	// adauga callerul la sesiune
+	_, err = db.Exec("update User set SessionId = ? where Id = ?", *sessionId, callerId)
+	if err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	return json.Marshal(map[string]string{"Topic": topic})
 }
 
-func HandleGetVideoByUser(db *gorm.DB, message []byte) ([]byte, error) {
-	user, err := getUserFromMessage(message)
+func HandleGetVideosByUser(db *sql.DB, message []byte) ([]byte, error) {
+	userId, err := strconv.Atoi(string(message))
 	if err != nil {
 		return nil, err
 	}
 
-	if err = db.First(&user, "id = ?", user.ID).Error; err != nil {
-		return nil, err
-	}
-
-	var foundVideos []Video
-	if err = db.Model(&user).Association("Videos").Find(&foundVideos); err != nil {
-		return nil, err
-	}
-
-	result, err := json.Marshal(foundVideos)
+	rows, err := db.Query("select Id, Duration, Size from Video inner join UserVideo on UserVideo.VideoId = Video.Id where UserId = ?", userId)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	return result, nil
+	var size string
+	var duration float64
+	var videoId int
+	videos := make([]map[string]string, 0)
+	for rows.Next() {
+		if err = rows.Scan(&videoId, &duration, &size); err != nil {
+			return nil, err
+		}
+		videos = append(videos, map[string]string{"ID": strconv.Itoa(videoId), "Duration": fmt.Sprintf("%f", duration), "Size": size})
+	}
+	return json.Marshal(videos)
 }
 
-func HandleDownloadVideoById(db *gorm.DB, message []byte) ([]byte, error) {
-	id, err := strconv.Atoi(string(message))
+func HandleDownloadVideoById(db *sql.DB, message []byte) ([]byte, error) {
+	videoId, err := strconv.Atoi(string(message))
 	if err != nil {
 		return nil, err
 	}
 
-	video := Video{}
-	if err = db.Where("id=?", uint(id)).First(&video).Error; err != nil {
+	var path string
+	err = db.QueryRow("select FilePath from Video where Id = ?", videoId).Scan(&path)
+	if err != nil {
 		return nil, err
 	}
 
-	videoContents, err := os.ReadFile(video.FilePath)
+	videoContents, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -197,65 +208,7 @@ func HandleDownloadVideoById(db *gorm.DB, message []byte) ([]byte, error) {
 	return videoContents, nil
 }
 
-func HandleDisconnect(db *gorm.DB, message []byte) ([]byte, error) {
-	var input map[string]string
-	if err := json.Unmarshal(message, &input); err != nil {
-		return nil, err
-	}
-
-	idString, idExists := input["ID"]
-	if !idExists {
-		return nil, errors.New("id not given")
-	}
-
-	id, err := strconv.Atoi(idString)
-	if err != nil {
-		return nil, err
-	}
-
-	var user User
-	if err = db.First(&user, "id = ?", uint(id)).Error; err != nil {
-		return nil, err
-	}
-
-	if user.SessionId != nil {
-		if err = deleteSession(db, *user.SessionId); err != nil {
-			return nil, err
-		}
-	}
-	return []byte("success"), nil
-}
-
-func HandleUsersInSession(db *gorm.DB, message []byte) ([]byte, error) {
-	var input map[string]string
-	if err := json.Unmarshal(message, &input); err != nil {
-		return nil, err
-	}
-
-	sessionIdString, idExists := input["ID"]
-	if !idExists {
-		return nil, errors.New("sessionId not given")
-	}
-
-	sessionId, err := strconv.Atoi(sessionIdString)
-	if err != nil {
-		return nil, err
-	}
-
-	var session Session
-	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
-		return nil, err
-	}
-
-	var associatedUsers []User
-	if err = db.Where("session_id = ?", uint(sessionId)).Find(&associatedUsers).Error; err != nil {
-		return nil, err
-	}
-
-	return []byte(strconv.Itoa(len(associatedUsers))), nil
-}
-
-func HandleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
+func HandleCreateSession(db *sql.DB, message []byte) ([]byte, error) {
 	var input map[string]string
 	if err := json.Unmarshal(message, &input); err != nil {
 		return nil, err
@@ -273,81 +226,40 @@ func HandleCreateSession(db *gorm.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	session := Session{Topic: topic}
-	if err = db.Create(&session).Error; err != nil {
+	res, err := db.Exec("insert into Session(Topic) values (?)", topic)
+	if err != nil {
 		return nil, err
 	}
 
-	var user User
-	if err = db.First(&user, "id = ?", uint(userId)).Error; err != nil {
+	sessionId, err := res.LastInsertId()
+	if err != nil {
 		return nil, err
 	}
 
-	if err = db.Model(&session).Association("Users").Append(&user); err != nil {
+	if _, err = db.Exec("update User set SessionId = ? where Id = ?", sessionId, userId); err != nil {
 		return nil, err
 	}
 
-	return []byte(strconv.Itoa(int(session.ID))), nil
+	return []byte(strconv.FormatInt(sessionId, 10)), nil
 }
 
-func HandleDeleteSession(db *gorm.DB, message []byte) ([]byte, error) {
-	var input map[string]string
-	if err := json.Unmarshal(message, &input); err != nil {
+func HandleDeleteSession(db *sql.DB, sessionId int) ([]byte, error) {
+	if _, err := db.Exec("update User set SessionId = NULL where SessionId = ?", sessionId); err != nil {
 		return nil, err
 	}
 
-	sessionIdString, hasSessionId := input["SessionId"]
-	userIdString, hasUserId := input["UserId"]
-	if !(hasSessionId && hasUserId) {
-		return nil, errors.New("not id given")
-	}
-
-	sessionId, err := strconv.Atoi(sessionIdString)
+	res, err := db.Exec("delete from Session where Id = ?", sessionId)
 	if err != nil {
 		return nil, err
-	}
-
-	userId, err := strconv.Atoi(userIdString)
-	if err != nil {
-		return nil, err
-	}
-
-	var user User
-	if err = db.First(&user, "id = ?", uint(userId)).Error; err != nil {
-		return nil, err
-	}
-
-	if err = db.Model(&user).Update("session_id", nil).Error; err != nil {
-		return nil, err
-	} // TODO reseteaza session id urile tuturor iuserilor din conversatie
-
-	var session Session
-	if err = db.First(&session, "id = ?", sessionId).Error; err != nil {
-		return nil, err
-	}
-
-	if err = db.Delete(&session).Error; err != nil {
-		return nil, err
+	} else {
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return nil, err
+		}
+		if affected != 1 {
+			return nil, errors.New("Deleted " + strconv.FormatInt(affected, 10) + " rows")
+		}
 	}
 
 	return []byte("success"), nil
-}
-
-func deleteSession(db *gorm.DB, sessionId uint) error {
-	var foundSession Session
-	if err := db.Where(&Session{Model: gorm.Model{ID: sessionId}}).First(&foundSession).Error; err != nil { // TODO VERIFICA SI DACA A FOST STEARSA
-		return err
-	}
-	if err := db.Delete(&foundSession).Error; err != nil {
-		return err
-	}
-	return nil
-}
-
-func getUserFromMessage(message []byte) (User, error) {
-	var jsonUser JsonUser
-	if err := json.Unmarshal(message, &jsonUser); err != nil {
-		return User{}, err
-	}
-	return jsonUser.ToUser(), nil
 }

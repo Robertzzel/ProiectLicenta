@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -89,12 +90,30 @@ class Merger:
         print(f"generated file {videoFile.name}")
 
         text = videoFile.readBytes()
+        try:
+            self.consumer.seekToEnd(self.topic, Kafka.partitions.MergerMicroservicePartition)
+        except:
+            pass
+
         self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=text, headers=[
             ("topic", self.topic.encode()),
             ("operation", b"ADD_VIDEO"),
             ("partition", str(Kafka.partitions.MergerMicroservicePartition).encode()),
             ("sessionId", str(self.sessionId).encode()),
         ])
+
+        self.consumer.receiveBigMessage(partition=Kafka.partitions.MergerMicroservicePartition, timeoutSeconds=10)
+        print("Video saved")
+
+        self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=b"msg", headers=[
+            ("topic", self.topic.encode()),
+            ("operation", b"DELETE_SESSION"),
+            ("partition", str(Kafka.partitions.MergerMicroservicePartition).encode()),
+            ("sessionId", str(self.sessionId).encode()),
+        ])
+
+        self.consumer.receiveBigMessage(partition=Kafka.partitions.MergerMicroservicePartition, timeoutSeconds=10)
+        print("Session deleted")
 
         print("cleaning...")
         for line in makefile.readStringLines():
@@ -104,9 +123,10 @@ class Merger:
 
         self.producer.flush(timeout=5)
 
+        self.consumer.close()
+
     def stop(self):
         self.running = False
-        self.consumer.close()
 
 
 if __name__ == "__main__":

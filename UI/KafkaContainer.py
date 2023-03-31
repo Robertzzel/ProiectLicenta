@@ -27,10 +27,10 @@ class KafkaContainer:
         consumerConfigs['group.id'] = "-"
         self.consumer = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.partition)])
 
-    def databaseCall(self, topic: str, operation: str, message: bytes, timeoutSeconds: float = None) -> kafka.Message:
+    def databaseCall(self, operation: str, message: bytes, timeoutSeconds: float = None) -> kafka.Message:
         self.seekToEnd()
         self.producer.produce(topic=DATABASE_TOPIC, headers=[
-            ("topic", topic.encode()), ("partition", str(self.partition).encode()), ("operation", operation.encode()),
+            ("topic", self.topic.encode()), ("partition", str(self.partition).encode()), ("operation", operation.encode()),
         ], value=message)
         self.producer.flush(timeout=1)
 

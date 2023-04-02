@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"strconv"
@@ -35,10 +34,7 @@ func (avp *AudioVideoPair) GetAudioTimestamp() (int, error) {
 func (avp *AudioVideoPair) CombineAndCompress(bitrate string, output string) ([]byte, error) {
 	result, err := exec.Command("./CombineAndCompress", avp.Video, avp.Audio, bitrate, output).Output()
 	if err != nil {
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
-			return nil, errors.New(string(exitError.Stderr))
-		}
+		return nil, err
 	}
 
 	return result, nil

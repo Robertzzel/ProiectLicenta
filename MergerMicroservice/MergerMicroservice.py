@@ -1,55 +1,13 @@
-import json
 import os
 import sys
-import tempfile
-import subprocess
 import signal
-
 import Kafka.partitions
 from Kafka.Kafka import *
-from typing import Optional
+from TempFile import TempFile
+from VideoAggregator import VideoAggregator
 
-KAFKA_ADDRESS = "localhost:9092"
+
 DATABASE_TOPIC = "DATABASE"
-
-
-class VideoAggregator:
-    @staticmethod
-    def aggregateVideos(files: str, resultFile: str):
-        process = subprocess.Popen(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", files, "-c", "copy", resultFile], stdout=subprocess.PIPE, stderr=sys.stderr)
-        out, err = process.communicate()
-        if err is not None and err != b"":
-            raise Exception("CONCAT ERROR:\n" + err.decode())
-
-
-class TempFile:
-
-    def __init__(self, delete=True):
-        self.file = tempfile.NamedTemporaryFile(mode="w+", suffix=".mp4", delete=delete)
-        self.name = self.file.name
-
-    def readStringLines(self):
-        with open(self.name, 'r') as f:
-            return f.readlines()
-
-    def readString(self):
-        with open(self.name, 'r') as f:
-            return f.read()
-
-    def readBytes(self):
-        with open(self.name, "rb") as f:
-            return f.read()
-
-    def write(self, text):
-        with open(self.name, "a+") as f:
-            f.write(text)
-
-    def writeBytes(self, text):
-        with open(self.name, "ab") as f:
-            f.write(text)
-
-    def close(self):
-        self.file.close()
 
 
 class Merger:
@@ -80,6 +38,7 @@ class Merger:
             file = TempFile(delete=False)
             file.writeBytes(message.value())
             makefile.write(f"file {file.name}\n")
+            print(f"Added {file.name}")
 
         if makefile.readString().strip() == "":
             print("No file received, closing...")
@@ -121,27 +80,24 @@ class Merger:
             print(filename)
             os.remove(filename)
 
-        self.producer.flush(timeout=5)
-
         self.consumer.close()
+        deleteTopic(self.broker, self.topic)
 
     def stop(self):
         self.running = False
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
+    try:
+        brokerAddress = os.environ["BROKER_ADDRESS"]
+        receiveTopic = os.environ["TOPIC"]
+        sessionId = os.environ["SESSION_ID"]
+    except KeyError:
         print("No broker address, topic and sessionId given")
         sys.exit(1)
 
     try:
-        brokerAddress = sys.argv[1]
-        receiveTopic = sys.argv[2]
-        sessionId = sys.argv[3]
-
         signal.signal(signal.SIGINT, signal.default_int_handler)
-        m = Merger(brokerAddress, receiveTopic, int(sessionId))
-        m.start()
-
+        Merger(brokerAddress, receiveTopic, int(sessionId)).start()
     except BaseException as ex:
         print("Error:", ex)

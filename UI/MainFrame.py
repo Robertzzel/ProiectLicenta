@@ -19,7 +19,6 @@ class MainFrame(customtkinter.CTkFrame):
         self.threadPool = ThreadPoolExecutor(4)
         self.sender: Optional[Sender] = None
         self.videoWindow: Optional[VideoWindow] = None
-        self.merger: Optional[Merger] = None
 
         self.LABEL_FONT = customtkinter.CTkFont(size=10, family="Arial")
 
@@ -112,8 +111,8 @@ class MainFrame(customtkinter.CTkFrame):
         for i, video in enumerate(data):
             customtkinter.CTkLabel(master=div, text=f"DURATION: {video.get('Duration')} secs").grid(row=i, column=0, padx=(0, 30), pady=(10, 10))
             customtkinter.CTkLabel(master=div, text=f"SIZE: {video.get('Size')} bytes").grid(row=i, column=1, padx=(0, 30), pady=(10, 10))
-            #date = video.get("CreatedAt")
-            #customtkinter.CTkLabel(master=div, text=f"CREATED: {date[:10]} {date[11:-1]}").grid(row=i, column=2, padx=(0, 20), pady=(10, 10))
+            date = video.get("CreatedAt")
+            customtkinter.CTkLabel(master=div, text=f"CREATED: {date}").grid(row=i, column=2, padx=(0, 20), pady=(10, 10))
             customtkinter.CTkButton(master=div, text="Download",
                                     command=lambda videoId=video.get("ID"): self.downloadVideo(videoId)).grid(row=i, column=3, pady=(10, 10))
 
@@ -192,7 +191,8 @@ class MainFrame(customtkinter.CTkFrame):
         msg = self.kafkaContainer.databaseCall(operation="CREATE_SESSION", message=json.dumps({
             "Topic": self.kafkaContainer.topic,
             "UserID": str(self.user.id),
-        }).encode(), timeoutSeconds=20)
+        }).encode(), timeoutSeconds=5)
+
         if msg is None:
             self.setStatusMessage("Cannot start sharing")
             return
@@ -208,8 +208,7 @@ class MainFrame(customtkinter.CTkFrame):
         if self.sender is not None:
             self.sender.start(self.kafkaContainer.topic)
 
-        if self.merger is not None:
-            self.merger.start(str(self.user.sessionId), self.kafkaContainer.topic)
+        Merger(self.kafkaContainer.address, self.kafkaContainer.topic, self.user.sessionId)
 
     def stopSharing(self):
         if self.sender is not None:
@@ -317,7 +316,6 @@ class MainFrame(customtkinter.CTkFrame):
         self.user = User(message.get("Id", None), username, message.get("CallKey", None), message.get("CallPassword", None), message.get("SessionId", None))
 
         self.sender = Sender(self.kafkaContainer.address)
-        self.merger = Merger(self.kafkaContainer.address)
 
         self.buildLoginFrame()
         self.mainWindow.title(f"RMI {self.user.name}")

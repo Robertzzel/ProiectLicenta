@@ -142,7 +142,7 @@ func CompressAndSendFiles(producer *Kafka.AggregatorMicroserviceProducer, files 
 		_ = files.Delete()
 	}(&files)
 
-	video, err := files.CombineAndCompress("1.5m", "pipe:1")
+	video, err := files.CombineAndCompress("3000k", "pipe:1")
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,12 @@ func main() {
 		for {
 			select {
 			case filesPair := <-filesChannel:
-				errorGroup.Go(func() error { return CompressAndSendFiles(producer, filesPair) })
+				err := CompressAndSendFiles(producer, filesPair)
+				if err != nil {
+					fmt.Println("Aggregaot sending file error", err)
+					return err
+				}
+				fmt.Println("Aggregator sent file")
 			case <-ctx.Done():
 				return nil
 			}

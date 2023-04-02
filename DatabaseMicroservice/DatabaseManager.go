@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"time"
 )
 
 func HandleLogin(db *sql.DB, message []byte) ([]byte, error) {
@@ -89,7 +90,7 @@ func HandleAddVideo(db *sql.DB, message []byte, sessionId int) ([]byte, error) {
 	size := videoDetails.Format.Size
 
 	//creeeaza linia in db
-	videoResult, err := db.Exec("insert into Video (FilePath, Duration, Size) VALUES (?,?,?)", filePath, duration, size)
+	videoResult, err := db.Exec("insert into Video (FilePath, Duration, CreatedAt, Size) VALUES (?,?, NOW() ,?)", filePath, duration, size)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +170,7 @@ func HandleGetVideosByUser(db *sql.DB, message []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	rows, err := db.Query("select Id, Duration, Size from Video inner join UserVideo on UserVideo.VideoId = Video.Id where UserId = ?", userId)
+	rows, err := db.Query("select Id, Duration, CreatedAt, Size from Video inner join UserVideo on UserVideo.VideoId = Video.Id where UserId = ?", userId)
 	if err != nil {
 		return nil, err
 	}
@@ -178,12 +179,14 @@ func HandleGetVideosByUser(db *sql.DB, message []byte) ([]byte, error) {
 	var size string
 	var duration float64
 	var videoId int
+	var tm time.Time
 	videos := make([]map[string]string, 0)
 	for rows.Next() {
-		if err = rows.Scan(&videoId, &duration, &size); err != nil {
+		if err = rows.Scan(&videoId, &duration, &tm, &size); err != nil {
 			return nil, err
 		}
-		videos = append(videos, map[string]string{"ID": strconv.Itoa(videoId), "Duration": fmt.Sprintf("%f", duration), "Size": size})
+		videos = append(videos, map[string]string{"ID": strconv.Itoa(videoId), "Duration": fmt.Sprintf("%f", duration), "Size": size,
+			"CreatedAt": tm.String()})
 	}
 	return json.Marshal(videos)
 }

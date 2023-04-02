@@ -3,7 +3,7 @@ import av
 import logging
 from queue import Queue
 import tkinter as tk
-from PIL import ImageTk, Image, ImageOps
+from PIL import ImageTk, Image
 import sounddevice as sd
 import Kafka.partitions
 from Kafka.Kafka import *
@@ -11,7 +11,7 @@ from io import BytesIO
 import numpy as np
 from typing import Optional
 from Kafka.Kafka import KafkaConsumerWrapper
-from UI.InputsBuffer import InputsBuffer
+from InputsBuffer import InputsBuffer
 import threading
 from asyncio import Event
 

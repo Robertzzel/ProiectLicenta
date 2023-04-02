@@ -1,7 +1,7 @@
 import queue
-from Kafka.partitions import *
 from recorder import Recorder
 from Kafka.Kafka import KafkaConsumerWrapper, KafkaProducerWrapper
+from Kafka.partitions import *
 import sys
 
 VIDEO_LENGTH = 1 / 5

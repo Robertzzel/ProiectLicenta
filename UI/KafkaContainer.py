@@ -37,7 +37,6 @@ class KafkaContainer:
         return self.consumer.receiveBigMessage(timeoutSeconds, partition=self.partition)
 
     def resetTopic(self):
-        deleteTopic(self.address, self.topic)
         self.topic = str(uuid.uuid1())
         createTopic(self.address, self.topic, partitions=7)
         self.consumer = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.partition)])

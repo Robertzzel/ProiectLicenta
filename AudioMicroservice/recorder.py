@@ -52,7 +52,6 @@ class Recorder:
 
     def process_buffer(self, start_time: time.time, chunk_size_seconds: float):
         next_chunk_end = start_time + chunk_size_seconds
-        cwd = os.getcwd()
         number_of_bytes_needed = int(SAMPLERATE * chunk_size_seconds)
 
         while self.running:
@@ -71,7 +70,7 @@ class Recorder:
             elif bytes_difference < 0:
                 audio_chunk = np.append(audio_chunk, np.array([0] * -bytes_difference, dtype=np.int16))
 
-            audio_file_name = cwd + "/audio/" + str(int((next_chunk_end - chunk_size_seconds) * 1000)) + ".wav"
+            audio_file_name = "/tmp/" + str(int((next_chunk_end - chunk_size_seconds) * 1000)) + ".wav"
             create_audio_file(audio_file_name, audio_chunk, SAMPLERATE)
             self.audio_queue.put_nowait(audio_file_name)
 

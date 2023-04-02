@@ -27,6 +27,7 @@ func NewCtx() context.Context {
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
 		cancel()
+		fmt.Println("context cancelled")
 	}()
 
 	return ctx
@@ -96,9 +97,12 @@ func main() {
 
 	errGroup.Go(func() error {
 		for ctx.Err() == nil {
-			if err = producer.Publish([]byte(<-videoRecorder.VideoBuffer), []kafka.Header{{"type", []byte("video")}}); err != nil {
+			videoBlock := []byte(<-videoRecorder.VideoBuffer)
+			if err = producer.Publish(videoBlock, []kafka.Header{{"type", []byte("video")}}); err != nil {
+				fmt.Println("Video block err", err)
 				return err
 			}
+			fmt.Println("Video block sent ", string(videoBlock))
 		}
 		return nil
 	})

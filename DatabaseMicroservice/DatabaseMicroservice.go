@@ -117,6 +117,7 @@ func MigrateDatabase(db *sql.DB) error {
     Id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
     FilePath varchar(255) NOT NULL,
     Duration DOUBLE(255, 2),
+    CreatedAt DATETIME,
     Size varchar(255),
     UNIQUE (FilePath)
 )`)
@@ -190,11 +191,6 @@ func main() {
 		if err != nil {
 			return
 		}
-		//marshal, _ := json.Marshal(map[string]string{"Name": "robert", "Password": "robert"})
-		//message := &kafka.Message{Headers: []kafka.Header{{Key: "sessionId", Value: []byte("1")}, {Key: "operation", Value: []byte("LOGIN")}},
-		//	Value: marshal}
-
-		log.Println("Message")
 		go handleRequest(db, message, producer)
 	}
 }

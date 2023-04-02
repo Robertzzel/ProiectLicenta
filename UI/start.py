@@ -5,38 +5,17 @@ import sys
 import pathlib
 import time
 import platform
-from typing import *
 from concurrent.futures import ThreadPoolExecutor
 
 
 class Merger:
-    def __init__(self, brokerAddress: str):
-        self.broker = brokerAddress
-        self.topic = None
-        self.process: Optional[subprocess.Popen] = None
-        self.path = str(pathlib.Path(os.getcwd()).parent)
-        self.running = False
+    def __init__(self, kafkaBroker: str, topic: str, sessionId: int):
+        import docker
+        client = docker.from_env()
+        client.containers.run("merger-microservice:v4", detach=True,
+                              environment={"BROKER_ADDRESS": kafkaBroker, "TOPIC": topic, "SESSION_ID": str(sessionId)},
+                              network_mode="host")
 
-    def start(self, sessionId: str, topic: str):
-        self.topic = topic
-        self.process = subprocess.Popen(["venv/bin/python3", "MergerMicroservice/MergerMicroservice.py", self.broker, self.topic, str(sessionId)],
-                                        cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
-        self.running = True
-
-    # def stop(self):
-    #     if self.process is None:
-    #         return
-    #
-    #     #self.process.send_signal(signal.SIGINT)
-    #
-    #     try:
-    #         self.process.wait(timeout=30)
-    #     except subprocess.TimeoutExpired as ex:
-    #         self.process.kill()
-    #     finally:
-    #         print("merger process closed")
-    #
-    #     self.running = False
 
 class Sender:
     def __init__(self, brokerAddress: str):
@@ -68,16 +47,16 @@ class Sender:
         return True
 
     def start(self, topic: str):
-        if not self.build() or platform.system().lower() == "windows":
+        if platform.system().lower() == "windows":
             return
 
         try:
-            self.videoProcess = subprocess.Popen(["./VideoMicroservice/VideoMicroservice", self.brokerAddress, topic],
-                                                 cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
+            self.videoProcess = subprocess.Popen(["./VideoMicroservice", self.brokerAddress, topic],
+                                                 stdout=sys.stdout, stderr=sys.stderr)
             self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress, topic],
                                                  cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
-            self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice/AggregatorMicroservice", self.brokerAddress, topic],
-                                                      cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
+            self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice", self.brokerAddress, topic],
+                                                      stdout=sys.stdout, stderr=sys.stderr)
             self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, topic],
                                                          cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
 

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"Licenta/Kafka"
+	"client/Kafka"
 	"context"
 	"errors"
 	"fmt"

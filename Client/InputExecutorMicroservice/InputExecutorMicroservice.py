@@ -1,10 +1,10 @@
-import Kafka.partitions
 from Kafka.partitions import InputPartition
 import pynput
 from TkPynputKeyCodes import KeyTranslator
 from pyautogui import size
 import sys
 from Kafka.Kafka import *
+from Client.UI.Kafka.partitions import InputPartition
 
 MOVE = 1
 CLICK = 2
@@ -36,7 +36,7 @@ def main():
     }, [(topic, InputPartition)])
 
     while True:
-        msg = consumer.consumeMessage(timeoutSeconds=None, partition=Kafka.partitions.InputPartition)
+        msg = consumer.consumeMessage(timeoutSeconds=None, partition=InputPartition)
         for command in msg.value().decode().split(";"):
             components = command.split(",")
             action = int(components[0])

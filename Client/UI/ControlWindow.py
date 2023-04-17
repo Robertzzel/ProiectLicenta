@@ -5,7 +5,6 @@ from queue import Queue
 import tkinter as tk
 from PIL import ImageTk, Image
 import sounddevice as sd
-import Kafka.partitions
 from Kafka.Kafka import *
 from io import BytesIO
 import numpy as np
@@ -14,6 +13,7 @@ from Kafka.Kafka import KafkaConsumerWrapper
 from InputsBuffer import InputsBuffer
 import threading
 from asyncio import Event
+from Client.UI.Kafka.partitions import InputPartition, ClientPartition
 
 logging.getLogger('libav').setLevel(logging.ERROR)  # removes warning: deprecated pixel format used
 MOVE = 1
@@ -97,7 +97,7 @@ class TkinterVideo(tk.Label):
                 time.sleep(0.05)
                 inputs = self.inputsBuffer.get()
                 if inputs != "":
-                    self.kafkaProducer.produce(topic=self.topic, value=inputs.encode(), partition=Kafka.partitions.InputPartition)
+                    self.kafkaProducer.produce(topic=self.topic, value=inputs.encode(), partition=InputPartition)
         except BaseException as ex:
             print(ex)
 
@@ -176,10 +176,10 @@ class TkinterVideo(tk.Label):
             self.streamConsumer = KafkaConsumerWrapper({
                 'bootstrap.servers': self.kafkaAddress,
                 'group.id': '-',
-            }, [(self.topic, Kafka.partitions.ClientPartition)])
+            }, [(self.topic, ClientPartition)])
 
             while not self.stopEvent.is_set():
-                message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=Kafka.partitions.ClientPartition)
+                message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=ClientPartition)
                 if message is None:
                     continue
 

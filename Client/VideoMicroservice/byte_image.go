@@ -1,10 +1,23 @@
 package main
 
+/*
+void BGRAToRGBA(int width, char* img){
+	int aux, i;
+	for(i = 0; i < width; i += 4){
+		aux = img[i];
+		img[i] = img[i+2];
+		img[i+2] = aux;
+		img[i+3] = 255;
+	}
+}
+*/
+import "C"
 import (
 	"bytes"
 	"errors"
 	"github.com/pixiv/go-libjpeg/jpeg"
 	"image"
+	"unsafe"
 )
 
 type ByteImage struct {
@@ -16,9 +29,7 @@ type ByteImage struct {
 }
 
 func (bi *ByteImage) getImage() image.Image {
-	for i := 0; i < len(bi.Data); i += 4 {
-		bi.Data[i], bi.Data[i+2], bi.Data[i+3] = bi.Data[i+2], bi.Data[i], 255
-	}
+	C.BGRAToRGBA((C.int)(len(bi.Data)), (*C.char)(unsafe.Pointer(&bi.Data[0])))
 
 	return &image.RGBA{
 		Pix:    bi.Data,

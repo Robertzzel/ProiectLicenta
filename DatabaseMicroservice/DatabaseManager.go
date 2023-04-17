@@ -32,17 +32,16 @@ func HandleLogin(db *sql.DB, message []byte) ([]byte, error) {
 	err := db.QueryRow(`select * from User where Name = ? and Password = ? LIMIT 1`, name, Hash(password)).Scan(&user.Id, &user.Name, &user.Password,
 		&user.CallKey, &user.CallPassword, &user.SessionId)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("nume sau parola incorecta")
 	}
 
 	user.CallPassword = uuid.NewString()
 	user.SessionId = nil
 	// creeaza parola noua de call
-	res, err := db.Exec(`update User set CallPassword = ?, SessionId = NULL where Id = ?`, user.CallPassword, user.Id)
+	_, err = db.Exec(`update User set CallPassword = ?, SessionId = NULL where Id = ?`, user.CallPassword, user.Id)
 	if err != nil {
 		return nil, err
 	}
-	println(res.RowsAffected())
 
 	// returneaza user
 	return json.Marshal(user)
@@ -98,6 +97,7 @@ func HandleAddVideo(db *sql.DB, message []byte, sessionId int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	//pune toti userii care au dreptul la video
 	rows, err := db.Query("select Id from User where SessionId = ?", sessionId)
 	if err != nil {
@@ -145,10 +145,10 @@ func HandleGetCallByKeyAndPassword(db *sql.DB, message []byte) ([]byte, error) {
 
 	// daca sharerul nu are sesiune atunci nu e activ, retueaza
 	if sessionId == nil {
-		return []byte("NOT ACTIVE"), nil
+		return []byte("the user is not active"), nil
 	}
 
-	// gaseste topicul sesinii si fa mesajul
+	// gaseste topicul sesinii si creeaza mesajul
 	var topic string
 	err = db.QueryRow("select Topic from Session where Id = ?", *sessionId).Scan(&topic)
 	if err != nil {

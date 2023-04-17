@@ -1,5 +1,5 @@
 from __future__ import annotations
-from pynput.keyboard import Key, KeyCode
+from pynput.keyboard import Key
 from typing import Optional
 
 

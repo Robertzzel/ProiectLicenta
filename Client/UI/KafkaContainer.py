@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-import Kafka.partitions
 from Kafka.Kafka import *
-DATABASE_TOPIC = "DATABASE"
 import uuid
+from Client.UI.Kafka.partitions import ClientPartition
 
+DATABASE_TOPIC = "DATABASE"
 
 @dataclass
 class KafkaContainer:
@@ -20,7 +20,7 @@ class KafkaContainer:
 
         self.consumerConfigs = consumerConfigs
         self.address = address
-        self.partition = Kafka.partitions.ClientPartition
+        self.partition = ClientPartition
         self.producer = KafkaProducerWrapper({'bootstrap.servers': self.address})
 
         consumerConfigs['bootstrap.servers'] = self.address

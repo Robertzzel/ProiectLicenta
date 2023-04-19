@@ -26,11 +26,11 @@ class MainWindow(customtkinter.CTk):
         self.mainFrame.pack(fill=tk.BOTH, expand=True, side=tk.RIGHT)
         self.mainFrame.pack_propagate(False)
 
-        self.menuFrame.bind("<<RemoteControlClick>>", lambda x: self.mainFrame.buildRemoteControlFrame())
-        self.menuFrame.bind("<<MyVideosClick>>", lambda x: self.mainFrame.buildMyVideosFrame())
-        self.menuFrame.bind("<<LoginClick>>", lambda x: self.mainFrame.buildLoginFrame())
-        self.menuFrame.bind("<<RegisterClick>>", lambda x: self.mainFrame.buildRegisterFrame())
-        self.menuFrame.bind("<<KafkaClick>>", lambda x: self.mainFrame.buildKafkaFrame())
+        self.menuFrame.bind("<<RemoteControlClick>>", lambda x: self.mainFrame.frameBuilder.buildRemoteControlFrame())
+        self.menuFrame.bind("<<MyVideosClick>>", lambda x: self.mainFrame.frameBuilder.buildMyVideosFrame())
+        self.menuFrame.bind("<<LoginClick>>", lambda x: self.mainFrame.frameBuilder.buildLoginFrame())
+        self.menuFrame.bind("<<RegisterClick>>", lambda x: self.mainFrame.frameBuilder.buildRegisterFrame())
+        self.menuFrame.bind("<<KafkaClick>>", lambda x: self.mainFrame.frameBuilder.buildKafkaFrame())
         self.protocol("WM_DELETE_WINDOW", self.on_exit)
 
     def on_exit(self):

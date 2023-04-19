@@ -6,7 +6,7 @@ version: "3"
 
 services:
   database-microservice:
-    image: database-microservice:v2
+    image: database-microservice:v5
     container_name: 'database-microservice'
     environment:
       - BROKER_ADDRESS=localhost:9092
@@ -19,7 +19,7 @@ services:
     depends_on:
       - kafka
   zookeeper:
-    image: docker.io/bitnami/zookeeper:3.8
+    image: 'bitnami/zookeeper:latest'
     container_name: 'zookeeper'
     ports:
       - "2181:2181"
@@ -28,7 +28,7 @@ services:
     environment:
       - ALLOW_ANONYMOUS_LOGIN=yes
   kafka:
-    image: docker.io/bitnami/kafka:3.3
+    image: 'bitnami/kafka:latest'
     container_name: 'kafka'
     ports:
       - "9092:9092"
@@ -37,6 +37,8 @@ services:
     environment:
       - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://$EXTERNAL_IP:9092
       - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_MAX_PARTITION_FETCH_BYTES=10485760
+      - KAFKA_CFG_MAX_REQUEST_SIZE=10485760
       - ALLOW_PLAINTEXT_LISTENER=yes
     depends_on:
       - zookeeper

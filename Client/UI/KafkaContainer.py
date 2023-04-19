@@ -27,14 +27,29 @@ class KafkaContainer:
         consumerConfigs['group.id'] = "-"
         self.consumer = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.partition)])
 
-    def databaseCall(self, operation: str, message: bytes, timeoutSeconds: float = None) -> kafka.Message:
+    def databaseCall(self, operation: str, message: bytes, timeoutSeconds: float = None, username: str = None, password: str = None) -> kafka.Message:
         self.seekToEnd()
-        self.producer.produce(topic=DATABASE_TOPIC, headers=[
-            ("topic", self.topic.encode()), ("partition", str(self.partition).encode()), ("operation", operation.encode()),
-        ], value=message)
+        headers = [
+            ("topic", self.topic.encode()),
+            ("partition", str(self.partition).encode()),
+            ("operation", operation.encode()),
+        ]
+
+        if operation not in ("LOGIN", "REGISTER") and username is not None and password is not None:
+            headers.append(("Name", username))
+            headers.append(("Password", password))
+
+        self.producer.produce(topic=DATABASE_TOPIC, headers=headers, value=message)
         self.producer.flush(timeout=1)
 
         return self.consumer.receiveBigMessage(timeoutSeconds, partition=self.partition)
+
+    @staticmethod
+    def getStatusFromMessage(responseMessage):
+        for header in responseMessage.headers():
+            if header[0] == "status":
+                return header[1].decode()
+        return None
 
     def resetTopic(self):
         self.topic = str(uuid.uuid1())
@@ -44,16 +59,6 @@ class KafkaContainer:
     @staticmethod
     def checkBrokerExists(address) -> bool:
         return checkKafkaActive(brokerAddress=address)
-
-    @staticmethod
-    def getStatusFromMessage(message: kafka.Message) -> Optional[str]:
-        status = None
-
-        for header in message.headers():
-            if header[0] == "status":
-                status = header[1].decode()
-
-        return status
 
     def seekToEnd(self):
         self.consumer.seekToEnd(self.topic, self.partition)

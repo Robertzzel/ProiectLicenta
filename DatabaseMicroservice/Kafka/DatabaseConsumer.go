@@ -7,15 +7,15 @@ import (
 )
 
 type DatabaseConsumer struct {
-	*ConsumerWrapper
+	*kafka.Consumer
 }
 
-func (this *DatabaseConsumer) Consume(ctx context.Context) (*kafka.Message, error) {
+func (this *DatabaseConsumer) Consume(ctx context.Context) (*CustomMessage, error) {
 	for ctx.Err() == nil {
 		ev := this.Poll(200)
 		switch e := ev.(type) {
 		case *kafka.Message:
-			return e, nil
+			return &CustomMessage{e}, nil
 		case kafka.Error:
 			return nil, e
 		default:
@@ -24,7 +24,7 @@ func (this *DatabaseConsumer) Consume(ctx context.Context) (*kafka.Message, erro
 	return nil, ctx.Err()
 }
 
-func (this *DatabaseConsumer) ConsumeFullMessage(ctx context.Context) (*kafka.Message, error) {
+func (this *DatabaseConsumer) ConsumeFullMessage(ctx context.Context) (*CustomMessage, error) {
 	message, err := this.Consume(ctx)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (this *DatabaseConsumer) ConsumeFullMessage(ctx context.Context) (*kafka.Me
 		fullMessage = append(fullMessage, messageValues...)
 	}
 
-	return &kafka.Message{Headers: message.Headers, Value: fullMessage}, err
+	return &CustomMessage{&kafka.Message{Headers: message.Headers, Value: fullMessage}}, err
 }
 
 func NewDatabaseConsumer(brokerAddress, topic string) (*DatabaseConsumer, error) {
@@ -92,5 +92,5 @@ func NewDatabaseConsumer(brokerAddress, topic string) (*DatabaseConsumer, error)
 		return nil, err
 	}
 
-	return &DatabaseConsumer{&ConsumerWrapper{consumer}}, nil
+	return &DatabaseConsumer{consumer}, nil
 }

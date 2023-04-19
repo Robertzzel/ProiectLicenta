@@ -14,7 +14,28 @@ import (
 	"time"
 )
 
-func HandleLogin(db *sql.DB, message []byte) ([]byte, error) {
+type DatabaseManager struct {
+	*sql.DB
+}
+
+func NewDatabaseManager(driverName, connectionString string) (*DatabaseManager, error) {
+	db, err := sql.Open(driverName, connectionString)
+	if err != nil {
+		return nil, err
+	}
+	return &DatabaseManager{db}, nil
+}
+
+func (db *DatabaseManager) UserExists(username, password string) bool {
+	var cnt int
+	err := db.QueryRow(`select count(*) from User where Name = ? and Password = ? LIMIT 1`, username, Hash(password)).Scan(&cnt)
+	if err != nil {
+		return false
+	}
+	return cnt == 1
+}
+
+func (db *DatabaseManager) HandleLogin(message []byte) ([]byte, error) {
 	var input map[string]string
 	if err := json.Unmarshal(message, &input); err != nil {
 		return nil, err
@@ -24,7 +45,7 @@ func HandleLogin(db *sql.DB, message []byte) ([]byte, error) {
 	password, passwordExists := input["Password"]
 
 	if !(nameExists && passwordExists) {
-		return nil, errors.New("name, password and topic needed")
+		return nil, errors.New("name, password are needed")
 	}
 
 	// cauta in functie de nume si parola
@@ -47,7 +68,7 @@ func HandleLogin(db *sql.DB, message []byte) ([]byte, error) {
 	return json.Marshal(user)
 }
 
-func HandleRegister(db *sql.DB, message []byte) ([]byte, error) {
+func (db *DatabaseManager) HandleRegister(message []byte) ([]byte, error) {
 	var input map[string]string
 	if err := json.Unmarshal(message, &input); err != nil {
 		return nil, err
@@ -72,7 +93,7 @@ func HandleRegister(db *sql.DB, message []byte) ([]byte, error) {
 	return []byte("success"), nil
 }
 
-func HandleAddVideo(db *sql.DB, message []byte, sessionId int) ([]byte, error) {
+func (db *DatabaseManager) HandleAddVideo(message []byte, sessionId int) ([]byte, error) {
 	// creaza fisierul
 	filePath, err := WriteNewFile(message)
 	if err != nil {
@@ -118,7 +139,7 @@ func HandleAddVideo(db *sql.DB, message []byte, sessionId int) ([]byte, error) {
 	return []byte("successs"), nil
 }
 
-func HandleGetCallByKeyAndPassword(db *sql.DB, message []byte) ([]byte, error) {
+func (db *DatabaseManager) HandleGetCallByKeyAndPassword(message []byte) ([]byte, error) {
 	var input map[string]string
 	if err := json.Unmarshal(message, &input); err != nil {
 		return nil, err
@@ -145,7 +166,7 @@ func HandleGetCallByKeyAndPassword(db *sql.DB, message []byte) ([]byte, error) {
 
 	// daca sharerul nu are sesiune atunci nu e activ, retueaza
 	if sessionId == nil {
-		return []byte("the user is not active"), nil
+		return nil, errors.New("the user is not active")
 	}
 
 	// gaseste topicul sesinii si creeaza mesajul
@@ -164,7 +185,7 @@ func HandleGetCallByKeyAndPassword(db *sql.DB, message []byte) ([]byte, error) {
 	return json.Marshal(map[string]string{"Topic": topic})
 }
 
-func HandleGetVideosByUser(db *sql.DB, message []byte) ([]byte, error) {
+func (db *DatabaseManager) HandleGetVideosByUser(message []byte) ([]byte, error) {
 	userId, err := strconv.Atoi(string(message))
 	if err != nil {
 		return nil, err
@@ -191,7 +212,7 @@ func HandleGetVideosByUser(db *sql.DB, message []byte) ([]byte, error) {
 	return json.Marshal(videos)
 }
 
-func HandleDownloadVideoById(db *sql.DB, message []byte) ([]byte, error) {
+func (db *DatabaseManager) HandleDownloadVideoById(message []byte) ([]byte, error) {
 	videoId, err := strconv.Atoi(string(message))
 	if err != nil {
 		return nil, err
@@ -211,7 +232,7 @@ func HandleDownloadVideoById(db *sql.DB, message []byte) ([]byte, error) {
 	return videoContents, nil
 }
 
-func HandleCreateSession(db *sql.DB, message []byte) ([]byte, error) {
+func (db *DatabaseManager) HandleCreateSession(message []byte) ([]byte, error) {
 	var input map[string]string
 	if err := json.Unmarshal(message, &input); err != nil {
 		return nil, err
@@ -246,7 +267,7 @@ func HandleCreateSession(db *sql.DB, message []byte) ([]byte, error) {
 	return []byte(strconv.FormatInt(sessionId, 10)), nil
 }
 
-func HandleDeleteSession(db *sql.DB, sessionId int) ([]byte, error) {
+func (db *DatabaseManager) HandleDeleteSession(sessionId int) ([]byte, error) {
 	if _, err := db.Exec("update User set SessionId = NULL where SessionId = ?", sessionId); err != nil {
 		return nil, err
 	}
@@ -265,4 +286,48 @@ func HandleDeleteSession(db *sql.DB, sessionId int) ([]byte, error) {
 	}
 
 	return []byte("success"), nil
+}
+
+func (db *DatabaseManager) MigrateDatabase() error {
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS Session(
+    Id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    Topic varchar(255) NOT NULL)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS User(
+    	Id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		Name varchar(255) NOT NULL,
+		Password varchar(255),
+		CallKey varchar(255) NOT NULL,
+		CallPassword varchar(255) NOT NULL,
+		SessionId int,
+    	FOREIGN KEY (SessionId) REFERENCES Session(Id),
+    	UNIQUE (Name),
+    	UNIQUE (CallKey)
+    )`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS Video(
+    Id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    FilePath varchar(255) NOT NULL,
+    Duration DOUBLE(255, 2),
+    CreatedAt DATETIME,
+    Size varchar(255),
+    UNIQUE (FilePath)
+)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS UserVideo(
+    UserId int,
+    VideoId int,
+    FOREIGN KEY (UserId) REFERENCES User(Id),
+    FOREIGN KEY (VideoId) REFERENCES Video(Id)
+)`)
+	return err
 }

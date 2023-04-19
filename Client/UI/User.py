@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class User:
     id: int
     name: str
+    password: str
     callKey: str
     callPassword: str
     sessionId: str = None

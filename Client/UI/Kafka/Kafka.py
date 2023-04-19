@@ -61,7 +61,7 @@ class KafkaConsumerWrapper(kafka.Consumer):
         _, high = self.get_watermark_offsets(tp)
         self.seek(kafka.TopicPartition(topic, partition, high))
 
-    def receiveBigMessage(self, timeoutSeconds: float = None, partition = 0) -> Optional[kafka.Message | CustomKafkaMessage]:
+    def receiveBigMessage(self, timeoutSeconds: float = None, partition = 0) -> Optional[kafka.Message | CustomKafkaMessage| str]:
         endTime = None if timeoutSeconds is None else time.time() + timeoutSeconds
 
         message = self.consumeMessage(None if endTime is None else endTime - time.time(), partition=partition)
@@ -70,7 +70,7 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
         for header in message.headers():
             if header == ("status", b"FAILED"):
-                return None
+                return message
 
         headersToBeReturned: List[str, bytes] = list(filter(lambda h: h[0] not in ("number-of-messages", "message-number"), message.headers()))
         numberOfMessages: int = 0

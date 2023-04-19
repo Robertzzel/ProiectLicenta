@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database.microservice/Kafka"
-	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
@@ -32,55 +31,60 @@ func NewContextCancelableBySignals() context.Context {
 	return ctx
 }
 
-func handleRequest(db *sql.DB, message *kafka.Message, producer *Kafka.DatabaseProducer) {
-	var sendTopic, operation string
-	var sessionId int
-	var partition = 0
-	var err error
-	for _, header := range message.Headers {
-		switch header.Key {
-		case "topic":
-			sendTopic = string(header.Value)
-		case "operation":
-			operation = string(header.Value)
-		case "partition":
-			partition, err = strconv.Atoi(string(header.Value))
-		case "sessionId":
-			sessionId, err = strconv.Atoi(string(header.Value))
-			if err != nil {
-				if err = producer.Publish([]byte("wrong session id"), []kafka.Header{{`status`, []byte("FAILED")}}, sendTopic, int32(partition)); err != nil {
-					log.Println(err)
-				}
+func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *Kafka.DatabaseProducer) {
+	if !message.ValidateHeaders() {
+		return
+	}
+
+	var headers = message.GetHeaders()
+	var sendTopic = string(headers["topic"])
+	var operation = string(headers["operation"])
+	var sessionId, _ = strconv.Atoi(string(headers["sessionId"]))
+	var partition, _ = strconv.Atoi(string(headers["partition"]))
+
+	if operation != "LOGIN" && operation != "REGISTER" && operation != "ADD_VIDEO" && operation != "DELETE_SESSION" {
+		name, hasUsername := headers["Name"]
+		password, hasPassword := headers["Password"]
+
+		if !hasUsername || !hasPassword {
+			return
+		}
+
+		if userExists := db.UserExists(string(name), string(password)); userExists == false {
+			if err := producer.Publish([]byte("permission denied"), []kafka.Header{{`status`, []byte("FAILED")}}, sendTopic, int32(partition)); err != nil {
+				fmt.Println(err)
 			}
 		}
 	}
 
 	var response []byte
+	var err error
 	switch operation {
 	case "LOGIN":
-		response, err = HandleLogin(db, message.Value)
+		response, err = db.HandleLogin(message.Value)
 	case "REGISTER":
-		response, err = HandleRegister(db, message.Value)
+		response, err = db.HandleRegister(message.Value)
 	case "ADD_VIDEO":
-		response, err = HandleAddVideo(db, message.Value, sessionId)
+		response, err = db.HandleAddVideo(message.Value, sessionId)
 	case "GET_CALL_BY_KEY":
-		response, err = HandleGetCallByKeyAndPassword(db, message.Value)
+		response, err = db.HandleGetCallByKeyAndPassword(message.Value)
 	case "GET_VIDEOS_BY_USER":
-		response, err = HandleGetVideosByUser(db, message.Value)
+		response, err = db.HandleGetVideosByUser(message.Value)
 	case "DOWNLOAD_VIDEO_BY_ID":
-		response, err = HandleDownloadVideoById(db, message.Value)
+		response, err = db.HandleDownloadVideoById(message.Value)
 	case "CREATE_SESSION":
-		response, err = HandleCreateSession(db, message.Value)
+		response, err = db.HandleCreateSession(message.Value)
 	case "DELETE_SESSION":
-		response, err = HandleDeleteSession(db, sessionId)
+		response, err = db.HandleDeleteSession(sessionId)
 	default:
 		err = errors.New("operation not permitted")
 	}
+
 	status := "OK"
 	if err != nil {
-		response = []byte(err.Error())
+		response = []byte("Error: " + err.Error())
 		status = "FAILED"
-		log.Println("$", err, "$")
+		log.Println("$", string(response), "$")
 	}
 	if err = producer.Publish(response, []kafka.Header{{`status`, []byte(status)}}, sendTopic, int32(partition)); err != nil {
 		fmt.Println(err)
@@ -88,50 +92,6 @@ func handleRequest(db *sql.DB, message *kafka.Message, producer *Kafka.DatabaseP
 	producer.Flush(200)
 
 	log.Println("Status:", status, "Opeartion:", operation, "Topic:", sendTopic, "Partition:", partition)
-}
-
-func MigrateDatabase(db *sql.DB) error {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS Session(
-    Id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    Topic varchar(255) NOT NULL)`)
-	if err != nil {
-		return err
-	}
-
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS User(
-    	Id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		Name varchar(255) NOT NULL,
-		Password varchar(255),
-		CallKey varchar(255) NOT NULL,
-		CallPassword varchar(255) NOT NULL,
-		SessionId int,
-    	FOREIGN KEY (SessionId) REFERENCES Session(Id),
-    	UNIQUE (Name),
-    	UNIQUE (CallKey)
-    )`)
-	if err != nil {
-		return err
-	}
-
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS Video(
-    Id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    FilePath varchar(255) NOT NULL,
-    Duration DOUBLE(255, 2),
-    CreatedAt DATETIME,
-    Size varchar(255),
-    UNIQUE (FilePath)
-)`)
-	if err != nil {
-		return err
-	}
-
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS UserVideo(
-    UserId int,
-    VideoId int,
-    FOREIGN KEY (UserId) REFERENCES User(Id),
-    FOREIGN KEY (VideoId) REFERENCES Video(Id)
-)`)
-	return err
 }
 
 func main() {
@@ -149,11 +109,11 @@ func main() {
 
 	connectionString := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", databaseUser, databasePassword, databaseHost, databasePort, databaseName)
 
-	db, err := sql.Open("mysql", connectionString)
+	db, err := NewDatabaseManager("mysql", connectionString)
 	if err != nil {
 		panic("cannot open the database " + err.Error())
 	}
-	defer func(db *sql.DB) {
+	defer func(db *DatabaseManager) {
 		err := db.Close()
 		if err != nil {
 			log.Println("Error while closing database object ", err)
@@ -161,7 +121,7 @@ func main() {
 	}(db)
 	db.SetMaxOpenConns(10)
 
-	if err = MigrateDatabase(db); err != nil {
+	if err = db.MigrateDatabase(); err != nil {
 		panic(err)
 	}
 

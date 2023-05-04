@@ -1,0 +1,10 @@
+#!/bin/sh
+
+go build -o VideoMicroservice.exe ./VideoMicroservice/VideoMicroservice.go ./VideoMicroservice/recorder.go ./VideoMicroservice/resizer.go ./VideoMicroservice/screenshot.go ./VideoMicroservice/screen.go ./VideoMicroservice/byte_image.go
+go build -o AggregatorMicroservice.exe AggregatorMicroservice/AggregatorMicroservice.go AggregatorMicroservice/AudioVideoPair.go
+
+chmod +x VideoMicroservice.exe
+chmod +x AggregatorMicroservice.exe
+
+#cd PingMicroservice
+#go build PingMicroservice.go

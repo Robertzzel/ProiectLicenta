@@ -57,8 +57,9 @@ class Recorder:
                                                  cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
             self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice.exe", self.brokerAddress, topic],
                                                       stdout=sys.stdout, stderr=sys.stderr)
+
             self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, topic],
-                                                         cwd=self.path, stdout=subprocess.PIPE, stderr=sys.stderr)
+                                                         cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
 
             self.running = True
         except Exception as ex:

@@ -189,13 +189,11 @@ func main() {
 		for {
 			select {
 			case filesPair := <-filesChannel:
-				fmt.Println("AGG BEFORE COMPRESSING")
 				err := CompressAndSendFiles(producer, filesPair)
 				if err != nil {
 					fmt.Println("Aggregaot sending file error", err)
 					return err
 				}
-				fmt.Println("Aggregator sent file")
 			case <-ctx.Done():
 				return nil
 			}

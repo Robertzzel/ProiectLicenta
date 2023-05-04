@@ -212,6 +212,7 @@ class KeyTranslator:
         Qt.Key_Up: Key.up,
     }
 
+
     @staticmethod
     def translate(keycode: int) -> Optional[Key | str]:
         result = None
@@ -219,9 +220,12 @@ class KeyTranslator:
             result = KeyTranslator.MAPPED_KEYS.get(keycode, None)
 
         if result is not None:
-            return KeyTranslator.keys.get(result, None)
-        else:
+            result = KeyTranslator.keys.get(result, None)
+
+        if result is None:
             return chr(keycode)
+
+        return result
 
 
 if __name__ == "__main__":

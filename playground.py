@@ -95,19 +95,15 @@ class AnotherWindow(QWidget):
     #     self.sig.emit(1)
 
     def keyPressEvent(self, event):
+
         trans = KeyTranslator.translate(event.key())
         self.keyboard_controller.press(trans)
-        print(f"{1},#{KeyTranslator.translate(trans)}#")
+        print(f"{1},#{trans}#")
 
     def keyReleaseEvent(self, event):
-        try:
-            code = ord(event.text())
-        except:
-            code = event.key()
-
-        trans = KeyTranslator.translate(code)
+        trans = KeyTranslator.translate(event.key())
         self.keyboard_controller.press(trans)
-        print(f"{2},{code}#{KeyTranslator.translate(code)}#")
+        print(f"{1},#{trans}#")
 
     def mousePressEvent(self, event):
         print("Mouse p:", event.button())

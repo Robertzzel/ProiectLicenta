@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QSize
 
@@ -36,6 +37,8 @@ class MainWindow(QMainWindow):
 
         self.themeFile = "./themes/py_dracula_dark.qss"
         self.__toggleTheme()
+        self.ui.topLogo.setStyleSheet(
+            f"background-image: url({Path(__file__).parent / 'images' / 'images' / 'PyDracula.png'});")
         self.show()
 
     def setCallbacks(self):
@@ -44,12 +47,12 @@ class MainWindow(QMainWindow):
         self.widgets.btnLogin.clicked.connect(self.btnLoginPressed)
         self.widgets.btnRegister.clicked.connect(self.btnRegisterPressed)
         self.widgets.btnMyVideos.clicked.connect(self.btnMyVideosPresses)
-        self.widgets.kafkaWindowButton.clicked.connect(self.connectToKafka)
-        self.widgets.loginButton.clicked.connect(self.loginAccount)
-        self.widgets.registerButton.clicked.connect(self.registerAccount)
+        self.widgets.kafkaWindow.pushButton.clicked.connect(self.connectToKafka)
+        self.widgets.loginWindow.pushButton.clicked.connect(self.loginAccount)
+        self.widgets.registerWindow.btnRegister.clicked.connect(self.registerAccount)
         self.widgets.btnCall.clicked.connect(self.btnCallWindowPressed)
-        self.widgets.callStartSharingButton.clicked.connect(self.startCall)
-        self.widgets.callJoinSessionButton.clicked.connect(self.joinCall)
+        self.widgets.callWindow.startSessionBtn.clicked.connect(self.startCall)
+        self.widgets.callWindow.joinSessionBtn.clicked.connect(self.joinCall)
         self.widgets.btnChangeTheme.clicked.connect(self.__toggleTheme)
 
     def __toggleTheme(self):
@@ -102,8 +105,8 @@ class MainWindow(QMainWindow):
             self.uiFunctions.setStatusMessage("No user connected")
             return
 
-        self.ui.callUserCallKeyEdit.setText(self.backend.user.callKey)
-        self.ui.callUserCallPasswordEdit.setText(self.backend.user.callPassword)
+        self.ui.callWindow.yourCallKeyEdit.setText(self.backend.user.callKey)
+        self.ui.callWindow.yourCallPasswordEdit.setText(self.backend.user.callPassword)
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.callWindow)
         UIFunctions.resetStyle(self, "btnCall")
@@ -113,7 +116,7 @@ class MainWindow(QMainWindow):
         self.dragPos = event.globalPos()
 
     def connectToKafka(self):
-        address = self.widgets.kafkaWindowTextEdit.text()
+        address = self.widgets.kafkaWindow.lineEdit.text()
         address = "localhost:9092" if address is None or address == "" else address
         connectionSet = self.backend.setKafkaConnection(address)
         if connectionSet is not True:
@@ -127,8 +130,8 @@ class MainWindow(QMainWindow):
         self.uiFunctions.setIsNotConnectedToKafkaState()
 
     def loginAccount(self):
-        username = self.ui.loginUsernameEdit.text()
-        password = self.ui.loginPasswordEdit.text()
+        username = self.ui.loginWindow.usernameLineEdit.text()
+        password = self.ui.loginWindow.passwordLineEit.text()
         if username == "" or password == "":
             self.uiFunctions.setStatusMessage("Must give username and password")
             return
@@ -162,21 +165,21 @@ class MainWindow(QMainWindow):
         self.backend.createSession()
         self.backend.startRecorder()
         self.backend.startMerger()
-        self.ui.callStartSharingButton.clicked.disconnect()
-        self.ui.callStartSharingButton.clicked.connect(self.stopCall)
-        self.ui.callStartSharingButton.setText("Stop Sharing")
+        self.ui.callWindow.startSessionBtn.clicked.disconnect()
+        self.ui.callWindow.startSessionBtn.clicked.connect(self.stopCall)
+        self.ui.callWindow.startSessionBtn.setText("Stop Sharing")
 
     def stopCall(self):
         self.backend.stopRecorder()
         self.backend.user.sessionId = None
         self.backend.kafkaContainer.resetTopic()
-        self.ui.callStartSharingButton.clicked.disconnect()
-        self.ui.callStartSharingButton.clicked.connect(self.startCall)
-        self.ui.callStartSharingButton.setText("Start Sharing")
+        self.ui.callWindow.startSessionBtn.clicked.disconnect()
+        self.ui.callWindow.startSessionBtn.clicked.connect(self.startCall)
+        self.ui.callWindow.startSessionBtn.setText("Start Sharing")
 
     def joinCall(self):
-        callKey = self.ui.callPartnerCallKeyEdit.text()
-        callPassword = self.ui.callPartnerCallPasswordEdit.text()
+        callKey = self.ui.callWindow.partnerCallKeyEdit.text()
+        callPassword = self.ui.callWindow.partnerCallPasswordEdit.text()
         if callKey == "" or callPassword == "":
             self.uiFunctions.setStatusMessage("provide both key and password")
             return

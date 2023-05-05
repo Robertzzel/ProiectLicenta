@@ -106,38 +106,38 @@ class UIFunctions:
         self.ui.closeAppBtn.clicked.connect(lambda: self.master.close())
 
     def setConnectedToKafkaState(self, address):
-        self.ui.kafkaWindowButton.setText("Disconnect")
-        self.ui.kafkaWindowTextEdit.setText(address)
-        self.ui.kafkaWindowTextEdit.setDisabled(True)
+        self.ui.kafkaWindow.pushButton.setText("Disconnect")
+        self.ui.kafkaWindow.lineEdit.setText(address)
+        self.ui.kafkaWindow.lineEdit.setDisabled(True)
 
-        self.ui.kafkaWindowButton.clicked.disconnect()
-        self.ui.kafkaWindowButton.clicked.connect(self.master.disconnectFromKafka)
+        self.ui.kafkaWindow.pushButton.clicked.disconnect()
+        self.ui.kafkaWindow.pushButton.clicked.connect(self.master.disconnectFromKafka)
 
     def setIsNotConnectedToKafkaState(self):
-        self.ui.kafkaWindowButton.setText("Connect")
-        self.ui.kafkaWindowTextEdit.setText("")
-        self.ui.kafkaWindowTextEdit.setDisabled(False)
+        self.ui.kafkaWindow.pushButton.setText("Connect")
+        self.ui.kafkaWindow.lineEdit.setText("")
+        self.ui.kafkaWindow.lineEdit.setDisabled(False)
 
-        self.ui.kafkaWindowButton.clicked.disconnect()
-        self.ui.kafkaWindowButton.clicked.connect(self.master.connectToKafka)
+        self.ui.kafkaWindow.pushButton.clicked.disconnect()
+        self.ui.kafkaWindow.pushButton.clicked.connect(self.master.connectToKafka)
 
     def setUserLoggedIn(self, username: str):
-        self.ui.loginUsernameEdit.setText(username)
-        self.ui.loginPasswordEdit.setText("")
-        self.ui.loginPasswordEdit.setDisabled(True)
-        self.ui.loginUsernameEdit.setDisabled(True)
-        self.ui.loginButton.setText("Disconnect")
-        self.ui.loginButton.clicked.disconnect()
-        self.ui.loginButton.clicked.connect(self.master.disconnectAccount)
+        self.ui.loginWindow.usernameLineEdit.setText(username)
+        self.ui.loginWindow.passwordLineEit.setText("")
+        self.ui.loginWindow.passwordLineEit.setDisabled(True)
+        self.ui.loginWindow.usernameLineEdit.setDisabled(True)
+        self.ui.loginWindow.pushButton.setText("Disconnect")
+        self.ui.loginWindow.pushButton.clicked.disconnect()
+        self.ui.loginWindow.pushButton.clicked.connect(self.master.disconnectAccount)
 
     def setUserNotLoggedIn(self):
-        self.ui.loginUsernameEdit.setText("")
-        self.ui.loginPasswordEdit.setText("")
-        self.ui.loginPasswordEdit.setDisabled(False)
-        self.ui.loginUsernameEdit.setDisabled(False)
-        self.ui.loginButton.setText("Connect")
-        self.ui.loginButton.clicked.disconnect()
-        self.ui.loginButton.clicked.connect(self.master.loginAccount)
+        self.ui.loginWindow.usernameLineEdit.setText("")
+        self.ui.loginWindow.passwordLineEit.setText("")
+        self.ui.loginWindow.passwordLineEit.setDisabled(False)
+        self.ui.loginWindow.usernameLineEdit.setDisabled(False)
+        self.ui.loginWindow.pushButton.setText("Connect")
+        self.ui.loginWindow.pushButton.clicked.disconnect()
+        self.ui.loginWindow.pushButton.clicked.connect(self.master.loginAccount)
 
     def setStatusMessage(self, message):
         self.ui.titleRightInfo.setText(message)

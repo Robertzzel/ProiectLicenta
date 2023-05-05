@@ -2,7 +2,11 @@ from pathlib import Path
 from PySide6.QtCore import *
 from PySide6.QtGui import *
 from PySide6.QtWidgets import *
-from .resources_rc import *
+
+from .CallWindow import CallWindow
+from .KafkaWindow import KafkaWindow
+from .Login import Login
+from .Register import Register
 
 
 class UiMainWindow(object):
@@ -137,7 +141,7 @@ class UiMainWindow(object):
         self.toggleButton.setFont(font)
         self.toggleButton.setCursor(QCursor(Qt.PointingHandCursor))
         self.toggleButton.setLayoutDirection(Qt.LeftToRight)
-        self.toggleButton.setStyleSheet(u"background-image: url(:/icons/images/icons/icon_menu.png);")
+        self.toggleButton.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-menu.png'});")
         self.toggleMenuSizeLayout.addWidget(self.toggleButton)
 
         self.buttonMenu = QFrame(self.leftMenuFrame)
@@ -160,7 +164,7 @@ class UiMainWindow(object):
         self.btnKafka.setFont(font)
         self.btnKafka.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnKafka.setLayoutDirection(Qt.LeftToRight)
-        self.btnKafka.setStyleSheet(u"background-image: url(:/icons/images/icons/cil-cloudy.png);")
+        self.btnKafka.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-cloudy.png'});")
         self.buttonMenuLayout.addWidget(self.btnKafka)
         # end kafka Button
 
@@ -173,7 +177,7 @@ class UiMainWindow(object):
         self.btnLogin.setFont(font)
         self.btnLogin.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnLogin.setLayoutDirection(Qt.LeftToRight)
-        self.btnLogin.setStyleSheet(u"background-image: url(:/icons/images/icons/cil-user.png);")
+        self.btnLogin.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-user.png'});")
         self.buttonMenuLayout.addWidget(self.btnLogin)
         # End Login Window Button
 
@@ -186,7 +190,7 @@ class UiMainWindow(object):
         self.btnRegister.setFont(font)
         self.btnRegister.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnRegister.setLayoutDirection(Qt.LeftToRight)
-        self.btnRegister.setStyleSheet(u"background-image: url(:/icons/images/icons/cil-user-follow.png);")
+        self.btnRegister.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-user-follow.png'});")
         self.buttonMenuLayout.addWidget(self.btnRegister)
         # End register Window Button
 
@@ -199,7 +203,7 @@ class UiMainWindow(object):
         self.btnCall.setFont(font)
         self.btnCall.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnCall.setLayoutDirection(Qt.LeftToRight)
-        self.btnCall.setStyleSheet(u"background-image: url(:/icons/images/icons/cil-laptop.png);")
+        self.btnCall.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-laptop.png'});")
         self.buttonMenuLayout.addWidget(self.btnCall)
         # End Call Window Button
 
@@ -212,7 +216,7 @@ class UiMainWindow(object):
         self.btnMyVideos.setFont(font)
         self.btnMyVideos.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnMyVideos.setLayoutDirection(Qt.LeftToRight)
-        self.btnMyVideos.setStyleSheet(u"background-image: url(:/icons/images/icons/cil-media-play.png);")
+        self.btnMyVideos.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-media-play.png'});")
         self.buttonMenuLayout.addWidget(self.btnMyVideos)
         # End My Videos Button
 
@@ -225,7 +229,7 @@ class UiMainWindow(object):
         self.btnChangeTheme.setFont(font)
         self.btnChangeTheme.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnChangeTheme.setLayoutDirection(Qt.LeftToRight)
-        self.btnChangeTheme.setStyleSheet(u"background-image: url(:/icons/images/icons/cil-star.png);")
+        self.btnChangeTheme.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-star.png'});")
         self.buttonMenuLayout.addWidget(self.btnChangeTheme)
         # change theme button end
 
@@ -304,7 +308,7 @@ class UiMainWindow(object):
         self.minimizeAppBtn.setMaximumSize(QSize(28, 28))
         self.minimizeAppBtn.setCursor(QCursor(Qt.PointingHandCursor))
         icon2 = QIcon()
-        icon2.addFile(u":/icons/images/icons/icon_minimize.png", QSize(), QIcon.Normal, QIcon.Off)
+        icon2.addFile(str(Path(__file__).parent.parent / 'images' / 'icons' / 'icon_minimize.png'), QSize(), QIcon.Normal, QIcon.Off)
         self.minimizeAppBtn.setIcon(icon2)
         self.minimizeAppBtn.setIconSize(QSize(20, 20))
         self.rightButtonsLayout.addWidget(self.minimizeAppBtn)
@@ -318,7 +322,7 @@ class UiMainWindow(object):
         self.maximizeRestoreAppBtn.setFont(font3)
         self.maximizeRestoreAppBtn.setCursor(QCursor(Qt.PointingHandCursor))
         icon3 = QIcon()
-        icon3.addFile(u":/icons/images/icons/icon_maximize.png", QSize(), QIcon.Normal, QIcon.Off)
+        icon3.addFile(str(Path(__file__).parent.parent / 'images' / 'icons' / 'icon_maximize.png'), QSize(), QIcon.Normal, QIcon.Off)
         self.maximizeRestoreAppBtn.setIcon(icon3)
         self.maximizeRestoreAppBtn.setIconSize(QSize(20, 20))
         self.rightButtonsLayout.addWidget(self.maximizeRestoreAppBtn)
@@ -331,7 +335,7 @@ class UiMainWindow(object):
         self.closeAppBtn.setMaximumSize(QSize(28, 28))
         self.closeAppBtn.setCursor(QCursor(Qt.PointingHandCursor))
         iconClose = QIcon()
-        iconClose.addFile(":/icons/images/icons/cil-x.png", QSize(), QIcon.Normal, QIcon.Off)
+        iconClose.addFile(str(Path(__file__).parent.parent / 'images' / 'icons' / 'cil-x.png'), QSize(), QIcon.Normal, QIcon.Off)
         self.closeAppBtn.setIcon(iconClose)
         self.closeAppBtn.setIconSize(QSize(20, 20))
         self.rightButtonsLayout.addWidget(self.closeAppBtn)
@@ -405,80 +409,91 @@ class UiMainWindow(object):
         self.bottomBarLayout.addWidget(self.resizeGrip)
 
         # Kafka Window
-        self.kafkaWindow = QWidget(MainWindow)
-        self.kafkaWindowVerticalLayout = QVBoxLayout(self.kafkaWindow)
-        self.kafkaWindowLabel = QLabel("Kafka Address")
-        self.kafkaWindowTextEdit = QLineEdit()
-        self.kafkaWindowButton = QPushButton("Connect")
-        self.kafkaWindowVerticalLayout.addWidget(self.kafkaWindowLabel)
-        self.kafkaWindowVerticalLayout.addWidget(self.kafkaWindowTextEdit)
-        self.kafkaWindowVerticalLayout.addWidget(self.kafkaWindowButton)
+        # self.kafkaWindow = QWidget(MainWindow)
+        # self.kafkaWindowVerticalLayout = QVBoxLayout(self.kafkaWindow)
+        # self.kafkaWindowVerticalLayout.setAlignment(Qt.AlignCenter)
+        # self.kafkaWindow.setStyleSheet("border: 1px solid rgb(255,0,0);")
+        # self.kafkaWindowVerticalLayout.setContentsMargins(0,0,0,0)
+        # self.kafkaWindowVerticalLayout.setSpacing(0)
+        # self.kafkaWindowLabel = QLabel("Kafka Address")
+        # self.kafkaWindowLabel.setAlignment(Qt.AlignCenter)
+        # #self.kafkaWindowLabel.setStyleSheet("margin-left: 100px")
+        # self.kafkaWindowLabel.setFixedSize(QSize(300, 50))
+        # self.kafkaWindowTextEdit = QLineEdit()
+        # self.kafkaWindowTextEdit.setStyleSheet("width: 10px")
+        # self.kafkaWindowButton = QPushButton("Connect")
+        # self.kafkaWindowButton.setStyleSheet("width: 10px")
+        # self.kafkaWindowVerticalLayout.addWidget(self.kafkaWindowLabel)
+        # self.kafkaWindowVerticalLayout.addWidget(self.kafkaWindowTextEdit)
+        # self.kafkaWindowVerticalLayout.addWidget(self.kafkaWindowButton)
+        # self.pagesStack.addWidget(self.kafkaWindow)
+        self.kafkaWindow = KafkaWindow(MainWindow)
         self.pagesStack.addWidget(self.kafkaWindow)
         # End Kafka Window
 
         # Login Window
-        self.loginWindow = QWidget(MainWindow)
-        self.loginWindowLayout = QVBoxLayout(self.loginWindow)
-        self.loginUsernameLabel = QLabel("Username")
-        self.loginPasswordLabel = QLabel("Password")
-        self.loginUsernameEdit = QLineEdit()
-        self.loginPasswordEdit = QLineEdit()
-        self.loginButton = QPushButton("Connect")
-        self.loginWindowLayout.addWidget(self.loginUsernameLabel)
-        self.loginWindowLayout.addWidget(self.loginUsernameEdit)
-        self.loginWindowLayout.addWidget(self.loginPasswordLabel)
-        self.loginWindowLayout.addWidget(self.loginPasswordEdit)
-        self.loginWindowLayout.addWidget(self.loginButton)
+        self.loginWindow = Login(MainWindow)
+        # self.loginWindowLayout = QVBoxLayout(self.loginWindow)
+        # self.loginUsernameLabel = QLabel("Username")
+        # self.loginPasswordLabel = QLabel("Password")
+        # self.loginUsernameEdit = QLineEdit()
+        # self.loginPasswordEdit = QLineEdit()
+        # self.loginButton = QPushButton("Connect")
+        # self.loginWindowLayout.addWidget(self.loginUsernameLabel)
+        # self.loginWindowLayout.addWidget(self.loginUsernameEdit)
+        # self.loginWindowLayout.addWidget(self.loginPasswordLabel)
+        # self.loginWindowLayout.addWidget(self.loginPasswordEdit)
+        # self.loginWindowLayout.addWidget(self.loginButton)
         self.pagesStack.addWidget(self.loginWindow)
         # End Login Window
 
         # Register Window
-        self.registerWindow = QWidget(MainWindow)
-        self.registerWindowLayout = QVBoxLayout(self.registerWindow)
-        self.registerUsernameLabel = QLabel("Username")
-        self.registerPasswordLabel = QLabel("Password")
-        self.registerConfirmPasswordLabel = QLabel("Confirm Password")
-        self.registerUsernameEdit = QLineEdit()
-        self.registerPasswordEdit = QLineEdit()
-        self.registerConfirmPasswordEdit = QLineEdit()
-        self.registerButton = QPushButton("Connect")
-        self.registerWindowLayout.addWidget(self.registerUsernameLabel)
-        self.registerWindowLayout.addWidget(self.registerUsernameEdit)
-        self.registerWindowLayout.addWidget(self.registerPasswordLabel)
-        self.registerWindowLayout.addWidget(self.registerPasswordEdit)
-        self.registerWindowLayout.addWidget(self.registerConfirmPasswordLabel)
-        self.registerWindowLayout.addWidget(self.registerConfirmPasswordEdit)
-        self.registerWindowLayout.addWidget(self.registerButton)
+        self.registerWindow = Register(MainWindow)
+        # self.registerWindowLayout = QVBoxLayout(self.registerWindow)
+        # self.registerUsernameLabel = QLabel("Username")
+        # self.registerPasswordLabel = QLabel("Password")
+        # self.registerConfirmPasswordLabel = QLabel("Confirm Password")
+        # self.registerUsernameEdit = QLineEdit()
+        # self.registerPasswordEdit = QLineEdit()
+        # self.registerConfirmPasswordEdit = QLineEdit()
+        # self.registerButton = QPushButton("Connect")
+        # self.registerWindowLayout.addWidget(self.registerUsernameLabel)
+        # self.registerWindowLayout.addWidget(self.registerUsernameEdit)
+        # self.registerWindowLayout.addWidget(self.registerPasswordLabel)
+        # self.registerWindowLayout.addWidget(self.registerPasswordEdit)
+        # self.registerWindowLayout.addWidget(self.registerConfirmPasswordLabel)
+        # self.registerWindowLayout.addWidget(self.registerConfirmPasswordEdit)
+        # self.registerWindowLayout.addWidget(self.registerButton)
         self.pagesStack.addWidget(self.registerWindow)
         # End register Window
 
         # Call Window
-        self.callWindow = QWidget(MainWindow)
-        self.callWindowLayout = QVBoxLayout(self.callWindow)
-
-        self.callUserCallKeyLabel = QLabel("Call Key")
-        self.callUserCallPasswordLabel = QLabel("Call Password")
-        self.callUserCallKeyEdit = QLineEdit()
-        self.callUserCallKeyEdit.setReadOnly(True)
-        self.callUserCallPasswordEdit = QLineEdit()
-        self.callUserCallPasswordEdit.setReadOnly(True)
-        self.callStartSharingButton = QPushButton("Start Sharing")
-        self.callWindowLayout.addWidget(self.callUserCallKeyLabel)
-        self.callWindowLayout.addWidget(self.callUserCallKeyEdit)
-        self.callWindowLayout.addWidget(self.callUserCallPasswordLabel)
-        self.callWindowLayout.addWidget(self.callUserCallPasswordEdit)
-        self.callWindowLayout.addWidget(self.callStartSharingButton)
-
-        self.callPartnerCallKeyLabel = QLabel("Call Key")
-        self.callPartnerCallPasswordLabel = QLabel("Call Password")
-        self.callPartnerCallKeyEdit = QLineEdit()
-        self.callPartnerCallPasswordEdit = QLineEdit()
-        self.callJoinSessionButton = QPushButton("Join Session")
-        self.callWindowLayout.addWidget(self.callPartnerCallKeyLabel)
-        self.callWindowLayout.addWidget(self.callPartnerCallKeyEdit)
-        self.callWindowLayout.addWidget(self.callPartnerCallPasswordLabel)
-        self.callWindowLayout.addWidget(self.callPartnerCallPasswordEdit)
-        self.callWindowLayout.addWidget(self.callJoinSessionButton)
+        self.callWindow = CallWindow(MainWindow)
+        # self.callWindowLayout = QVBoxLayout(self.callWindow)
+        #
+        # self.callUserCallKeyLabel = QLabel("Call Key")
+        # self.callUserCallPasswordLabel = QLabel("Call Password")
+        # self.callUserCallKeyEdit = QLineEdit()
+        # self.callUserCallKeyEdit.setReadOnly(True)
+        # self.callUserCallPasswordEdit = QLineEdit()
+        # self.callUserCallPasswordEdit.setReadOnly(True)
+        # self.callStartSharingButton = QPushButton("Start Sharing")
+        # self.callWindowLayout.addWidget(self.callUserCallKeyLabel)
+        # self.callWindowLayout.addWidget(self.callUserCallKeyEdit)
+        # self.callWindowLayout.addWidget(self.callUserCallPasswordLabel)
+        # self.callWindowLayout.addWidget(self.callUserCallPasswordEdit)
+        # self.callWindowLayout.addWidget(self.callStartSharingButton)
+        #
+        # self.callPartnerCallKeyLabel = QLabel("Call Key")
+        # self.callPartnerCallPasswordLabel = QLabel("Call Password")
+        # self.callPartnerCallKeyEdit = QLineEdit()
+        # self.callPartnerCallPasswordEdit = QLineEdit()
+        # self.callJoinSessionButton = QPushButton("Join Session")
+        # self.callWindowLayout.addWidget(self.callPartnerCallKeyLabel)
+        # self.callWindowLayout.addWidget(self.callPartnerCallKeyEdit)
+        # self.callWindowLayout.addWidget(self.callPartnerCallPasswordLabel)
+        # self.callWindowLayout.addWidget(self.callPartnerCallPasswordEdit)
+        # self.callWindowLayout.addWidget(self.callJoinSessionButton)
 
         self.pagesStack.addWidget(self.callWindow)
         # End Call Window

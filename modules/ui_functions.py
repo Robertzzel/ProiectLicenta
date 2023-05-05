@@ -31,11 +31,11 @@ class UIFunctions:
         self.state = status
 
     def toggleMenu(self):
-        width = Settings.MENU_WIDTH if self.ui.leftMenuBg.width() == 60 else 60
+        width = Settings.MENU_WIDTH if self.ui.leftMenuWithLogoFrame.width() == 60 else 60
         # ANIMATION
-        self.animation = QPropertyAnimation(self.ui.leftMenuBg, b"minimumWidth")
+        self.animation = QPropertyAnimation(self.ui.leftMenuWithLogoFrame, b"minimumWidth")
         self.animation.setDuration(Settings.TIME_ANIMATION)
-        self.animation.setStartValue(60 if self.ui.leftMenuBg.width() == 60 else Settings.MENU_WIDTH)
+        self.animation.setStartValue(60 if self.ui.leftMenuWithLogoFrame.width() == 60 else Settings.MENU_WIDTH)
         self.animation.setEndValue(width)
         self.animation.setEasingCurve(QEasingCurve.InOutQuart)
         self.animation.start()

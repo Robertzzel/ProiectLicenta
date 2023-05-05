@@ -164,7 +164,7 @@ class UiMainWindow(object):
 
         # Call Window Button
         self.btnCall = QPushButton(self.topMenu)
-        self.btnCall.setObjectName(u"btnRegister")
+        self.btnCall.setObjectName(u"btnCall")
         sizePolicy.setHeightForWidth(self.btnCall.sizePolicy().hasHeightForWidth())
         self.btnCall.setSizePolicy(sizePolicy)
         self.btnCall.setMinimumSize(QSize(0, 45))
@@ -174,6 +174,19 @@ class UiMainWindow(object):
         self.btnCall.setStyleSheet(u"background-image: url(:/icons/images/icons/cil-laptop.png);")
         self.verticalLayout_8.addWidget(self.btnCall)
         # End Call Window Button
+
+        # My Videos Button
+        self.btnMyVideos = QPushButton(self.topMenu)
+        self.btnMyVideos.setObjectName(u"btnMyVideos")
+        sizePolicy.setHeightForWidth(self.btnMyVideos.sizePolicy().hasHeightForWidth())
+        self.btnMyVideos.setSizePolicy(sizePolicy)
+        self.btnMyVideos.setMinimumSize(QSize(0, 45))
+        self.btnMyVideos.setFont(font)
+        self.btnMyVideos.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btnMyVideos.setLayoutDirection(Qt.LeftToRight)
+        self.btnMyVideos.setStyleSheet(u"background-image: url(:/icons/images/icons/cil-media-play.png);")
+        self.verticalLayout_8.addWidget(self.btnMyVideos)
+        # End My Videos Button
 
         # change theme button
         self.btnChangeTheme = QPushButton(self.topMenu)
@@ -499,6 +512,18 @@ class UiMainWindow(object):
         self.stackedWidget.addWidget(self.callWindow)
         # End Call Window
 
+        # My Videos Window
+        self.myVideosWindow = QWidget(MainWindow)
+        self.myVideosWindowLayout = QVBoxLayout(self.myVideosWindow)
+        self.myVideosScroll = QScrollArea()
+        self.myVideosScroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.myVideosScroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.myVideosScroll.setWidgetResizable(True)
+        self.myVideosScroll.setWidget(self.myVideosWindow)
+
+        self.stackedWidget.addWidget(self.myVideosWindow)
+        # End My Videos Window
+
     def retranslateUi(self, MainWindow):
         MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"MainWindow", None))
         self.titleLeftApp.setText(QCoreApplication.translate("MainWindow", u"PyDracula", None))
@@ -508,6 +533,7 @@ class UiMainWindow(object):
         self.btnLogin.setText(QCoreApplication.translate("MainWindow", u"Login", None))
         self.btnRegister.setText(QCoreApplication.translate("MainWindow", u"Register", None))
         self.btnCall.setText(QCoreApplication.translate("MainWindow", u"Call", None))
+        self.btnMyVideos.setText(QCoreApplication.translate("MainWindow", u"MyVideos", None))
         self.btnChangeTheme.setText(QCoreApplication.translate("MainWindow", u"Change Theme", None))
         self.titleRightInfo.setText(
             QCoreApplication.translate("MainWindow", u"PyDracula APP - Theme with colors based on Dracula for Python.",

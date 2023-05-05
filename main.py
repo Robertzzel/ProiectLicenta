@@ -39,8 +39,10 @@ class MainWindow(QMainWindow):
         self.widgets.btnKafka.clicked.connect(self.btnKafkaPressed)
         self.widgets.btnLogin.clicked.connect(self.btnLoginPressed)
         self.widgets.btnRegister.clicked.connect(self.btnRegisterPressed)
+        self.widgets.btnMyVideos.clicked.connect(self.btnMyVideosPresses)
         self.widgets.kafkaWindowButton.clicked.connect(self.connectToKafka)
         self.widgets.loginButton.clicked.connect(self.loginAccount)
+        self.widgets.registerButton.clicked.connect(self.registerAccount)
         self.widgets.btnCall.clicked.connect(self.btnCallWindowPressed)
         self.widgets.callStartSharingButton.clicked.connect(self.startCall)
         self.widgets.callJoinSessionButton.clicked.connect(self.joinCall)
@@ -68,9 +70,31 @@ class MainWindow(QMainWindow):
         UIFunctions.resetStyle(self, "btnRegister")
         btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
 
+    def btnMyVideosPresses(self):
+        if self.backend.user is None:
+            self.uiFunctions.setStatusMessage("No user connected")
+            return
+
+        videos = self.backend.getUserVideos()
+        for video in videos:
+            vBox = QHBoxLayout()
+            self.ui.myVideosWindowLayout.addLayout(vBox)
+
+            vBox.addWidget(QLabel(f"DURATION: {video[0]} secs"))
+            vBox.addWidget(QLabel(f"SIZE: {video[1]} bytes"))
+            vBox.addWidget(QLabel(f"CREATED: {video[2]}"))
+            btn = QPushButton("DOWNLOAD")
+            btn.clicked.connect(lambda checked=True, id=video[3]: self.downloadVideo(id))
+            vBox.addWidget(btn)
+
+        btn = self.sender()
+        self.widgets.stackedWidget.setCurrentWidget(self.widgets.myVideosWindow)
+        UIFunctions.resetStyle(self, "btnMyVideos")
+        btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
+
     def btnCallWindowPressed(self):
         if self.backend.user is None:
-            print("No user connected")
+            self.uiFunctions.setStatusMessage("No user connected")
             return
 
         self.ui.callUserCallKeyEdit.setText(self.backend.user.callKey)
@@ -101,12 +125,12 @@ class MainWindow(QMainWindow):
         username = self.ui.loginUsernameEdit.text()
         password = self.ui.loginPasswordEdit.text()
         if username == "" or password == "":
-            print("Must give username and password")
+            self.uiFunctions.setStatusMessage("Must give username and password")
             return
 
         loginResult = self.backend.login(username, password)
         if loginResult is not None:
-            print(loginResult)
+            self.uiFunctions.setStatusMessage(loginResult)
             return
         self.uiFunctions.setUserLoggedIn(username)
 
@@ -119,15 +143,15 @@ class MainWindow(QMainWindow):
         password = self.ui.registerPasswordEdit.text()
         confirmPassword = self.ui.registerConfirmPasswordEdit.text()
         if username == "" or password == "" or confirmPassword == "":
-            print("Must give username, password and confirm password")
+            self.uiFunctions.setStatusMessage("Must give username, password and confirm password")
             return
         if password != confirmPassword:
-            print("The Password and the confirmation are not the same")
+            self.uiFunctions.setStatusMessage("The Password and the confirmation are not the same")
             return
 
         registerResult = self.backend.registerNewAccount(username, password)
         if registerResult is not None:
-            print(registerResult)
+            self.uiFunctions.setStatusMessage(registerResult)
 
     def startCall(self):
         self.backend.createSession()
@@ -149,20 +173,32 @@ class MainWindow(QMainWindow):
         callKey = self.ui.callPartnerCallKeyEdit.text()
         callPassword = self.ui.callPartnerCallPasswordEdit.text()
         if callKey == "" or callPassword == "":
-            print("provide both key and password")
+            self.uiFunctions.setStatusMessage("provide both key and password")
             return
 
         topic = self.backend.getPartnerTopic(callKey, callPassword)
         if type(topic) is Exception:
-            print(topic)
+            self.uiFunctions.setStatusMessage(topic)
             return
 
         self.w = AnotherWindow(topic, self.backend.kafkaContainer.address)
         self.w.show()
 
-    def exitCall(self):
-        # TODO: sterge toate ferestrele deschise
-        pass
+    def downloadVideo(self, videoId: int):
+        file = QFileDialog()
+        file.setDefaultSuffix("mp4")
+        f = file.getSaveFileName(self, 'Save File')
+        if file is None:
+            self.uiFunctions.setStatusMessage("No file selected")
+            return
+
+        video = self.backend.downloadVideo(videoId)
+        if type(video) is Exception:
+            self.uiFunctions.setStatusMessage(video)
+            return
+
+        with open(f[0], "wb") as file:
+            file.write(video)
 
 
 if __name__ == "__main__":

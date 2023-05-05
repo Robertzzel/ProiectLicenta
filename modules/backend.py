@@ -107,3 +107,31 @@ class Backend:
     def stopRecorder(self):
         if self.sender is not None:
             self.sender.stop()
+
+    def getUserVideos(self):
+        msg = self.kafkaContainer.databaseCall("GET_VIDEOS_BY_USER", str(self.user.id).encode(),
+                                                      timeoutSeconds=2, username=self.user.name,
+                                                      password=self.user.password)
+        if msg is None:
+            return Exception("Cannot talk to the database")
+
+        status = KafkaContainer.getStatusFromMessage(msg)
+        if status is None or status.lower() != "ok":
+            return Exception("Cannot get videos")
+
+        data = json.loads(msg.value())
+
+        return ((video.get('Duration'), video.get('Size'),
+                 video.get("CreatedAt"), video.get("ID")) for video in data)
+
+    def downloadVideo(self, videoId):
+        msg = self.kafkaContainer.databaseCall("DOWNLOAD_VIDEO_BY_ID", str(videoId).encode(), username=self.user.name,
+                                               password=self.user.password)
+        if msg is None:
+            return Exception("Cannot download video, database not responding")
+
+        status = self.kafkaContainer.getStatusFromMessage(msg)
+        if status.lower() != "ok":
+            return Exception(f"Download video, {status}")
+
+        return msg.value()

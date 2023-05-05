@@ -61,12 +61,10 @@ class DisplayContentThread(QThread):
 
 class StreamReceiverThread(QThread):
 
-    def __init__(self, master,vq, aq):
+    def __init__(self, master):
         super().__init__()
         self.streamConsumer = None
         self.master = master
-        self.videoFramesQueue: Queue = vq
-        self.audioBlocksQueue: Queue = aq
 
     def run(self):
         try:
@@ -90,19 +88,19 @@ class StreamReceiverThread(QThread):
                     for packet in container.demux():
                         for frame in packet.decode():
                             if isinstance(frame, av.VideoFrame) and not self.master.stopEvent:
-                                self.videoFramesQueue.put(item=frame, block=True)
+                                self.master.videoFramesQueue.put(item=frame, block=True)
                             elif isinstance(frame, av.AudioFrame) and not self.master.stopEvent:
-                                self.audioBlocksQueue.put(item=frame.to_ndarray(), block=True)
+                                self.master.audioBlocksQueue.put(item=frame.to_ndarray(), block=True)
         except BaseException as ex:
             print(ex)
 
         self.master.stopEvent = True
 
     def clearAudioAndVideoQueues(self):
-        with self.videoFramesQueue.mutex:
-            self.videoFramesQueue.queue.clear()
-        with self.audioBlocksQueue.mutex:
-            self.audioBlocksQueue.queue.clear()
+        with self.master.videoFramesQueue.mutex:
+            self.master.videoFramesQueue.queue.clear()
+        with self.master.audioBlocksQueue.mutex:
+            self.master.audioBlocksQueue.queue.clear()
 
 
 class SendInputsThread(QThread):
@@ -146,7 +144,7 @@ class AnotherWindow(QWidget):
         self._resampling_method: int = Image.NEAREST
 
         self.dct = DisplayContentThread(self)
-        self.srt = StreamReceiverThread(self, self.videoFramesQueue, self.audioBlocksQueue)
+        self.srt = StreamReceiverThread(self)
         self.sit = SendInputsThread(self)
 
         self.dct.imageEvent.connect(self.displayFrame)
@@ -156,6 +154,7 @@ class AnotherWindow(QWidget):
         self.label.mouseMoveEvent = self.mouseMoveEvent
         self.label.wheelEvent = self.wheelEvent
         self.label.mousePressEvent = self.mousePressEvent
+        self.windowSize = ()
 
     def keyPressEvent(self, event):
         self.inputsBuffer.add(f"{PRESS},{event.key()}")
@@ -194,11 +193,13 @@ class AnotherWindow(QWidget):
         self.inputsBuffer.add(f"{CLICK},{button},0")
 
     def mouseMoveEvent(self, event):
-        self.inputsBuffer.add(f"{MOVE},{round(event.x() / self.width(), 3)},{round(event.y() / self.height(), 3)}")
+        self.inputsBuffer.add(f"{MOVE},{round(event.x() / self.windowSize[0], 3)},{round(event.y() / self.windowSize[1], 3)}")
 
     def resizeEvent(self, event):
-        self.label.setFixedWidth(self.width() - 1)
-        self.label.setFixedHeight(self.height() - 1)
+        self.windowSize = (self.width(), self.height())
+        self.labelSize = (self.windowSize[0] - 1, self.windowSize[1] - 1)
+        self.label.setFixedWidth(self.labelSize[0])
+        self.label.setFixedHeight(self.labelSize[1])
 
     def play(self):
         self.srt.start()
@@ -232,7 +233,13 @@ class AnotherWindow(QWidget):
         outdata[:] = data
 
     def displayFrame(self, image):
-        self.label.setPixmap(QPixmap.fromImage(ImageQt(image.resize((self.width()-1, self.height()-1), self._resampling_method))))
+        self.label.setPixmap(
+            QPixmap.fromImage(
+                ImageQt(
+                    image.resize((self.labelSize[0], self.labelSize[1]), self._resampling_method)
+                )
+            )
+        )
 
     def stop(self):
         self.stopEvent = True

@@ -1,6 +1,7 @@
 from PySide6 import QtCore
 
 from main import *
+from modules import UiMainWindow
 
 
 class UIFunctions:
@@ -138,3 +139,6 @@ class UIFunctions:
         self.ui.loginButton.setText("Connect")
         self.ui.loginButton.clicked.disconnect()
         self.ui.loginButton.clicked.connect(self.master.loginAccount)
+
+    def setStatusMessage(self, message):
+        self.ui.titleRightInfo.setText(message)

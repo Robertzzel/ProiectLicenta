@@ -1,4 +1,6 @@
 from PySide6 import QtCore
+from PySide6.QtCore import Qt, QEvent, QTimer, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QColor
 
 from main import *
 from modules import UiMainWindow
@@ -48,18 +50,15 @@ class UIFunctions:
         deselect = getStyle.replace(Settings.MENU_SELECTED_STYLESHEET, "")
         return deselect
 
-    def selectStandardMenu(self, widget):
-        for w in self.ui.topMenu.findChildren(QPushButton):
-            if w.objectName() == widget:
-                w.setStyleSheet(UIFunctions.selectMenu(w.mainWindowWidget()))
-
     def resetStyle(self, widget):
-        for w in self.ui.topMenu.findChildren(QPushButton):
+        for w in self.ui.buttonMenu.findChildren(QPushButton):
             if w.objectName() != widget:
                 try:
-                    w.setStyleSheet(UIFunctions.deselectMenu(w.mainWindowWidget()))
-                except Exception:
-                    pass
+                    mainWindowWidget = w.styleSheet()
+                    style = UIFunctions.deselectMenu(mainWindowWidget)
+                    w.setStyleSheet(style)
+                except Exception as ex:
+                    print(ex)
 
     def theme(self, file):
         str = open(file, 'r').read()
@@ -94,7 +93,7 @@ class UIFunctions:
         self.ui.bgApp.setGraphicsEffect(self.shadow)
 
         # RESIZE WINDOW
-        self.sizegrip = QSizeGrip(self.ui.frame_size_grip)
+        self.sizegrip = QSizeGrip(self.ui.resizeGrip)
         self.sizegrip.setStyleSheet("width: 20px; height: 20px; margin 0px; padding: 0px;")
 
         # MINIMIZE
@@ -142,3 +141,9 @@ class UIFunctions:
 
     def setStatusMessage(self, message):
         self.ui.titleRightInfo.setText(message)
+
+    def clearLayout(self, layout):
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()

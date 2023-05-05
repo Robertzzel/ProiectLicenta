@@ -1,12 +1,12 @@
-import os, sys
+import os
+import sys
+
+from PySide6.QtCore import QSize
+
 from modules import *
-from PySide6.QtCore import *
-from PySide6.QtGui import *
 from PySide6.QtWidgets import *
-from tkinter import Tk
 
 from modules.backend import Backend
-from utils.ControlWindow import VideoWindow
 from utils.ControlWindowPyQt import AnotherWindow
 
 os.environ["QT_FONT_DPI"] = "96" # FIX Problem for High DPI and Scale above 100%
@@ -15,6 +15,10 @@ os.environ["QT_FONT_DPI"] = "96" # FIX Problem for High DPI and Scale above 100%
 class MainWindow(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
+
+        self.resize(940, 560)
+        self.setMinimumSize(QSize(940, 560))
+        self.setObjectName(u"MainWindow")
 
         self.videoWindow = None
         self.ui = UiMainWindow(self)
@@ -28,7 +32,7 @@ class MainWindow(QMainWindow):
 
         self.setCallbacks()
 
-        self.widgets.stackedWidget.setCurrentWidget(self.widgets.kafkaWindow)
+        self.widgets.pagesStack.setCurrentWidget(self.widgets.kafkaWindow)
 
         self.themeFile = "./themes/py_dracula_dark.qss"
         self.__toggleTheme()
@@ -54,19 +58,19 @@ class MainWindow(QMainWindow):
 
     def btnKafkaPressed(self):
         btn = self.sender()
-        self.widgets.stackedWidget.setCurrentWidget(self.widgets.kafkaWindow)
+        self.widgets.pagesStack.setCurrentWidget(self.widgets.kafkaWindow)
         UIFunctions.resetStyle(self, "btnKafka")
         btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
 
     def btnLoginPressed(self):
         btn = self.sender()
-        self.widgets.stackedWidget.setCurrentWidget(self.widgets.loginWindow)
+        self.widgets.pagesStack.setCurrentWidget(self.widgets.loginWindow)
         UIFunctions.resetStyle(self, "btnLogin")
         btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
 
     def btnRegisterPressed(self):
         btn = self.sender()
-        self.widgets.stackedWidget.setCurrentWidget(self.widgets.registerWindow)
+        self.widgets.pagesStack.setCurrentWidget(self.widgets.registerWindow)
         UIFunctions.resetStyle(self, "btnRegister")
         btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
 
@@ -75,6 +79,7 @@ class MainWindow(QMainWindow):
             self.uiFunctions.setStatusMessage("No user connected")
             return
 
+        self.uiFunctions.clearLayout(self.ui.myVideosWindowLayout)
         videos = self.backend.getUserVideos()
         for video in videos:
             vBox = QHBoxLayout()
@@ -88,7 +93,7 @@ class MainWindow(QMainWindow):
             vBox.addWidget(btn)
 
         btn = self.sender()
-        self.widgets.stackedWidget.setCurrentWidget(self.widgets.myVideosWindow)
+        self.widgets.pagesStack.setCurrentWidget(self.widgets.myVideosWindow)
         UIFunctions.resetStyle(self, "btnMyVideos")
         btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
 
@@ -100,7 +105,7 @@ class MainWindow(QMainWindow):
         self.ui.callUserCallKeyEdit.setText(self.backend.user.callKey)
         self.ui.callUserCallPasswordEdit.setText(self.backend.user.callPassword)
         btn = self.sender()
-        self.widgets.stackedWidget.setCurrentWidget(self.widgets.callWindow)
+        self.widgets.pagesStack.setCurrentWidget(self.widgets.callWindow)
         UIFunctions.resetStyle(self, "btnCall")
         btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
 
@@ -130,7 +135,7 @@ class MainWindow(QMainWindow):
 
         loginResult = self.backend.login(username, password)
         if loginResult is not None:
-            self.uiFunctions.setStatusMessage(loginResult)
+            self.uiFunctions.setStatusMessage(str(loginResult))
             return
         self.uiFunctions.setUserLoggedIn(username)
 
@@ -151,7 +156,7 @@ class MainWindow(QMainWindow):
 
         registerResult = self.backend.registerNewAccount(username, password)
         if registerResult is not None:
-            self.uiFunctions.setStatusMessage(registerResult)
+            self.uiFunctions.setStatusMessage(str(registerResult))
 
     def startCall(self):
         self.backend.createSession()
@@ -178,7 +183,7 @@ class MainWindow(QMainWindow):
 
         topic = self.backend.getPartnerTopic(callKey, callPassword)
         if type(topic) is Exception:
-            self.uiFunctions.setStatusMessage(topic)
+            self.uiFunctions.setStatusMessage(str(topic))
             return
 
         self.w = AnotherWindow(topic, self.backend.kafkaContainer.address)
@@ -194,7 +199,7 @@ class MainWindow(QMainWindow):
 
         video = self.backend.downloadVideo(videoId)
         if type(video) is Exception:
-            self.uiFunctions.setStatusMessage(video)
+            self.uiFunctions.setStatusMessage(str(video))
             return
 
         with open(f[0], "wb") as file:

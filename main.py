@@ -7,6 +7,7 @@ from PySide6.QtCore import QSize
 from modules import *
 from PySide6.QtWidgets import *
 
+from modules.VideoWidget import VideoWidget
 from modules.backend import Backend
 from utils.ControlWindowPyQt import AnotherWindow
 
@@ -85,15 +86,8 @@ class MainWindow(QMainWindow):
         self.uiFunctions.clearLayout(self.ui.myVideosWindowLayout)
         videos = self.backend.getUserVideos()
         for video in videos:
-            vBox = QHBoxLayout()
-            self.ui.myVideosWindowLayout.addLayout(vBox)
-
-            vBox.addWidget(QLabel(f"DURATION: {video[0]} secs"))
-            vBox.addWidget(QLabel(f"SIZE: {video[1]} bytes"))
-            vBox.addWidget(QLabel(f"CREATED: {video[2]}"))
-            btn = QPushButton("DOWNLOAD")
-            btn.clicked.connect(lambda checked=True, id=video[3]: self.downloadVideo(id))
-            vBox.addWidget(btn)
+            vBox = VideoWidget(self, f"DURATION: {video[0]} secs", f"SIZE: {video[1]} bytes", f"CREATED: {video[2]}", lambda checked=True, id=video[3]: self.downloadVideo(id))
+            self.ui.myVideosWindowLayout.addWidget(vBox)
 
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.myVideosWindow)

@@ -88,29 +88,25 @@ class KafkaConsumerWrapper(kafka.Consumer):
         numberOfMessages: int = 0
         currentMessageNumber: int = 0
 
-        for header in message.headers():
+        msgNrIndex = None
+        for i,header in enumerate(message.headers()):
             if header[0] == "number-of-messages":
                 numberOfMessages = int(header[1].decode())
             elif header[0] == "message-number":
                 currentMessageNumber = int(header[1].decode())
+                msgNrIndex = i
 
-        messages: List[bytes] = [b""] * numberOfMessages
+        messages: List[bytes] = [0] * numberOfMessages
         messages[currentMessageNumber] = message.value()
         for i in range(numberOfMessages - 1):
             message = self.consumeMessage(None if endTime is None else endTime - time.time(), partition=partition)
             if message is None:
                 return None
 
-            for header in message.headers():
-                if header[0] == "message-number":
-                    currentMessageNumber = int(header[1].decode())
+            currentMessageNumber = int(message.headers()[msgNrIndex][1].decode())
             messages[currentMessageNumber] = message.value()
 
-        finalMessage = b""
-        for message in messages:
-            finalMessage += message
-
-        return CustomKafkaMessage(value=finalMessage, headers=headersToBeReturned)
+        return CustomKafkaMessage(value=b"".join(messages), headers=headersToBeReturned)
 
     def consumeMessage(self, timeoutSeconds: int = None, partition=0) -> Optional[kafka.Message]:
         if timeoutSeconds is None:

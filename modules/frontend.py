@@ -2,10 +2,10 @@ from pathlib import Path
 from PySide6.QtCore import *
 from PySide6.QtGui import *
 from PySide6.QtWidgets import *
-
 from .CallWindow import CallWindow
 from .KafkaWindow import KafkaWindow
 from .Login import Login
+from .MyVideosWindow import MyVideosWindow
 from .Register import Register
 
 
@@ -16,12 +16,6 @@ class UiMainWindow(object):
         font.setPointSize(10)
         font.setBold(False)
         font.setItalic(False)
-
-        font1 = QFont()
-        font1.setFamily(u"Segoe UI Semibold")
-        font1.setPointSize(12)
-        font1.setBold(False)
-        font1.setItalic(False)
 
         font1 = QFont()
         font1.setFamily(u"Segoe UI Semibold")
@@ -53,31 +47,28 @@ class UiMainWindow(object):
         MainWindow.setCentralWidget(self.mainWindowWidget)
 
         self.windowMargins = QVBoxLayout(self.mainWindowWidget)
-        self.windowMargins.setObjectName(u"appMargins")
 
-        self.bgApp = QFrame(self.mainWindowWidget)
-        self.bgApp.setObjectName(u"bgApp")
-        self.windowMargins.addWidget(self.bgApp)
+        self.applicationFrame = QFrame(self.mainWindowWidget)
+        self.applicationFrame.setObjectName(u"applicationFrame")
+        self.windowMargins.addWidget(self.applicationFrame)
 
-        self.appLayout = QHBoxLayout(self.bgApp)
+        self.appLayout = QHBoxLayout(self.applicationFrame)
         self.appLayout.setSpacing(0)
-        self.appLayout.setObjectName(u"appLayout")
         self.appLayout.setContentsMargins(0, 0, 0, 0)
 
-        self.leftMenuWithLogoFrame = QFrame(self.bgApp)
+        self.leftMenuWithLogoFrame = QFrame(self.applicationFrame)
         self.leftMenuWithLogoFrame.setObjectName(u"leftMenuBg")
         self.leftMenuWithLogoFrame.setMinimumSize(QSize(60, 0))
         self.leftMenuWithLogoFrame.setMaximumSize(QSize(60, 16777215))
         self.leftMenuWithLogoFrame.setFrameShape(QFrame.NoFrame)
         self.leftMenuWithLogoFrame.setFrameShadow(QFrame.Raised)
+        self.appLayout.addWidget(self.leftMenuWithLogoFrame)
 
         self.leftMenuWithLogoLayout = QVBoxLayout(self.leftMenuWithLogoFrame)
         self.leftMenuWithLogoLayout.setSpacing(0)
-        self.leftMenuWithLogoLayout.setObjectName(u"verticalLayout_3")
         self.leftMenuWithLogoLayout.setContentsMargins(0, 0, 0, 0)
 
         self.topLogoInfo = QFrame(self.leftMenuWithLogoFrame)
-        self.topLogoInfo.setObjectName(u"topLogoInfo")
         self.topLogoInfo.setMinimumSize(QSize(0, 50))
         self.topLogoInfo.setMaximumSize(QSize(16777215, 50))
         self.topLogoInfo.setFrameShape(QFrame.NoFrame)
@@ -145,7 +136,7 @@ class UiMainWindow(object):
         self.toggleMenuSizeLayout.addWidget(self.toggleButton)
 
         self.buttonMenu = QFrame(self.leftMenuFrame)
-        self.buttonMenu.setObjectName(u"topMenu")
+        self.buttonMenu.setObjectName(u"buttonMenu")
         self.buttonMenu.setFrameShape(QFrame.NoFrame)
         self.buttonMenu.setFrameShadow(QFrame.Raised)
         self.leftMenuLayout.addWidget(self.buttonMenu, 0, Qt.AlignTop)
@@ -233,11 +224,7 @@ class UiMainWindow(object):
         self.buttonMenuLayout.addWidget(self.btnChangeTheme)
         # change theme button end
 
-
-
-        self.appLayout.addWidget(self.leftMenuWithLogoFrame)
-
-        self.contentBox = QFrame(self.bgApp)
+        self.contentBox = QFrame(self.applicationFrame)
         self.contentBox.setObjectName(u"contentBox")
         self.contentBox.setFrameShape(QFrame.NoFrame)
         self.contentBox.setFrameShadow(QFrame.Raised)
@@ -248,20 +235,20 @@ class UiMainWindow(object):
         self.contentBoxLayout.setObjectName(u"verticalLayout_2")
         self.contentBoxLayout.setContentsMargins(0, 0, 0, 0)
 
-        self.contentTopBg = QFrame(self.contentBox)
-        self.contentTopBg.setObjectName(u"contentTopBg")
-        self.contentTopBg.setMinimumSize(QSize(0, 50))
-        self.contentTopBg.setMaximumSize(QSize(16777215, 50))
-        self.contentTopBg.setFrameShape(QFrame.NoFrame)
-        self.contentTopBg.setFrameShadow(QFrame.Raised)
-        self.contentBoxLayout.addWidget(self.contentTopBg)
+        self.topBarFrame = QFrame(self.contentBox)
+        self.topBarFrame.setObjectName(u"topBarFrame")
+        self.topBarFrame.setMinimumSize(QSize(0, 50))
+        self.topBarFrame.setMaximumSize(QSize(16777215, 50))
+        self.topBarFrame.setFrameShape(QFrame.NoFrame)
+        self.topBarFrame.setFrameShadow(QFrame.Raised)
+        self.contentBoxLayout.addWidget(self.topBarFrame)
 
-        self.contentTopLayout = QHBoxLayout(self.contentTopBg)
+        self.contentTopLayout = QHBoxLayout(self.topBarFrame)
         self.contentTopLayout.setSpacing(0)
         self.contentTopLayout.setObjectName(u"horizontalLayout")
         self.contentTopLayout.setContentsMargins(0, 0, 10, 0)
 
-        self.topLeftBox = QFrame(self.contentTopBg)
+        self.topLeftBox = QFrame(self.topBarFrame)
         self.topLeftBox.setObjectName(u"leftBox")
         sizePolicy1 = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         sizePolicy1.setHorizontalStretch(0)
@@ -289,7 +276,7 @@ class UiMainWindow(object):
         self.titleRightInfo.setAlignment(Qt.AlignLeading | Qt.AlignLeft | Qt.AlignVCenter)
         self.topLeftBoxLayout.addWidget(self.titleRightInfo)
 
-        self.rightButtonsFrame = QFrame(self.contentTopBg)
+        self.rightButtonsFrame = QFrame(self.topBarFrame)
         self.rightButtonsFrame.setObjectName(u"rightButtons")
         self.rightButtonsFrame.setMinimumSize(QSize(0, 28))
         self.rightButtonsFrame.setFrameShape(QFrame.NoFrame)
@@ -409,104 +396,33 @@ class UiMainWindow(object):
         self.bottomBarLayout.addWidget(self.resizeGrip)
 
         # Kafka Window
-        # self.kafkaWindow = QWidget(MainWindow)
-        # self.kafkaWindowVerticalLayout = QVBoxLayout(self.kafkaWindow)
-        # self.kafkaWindowVerticalLayout.setAlignment(Qt.AlignCenter)
-        # self.kafkaWindow.setStyleSheet("border: 1px solid rgb(255,0,0);")
-        # self.kafkaWindowVerticalLayout.setContentsMargins(0,0,0,0)
-        # self.kafkaWindowVerticalLayout.setSpacing(0)
-        # self.kafkaWindowLabel = QLabel("Kafka Address")
-        # self.kafkaWindowLabel.setAlignment(Qt.AlignCenter)
-        # #self.kafkaWindowLabel.setStyleSheet("margin-left: 100px")
-        # self.kafkaWindowLabel.setFixedSize(QSize(300, 50))
-        # self.kafkaWindowTextEdit = QLineEdit()
-        # self.kafkaWindowTextEdit.setStyleSheet("width: 10px")
-        # self.kafkaWindowButton = QPushButton("Connect")
-        # self.kafkaWindowButton.setStyleSheet("width: 10px")
-        # self.kafkaWindowVerticalLayout.addWidget(self.kafkaWindowLabel)
-        # self.kafkaWindowVerticalLayout.addWidget(self.kafkaWindowTextEdit)
-        # self.kafkaWindowVerticalLayout.addWidget(self.kafkaWindowButton)
-        # self.pagesStack.addWidget(self.kafkaWindow)
         self.kafkaWindow = KafkaWindow(MainWindow)
         self.pagesStack.addWidget(self.kafkaWindow)
         # End Kafka Window
 
         # Login Window
         self.loginWindow = Login(MainWindow)
-        # self.loginWindowLayout = QVBoxLayout(self.loginWindow)
-        # self.loginUsernameLabel = QLabel("Username")
-        # self.loginPasswordLabel = QLabel("Password")
-        # self.loginUsernameEdit = QLineEdit()
-        # self.loginPasswordEdit = QLineEdit()
-        # self.loginButton = QPushButton("Connect")
-        # self.loginWindowLayout.addWidget(self.loginUsernameLabel)
-        # self.loginWindowLayout.addWidget(self.loginUsernameEdit)
-        # self.loginWindowLayout.addWidget(self.loginPasswordLabel)
-        # self.loginWindowLayout.addWidget(self.loginPasswordEdit)
-        # self.loginWindowLayout.addWidget(self.loginButton)
         self.pagesStack.addWidget(self.loginWindow)
         # End Login Window
 
         # Register Window
         self.registerWindow = Register(MainWindow)
-        # self.registerWindowLayout = QVBoxLayout(self.registerWindow)
-        # self.registerUsernameLabel = QLabel("Username")
-        # self.registerPasswordLabel = QLabel("Password")
-        # self.registerConfirmPasswordLabel = QLabel("Confirm Password")
-        # self.registerUsernameEdit = QLineEdit()
-        # self.registerPasswordEdit = QLineEdit()
-        # self.registerConfirmPasswordEdit = QLineEdit()
-        # self.registerButton = QPushButton("Connect")
-        # self.registerWindowLayout.addWidget(self.registerUsernameLabel)
-        # self.registerWindowLayout.addWidget(self.registerUsernameEdit)
-        # self.registerWindowLayout.addWidget(self.registerPasswordLabel)
-        # self.registerWindowLayout.addWidget(self.registerPasswordEdit)
-        # self.registerWindowLayout.addWidget(self.registerConfirmPasswordLabel)
-        # self.registerWindowLayout.addWidget(self.registerConfirmPasswordEdit)
-        # self.registerWindowLayout.addWidget(self.registerButton)
         self.pagesStack.addWidget(self.registerWindow)
         # End register Window
 
         # Call Window
         self.callWindow = CallWindow(MainWindow)
-        # self.callWindowLayout = QVBoxLayout(self.callWindow)
-        #
-        # self.callUserCallKeyLabel = QLabel("Call Key")
-        # self.callUserCallPasswordLabel = QLabel("Call Password")
-        # self.callUserCallKeyEdit = QLineEdit()
-        # self.callUserCallKeyEdit.setReadOnly(True)
-        # self.callUserCallPasswordEdit = QLineEdit()
-        # self.callUserCallPasswordEdit.setReadOnly(True)
-        # self.callStartSharingButton = QPushButton("Start Sharing")
-        # self.callWindowLayout.addWidget(self.callUserCallKeyLabel)
-        # self.callWindowLayout.addWidget(self.callUserCallKeyEdit)
-        # self.callWindowLayout.addWidget(self.callUserCallPasswordLabel)
-        # self.callWindowLayout.addWidget(self.callUserCallPasswordEdit)
-        # self.callWindowLayout.addWidget(self.callStartSharingButton)
-        #
-        # self.callPartnerCallKeyLabel = QLabel("Call Key")
-        # self.callPartnerCallPasswordLabel = QLabel("Call Password")
-        # self.callPartnerCallKeyEdit = QLineEdit()
-        # self.callPartnerCallPasswordEdit = QLineEdit()
-        # self.callJoinSessionButton = QPushButton("Join Session")
-        # self.callWindowLayout.addWidget(self.callPartnerCallKeyLabel)
-        # self.callWindowLayout.addWidget(self.callPartnerCallKeyEdit)
-        # self.callWindowLayout.addWidget(self.callPartnerCallPasswordLabel)
-        # self.callWindowLayout.addWidget(self.callPartnerCallPasswordEdit)
-        # self.callWindowLayout.addWidget(self.callJoinSessionButton)
-
         self.pagesStack.addWidget(self.callWindow)
         # End Call Window
 
         # My Videos Window
-        self.myVideosWindow = QWidget(MainWindow)
-        self.myVideosWindowLayout = QVBoxLayout(self.myVideosWindow)
-        self.myVideosScroll = QScrollArea()
-        self.myVideosScroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.myVideosScroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.myVideosScroll.setWidgetResizable(True)
-        self.myVideosScroll.setWidget(self.myVideosWindow)
-
+        self.myVideosWindow = MyVideosWindow()
+        # self.myVideosWindowLayout = QVBoxLayout(self.myVideosWindow)
+        # self.myVideosScroll = QScrollArea()
+        # self.myVideosScroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        # self.myVideosScroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # self.myVideosScroll.setWidgetResizable(True)
+        # self.myVideosScroll.setWidget(self.myVideosWindow)
         self.pagesStack.addWidget(self.myVideosWindow)
         # End My Videos Window
 

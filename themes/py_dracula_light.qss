@@ -40,7 +40,7 @@ QToolTip {
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////
 Bg App */
-#bgApp {	
+#applicationFrame {
 	background-color: #f8f8f2;
 	border: 1px solid #CCC;
     color: #44475a;
@@ -60,7 +60,7 @@ Left Menu */
 #titleLeftDescription { font: 8pt "Segoe UI"; color: #bd93f9; }
 
 /* MENUS */
-#topMenu .QPushButton {	
+#buttonMenu .QPushButton {
 	background-position: left center;
     background-repeat: no-repeat;
 	border: none;
@@ -70,10 +70,10 @@ Left Menu */
 	padding-left: 44px;
     color: #f8f8f2;
 }
-#topMenu .QPushButton:hover {
+#buttonMenu .QPushButton:hover {
 	background-color: #bd93f9;
 }
-#topMenu .QPushButton:pressed {	
+#buttonMenu .QPushButton:pressed {
 	background-color: #ff79c6;
 	color: rgb(255, 255, 255);
 }
@@ -172,7 +172,7 @@ Extra Tab */
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////
 Content App */
-#contentTopBg{	
+#topBarFrame{
 	background-color: #6272a4;
 }
 #contentBottom{

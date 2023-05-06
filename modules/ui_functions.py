@@ -90,7 +90,7 @@ class UIFunctions:
         self.shadow.setXOffset(0)
         self.shadow.setYOffset(0)
         self.shadow.setColor(QColor(0, 0, 0, 150))
-        self.ui.bgApp.setGraphicsEffect(self.shadow)
+        self.ui.applicationFrame.setGraphicsEffect(self.shadow)
 
         # RESIZE WINDOW
         self.sizegrip = QSizeGrip(self.ui.resizeGrip)
@@ -142,8 +142,3 @@ class UIFunctions:
     def setStatusMessage(self, message):
         self.ui.titleRightInfo.setText(message)
 
-    def clearLayout(self, layout):
-        while layout.count():
-            child = layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()

@@ -7,7 +7,7 @@ from PySide6.QtCore import QSize
 from modules import *
 from PySide6.QtWidgets import *
 
-from modules.VideoWidget import VideoWidget
+from modules import UiMainWindow
 from modules.backend import Backend
 from utils.ControlWindowPyQt import AnotherWindow
 
@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
 
         self.widgets.pagesStack.setCurrentWidget(self.widgets.kafkaWindow)
 
-        self.themeFile = "./themes/py_dracula_dark.qss"
+        self.isDarkThemeOn = False
         self.__toggleTheme()
         self.ui.topLogo.setStyleSheet(
             f"background-image: url({Path(__file__).parent / 'images' / 'images' / 'PyDracula.png'});")
@@ -57,8 +57,11 @@ class MainWindow(QMainWindow):
         self.widgets.btnChangeTheme.clicked.connect(self.__toggleTheme)
 
     def __toggleTheme(self):
-        UIFunctions.theme(self, self.themeFile)
-        self.themeFile = "./themes/py_dracula_dark.qss" if self.themeFile == "./themes/py_dracula_light.qss" else "./themes/py_dracula_light.qss"
+        if self.isDarkThemeOn:
+            UIFunctions.theme(self, "./themes/py_dracula_light.qss")
+        else:
+            UIFunctions.theme(self, "./themes/py_dracula_dark.qss")
+        self.isDarkThemeOn = not self.isDarkThemeOn
 
     def btnKafkaPressed(self):
         btn = self.sender()
@@ -83,11 +86,15 @@ class MainWindow(QMainWindow):
             self.uiFunctions.setStatusMessage("No user connected")
             return
 
-        self.uiFunctions.clearLayout(self.ui.myVideosWindowLayout)
+        self.widgets.myVideosWindow.clear()
         videos = self.backend.getUserVideos()
+        if type(videos) is Exception:
+            self.uiFunctions.setStatusMessage(str(videos))
+
         for video in videos:
-            vBox = VideoWidget(self, f"DURATION: {video[0]} secs", f"SIZE: {video[1]} bytes", f"CREATED: {video[2]}", lambda checked=True, id=video[3]: self.downloadVideo(id))
-            self.ui.myVideosWindowLayout.addWidget(vBox)
+            self.widgets.myVideosWindow.addVideoRow(f"DURATION: {video[0]} secs", f"SIZE: {video[1]} bytes",
+                                                    f"CREATED: {video[2]}",
+                                                    lambda checked=True, id=video[3]: self.downloadVideo(id))
 
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.myVideosWindow)
@@ -114,14 +121,16 @@ class MainWindow(QMainWindow):
         address = "localhost:9092" if address is None or address == "" else address
         connectionSet = self.backend.setKafkaConnection(address)
         if connectionSet is not True:
-            print(connectionSet)
+            self.uiFunctions.setStatusMessage(connectionSet)
             return
 
         self.uiFunctions.setConnectedToKafkaState(address)
+        self.uiFunctions.setStatusMessage("Connected to kafka")
 
     def disconnectFromKafka(self):
         self.backend.disconnectFromKafka()
         self.uiFunctions.setIsNotConnectedToKafkaState()
+        self.uiFunctions.setStatusMessage("Disconnected from kafka")
 
     def loginAccount(self):
         username = self.ui.loginWindow.usernameLineEdit.text()
@@ -134,16 +143,19 @@ class MainWindow(QMainWindow):
         if loginResult is not None:
             self.uiFunctions.setStatusMessage(str(loginResult))
             return
+
         self.uiFunctions.setUserLoggedIn(username)
+        self.uiFunctions.setStatusMessage(f"Successfully connected as {username}")
 
     def disconnectAccount(self):
         self.backend.disconnect()
         self.uiFunctions.setUserNotLoggedIn()
+        self.uiFunctions.setStatusMessage(f"Successfully disconnected")
 
     def registerAccount(self):
-        username = self.ui.registerUsernameEdit.text()
-        password = self.ui.registerPasswordEdit.text()
-        confirmPassword = self.ui.registerConfirmPasswordEdit.text()
+        username = self.ui.registerWindow.usernameEdit.text()
+        password = self.ui.registerWindow.passwordEdit.text()
+        confirmPassword = self.ui.registerWindow.confirmPasswordEdit.text()
         if username == "" or password == "" or confirmPassword == "":
             self.uiFunctions.setStatusMessage("Must give username, password and confirm password")
             return
@@ -152,8 +164,14 @@ class MainWindow(QMainWindow):
             return
 
         registerResult = self.backend.registerNewAccount(username, password)
-        if registerResult is not None:
+        if type(registerResult) is Exception:
             self.uiFunctions.setStatusMessage(str(registerResult))
+            return
+
+        self.ui.registerWindow.usernameEdit.setText("")
+        self.ui.registerWindow.passwordEdit.setText("")
+        self.ui.registerWindow.confirmPasswordEdit.setText("")
+        self.uiFunctions.setStatusMessage("Successfully registered")
 
     def startCall(self):
         self.backend.createSession()
@@ -161,7 +179,8 @@ class MainWindow(QMainWindow):
         self.backend.startMerger()
         self.ui.callWindow.startSessionBtn.clicked.disconnect()
         self.ui.callWindow.startSessionBtn.clicked.connect(self.stopCall)
-        self.ui.callWindow.startSessionBtn.setText("Stop Sharing")
+        self.ui.callWindow.startSessionBtn.setText("STOP SHARING")
+        self.uiFunctions.setStatusMessage("Call started")
 
     def stopCall(self):
         self.backend.stopRecorder()
@@ -169,7 +188,8 @@ class MainWindow(QMainWindow):
         self.backend.kafkaContainer.resetTopic()
         self.ui.callWindow.startSessionBtn.clicked.disconnect()
         self.ui.callWindow.startSessionBtn.clicked.connect(self.startCall)
-        self.ui.callWindow.startSessionBtn.setText("Start Sharing")
+        self.ui.callWindow.startSessionBtn.setText("START SHARING")
+        self.uiFunctions.setStatusMessage("Call stopped")
 
     def joinCall(self):
         callKey = self.ui.callWindow.partnerCallKeyEdit.text()
@@ -201,6 +221,7 @@ class MainWindow(QMainWindow):
 
         with open(f[0], "wb") as file:
             file.write(video)
+        self.uiFunctions.setStatusMessage("Video downloaded")
 
 
 if __name__ == "__main__":

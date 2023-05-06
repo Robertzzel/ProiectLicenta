@@ -49,9 +49,14 @@ class MyVideosWindow(QtWidgets.QWidget):
         self.verticalLayout.addLayout(horizontalLayout)
 
     def clear(self):
-        while self.verticalLayout.count():
-            child = self.verticalLayout.takeAt(0)
+        self.clearLayout(self.verticalLayout)
+
+    def clearLayout(self, layout):
+        while layout.count():
+            child = layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
+            if child.layout():
+                self.clearLayout(child.layout())
 
 

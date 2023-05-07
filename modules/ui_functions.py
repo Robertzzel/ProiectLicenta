@@ -110,7 +110,7 @@ class UIFunctions:
         self.ui.kafkaWindow.lineEdit.setText(address)
         self.ui.kafkaWindow.lineEdit.setDisabled(True)
 
-        self.ui.kafkaWindow.pushButton.clicked.disconnect()
+        self.ui.kafkaWindow.pushButton.clicked.disconnect(self.master.connectToKafka)
         self.ui.kafkaWindow.pushButton.clicked.connect(self.master.disconnectFromKafka)
 
     def setIsNotConnectedToKafkaState(self):
@@ -118,7 +118,7 @@ class UIFunctions:
         self.ui.kafkaWindow.lineEdit.setText("")
         self.ui.kafkaWindow.lineEdit.setDisabled(False)
 
-        self.ui.kafkaWindow.pushButton.clicked.disconnect()
+        self.ui.kafkaWindow.pushButton.clicked.disconnect(self.master.disconnectFromKafka)
         self.ui.kafkaWindow.pushButton.clicked.connect(self.master.connectToKafka)
 
     def setUserLoggedIn(self, username: str):
@@ -127,7 +127,7 @@ class UIFunctions:
         self.ui.loginWindow.passwordLineEit.setDisabled(True)
         self.ui.loginWindow.usernameLineEdit.setDisabled(True)
         self.ui.loginWindow.pushButton.setText("Disconnect")
-        self.ui.loginWindow.pushButton.clicked.disconnect()
+        self.ui.loginWindow.pushButton.clicked.disconnect(self.master.loginAccount)
         self.ui.loginWindow.pushButton.clicked.connect(self.master.disconnectAccount)
 
     def setUserNotLoggedIn(self):
@@ -136,9 +136,14 @@ class UIFunctions:
         self.ui.loginWindow.passwordLineEit.setDisabled(False)
         self.ui.loginWindow.usernameLineEdit.setDisabled(False)
         self.ui.loginWindow.pushButton.setText("Connect")
-        self.ui.loginWindow.pushButton.clicked.disconnect()
+        self.ui.loginWindow.pushButton.clicked.disconnect(self.master.disconnectAccount)
         self.ui.loginWindow.pushButton.clicked.connect(self.master.loginAccount)
 
-    def setStatusMessage(self, message):
+    def setStatusMessage(self, message, isError=False):
+        if isError:
+            self.ui.titleRightInfo.setStyleSheet("color: #ff0000;")
+            playsound(self.master.errorSoundFilePath, False)
+        else:
+            self.ui.titleRightInfo.setStyleSheet("color: #ffffff;")
         self.ui.titleRightInfo.setText(message)
 

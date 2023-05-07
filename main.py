@@ -3,21 +3,24 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QSize
-
+from playsound import playsound
 from modules import *
 from PySide6.QtWidgets import *
 
 from modules import UiMainWindow
 from modules.backend import Backend
+from utils.Audio import AudioTool
 from utils.ControlWindowPyQt import VideoWindow
 
-os.environ["QT_FONT_DPI"] = "96" # FIX Problem for High DPI and Scale above 100%
+os.environ["QT_FONT_DPI"] = "96"  # FIX Problem for High DPI and Scale above 100%
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
-
+        self.buttonClickSoundFilePath = Path(__file__).parent / "sounds" / "click.wav"
+        self.errorSoundFilePath = Path(__file__).parent / "sounds" / "error.wav"
+        self.themeSoundFilePath = Path(__file__).parent / "sounds" / "theme.wav"
         self.resize(940, 560)
         self.setMinimumSize(QSize(940, 560))
         self.setObjectName(u"MainWindow")
@@ -26,6 +29,9 @@ class MainWindow(QMainWindow):
         self.ui = UiMainWindow(self)
         self.setWindowTitle("RMI")
         self.backend = Backend()
+        self.audio = AudioTool()
+        self.audio.audioClickSignal.connect(self.audioSignaleCallback)
+        self.audio.start()
 
         self.widgets = self.ui
         self.widgets.titleRightInfo.setText("Remote Desktop Application")
@@ -38,23 +44,70 @@ class MainWindow(QMainWindow):
 
         self.isDarkThemeOn = False
         self.__toggleTheme()
+        playsound(Path(__file__).parent / "sounds" / "start.mp3", False)
+
         self.ui.topLogo.setStyleSheet(
             f"background-image: url({Path(__file__).parent / 'images' / 'images' / 'PyDracula.png'});")
         self.show()
 
     def setCallbacks(self):
-        self.widgets.toggleButton.clicked.connect(lambda: UIFunctions.toggleMenu(self))
+        self.widgets.toggleButton.clicked.connect(lambda x=True: UIFunctions.toggleMenu(self))
+        self.widgets.toggleButton.clicked.connect(lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.btnKafka.clicked.connect(self.btnKafkaPressed)
+        self.widgets.btnKafka.clicked.connect(lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.btnLogin.clicked.connect(self.btnLoginPressed)
+        self.widgets.btnLogin.clicked.connect(lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.btnRegister.clicked.connect(self.btnRegisterPressed)
+        self.widgets.btnRegister.clicked.connect(lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.btnMyVideos.clicked.connect(self.btnMyVideosPresses)
+        self.widgets.btnMyVideos.clicked.connect(lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.kafkaWindow.pushButton.clicked.connect(self.connectToKafka)
+        self.widgets.kafkaWindow.pushButton.clicked.connect(
+            lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.loginWindow.pushButton.clicked.connect(self.loginAccount)
+        self.widgets.loginWindow.pushButton.clicked.connect(
+            lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.registerWindow.btnRegister.clicked.connect(self.registerAccount)
+        self.widgets.registerWindow.btnRegister.clicked.connect(
+            lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.btnCall.clicked.connect(self.btnCallWindowPressed)
+        self.widgets.btnCall.clicked.connect(lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.callWindow.startSessionBtn.clicked.connect(self.startCall)
+        self.widgets.callWindow.startSessionBtn.clicked.connect(
+            lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.callWindow.joinSessionBtn.clicked.connect(self.joinCall)
+        self.widgets.callWindow.joinSessionBtn.clicked.connect(
+            lambda x=True: playsound(self.buttonClickSoundFilePath, False))
+
         self.widgets.btnChangeTheme.clicked.connect(self.__toggleTheme)
+        self.widgets.btnChangeTheme.clicked.connect(lambda x=True: playsound(self.themeSoundFilePath, False))
+
+    def audioSignaleCallback(self, text):
+        text = text.lower()
+        if text == "kafka":
+            self.ui.btnKafka.click()
+        elif text == "register":
+            self.ui.btnRegister.click()
+        elif text == "login":
+            self.ui.btnRegister.click()
+        elif text == "videos" or text == "video":
+            self.ui.btnMyVideos.click()
+        elif text == "call" or text == "calls":
+            self.ui.btnCall.click()
+        elif "theme" in text:
+            self.ui.btnChangeTheme.click()
+        else:
+            self.uiFunctions.setStatusMessage(text)
 
     def __toggleTheme(self):
         if self.isDarkThemeOn:
@@ -124,7 +177,7 @@ class MainWindow(QMainWindow):
         address = "localhost:9092" if address is None or address == "" else address
         connectionSet = self.backend.setKafkaConnection(address)
         if connectionSet is not True:
-            self.uiFunctions.setStatusMessage(str(connectionSet))
+            self.uiFunctions.setStatusMessage(str(connectionSet), True)
             return
 
         self.uiFunctions.setConnectedToKafkaState(address)
@@ -133,7 +186,7 @@ class MainWindow(QMainWindow):
     def disconnectFromKafka(self):
         self.backend.disconnectFromKafka()
         self.uiFunctions.setIsNotConnectedToKafkaState()
-        self.uiFunctions.setStatusMessage("Disconnected from kafka")
+        self.uiFunctions.setStatusMessage("Disconnected from kafka", True)
 
     def loginAccount(self):
         username = self.ui.loginWindow.usernameLineEdit.text()
@@ -180,7 +233,7 @@ class MainWindow(QMainWindow):
         self.backend.createSession()
         self.backend.startRecorder()
         self.backend.startMerger()
-        self.ui.callWindow.startSessionBtn.clicked.disconnect()
+        self.ui.callWindow.startSessionBtn.clicked.disconnect(self.startCall)
         self.ui.callWindow.startSessionBtn.clicked.connect(self.stopCall)
         self.ui.callWindow.startSessionBtn.setText("STOP SHARING")
         self.uiFunctions.setStatusMessage("Call started")
@@ -189,7 +242,7 @@ class MainWindow(QMainWindow):
         self.backend.stopRecorder()
         self.backend.user.sessionId = None
         self.backend.kafkaContainer.resetTopic()
-        self.ui.callWindow.startSessionBtn.clicked.disconnect()
+        self.ui.callWindow.startSessionBtn.clicked.disconnect(self.stopCall)
         self.ui.callWindow.startSessionBtn.clicked.connect(self.startCall)
         self.ui.callWindow.startSessionBtn.setText("START SHARING")
         self.uiFunctions.setStatusMessage("Call stopped")

@@ -1,21 +1,8 @@
-QWidget{
-	color: rgb(221, 221, 221);
-	font: 10pt "Segoe UI";
-}
+/*
+primara: rgb(40, 44, 52)
+secundara: rgb(33, 37, 43)
+*/
 
-QToolTip {
-	color: #ffffff;
-	background-color: rgba(33, 37, 43, 180);
-	border: 1px solid rgb(44, 49, 58);
-	background-image: none;
-	background-position: left center;
-    background-repeat: no-repeat;
-	border: none;
-	border-left: 2px solid rgb(255, 121, 198);
-	text-align: left;
-	padding-left: 8px;
-	margin: 0px;
-}
 
 #applicationFrame {
 	background-color: rgb(40, 44, 52);
@@ -95,6 +82,40 @@ QToolTip {
 
 #bottomBar { background-color: rgb(44, 49, 58) }
 #bottomBar QLabel { font-size: 11px; color: rgb(113, 126, 149); padding-left: 10px; padding-right: 10px; padding-bottom: 2px; }
+
+#pagesContainer QPushButton {
+	border: 2px solid rgb(52, 59, 72);
+	border-radius: 5px;
+	background-color: rgb(52, 59, 72);
+}
+
+#pagesContainer QPushButton:hover {
+	border: 2px solid rgb(62, 69, 82);
+}
+
+#pagesContainer QPushButton:pressed {
+	background-color: rgb(35, 40, 49);
+	border: 2px solid rgb(43, 50, 61);
+}
+
+QWidget{
+	color: rgb(221, 221, 221);
+	font: 10pt "Segoe UI";
+}
+
+QToolTip {
+	color: #ffffff;
+	background-color: rgba(33, 37, 43, 180);
+	border: 1px solid rgb(44, 49, 58);
+	background-image: none;
+	background-position: left center;
+    background-repeat: no-repeat;
+	border: none;
+	border-left: 2px solid rgb(255, 121, 198);
+	text-align: left;
+	padding-left: 8px;
+	margin: 0px;
+}
 
 QTableWidget {	
 	background-color: transparent;
@@ -369,20 +390,4 @@ QCommandLinkButton:hover {
 QCommandLinkButton:pressed {	
 	color: rgb(189, 147, 249);
 	background-color: rgb(52, 58, 71);
-}
-
-#pagesContainer QPushButton {
-	border: 2px solid rgb(52, 59, 72);
-	border-radius: 5px;	
-	background-color: rgb(52, 59, 72);
-}
-
-#pagesContainer QPushButton:hover {
-	background-color: rgb(57, 65, 80);
-	border: 2px solid rgb(61, 70, 86);
-}
-
-#pagesContainer QPushButton:pressed {	
-	background-color: rgb(35, 40, 49);
-	border: 2px solid rgb(43, 50, 61);
 }

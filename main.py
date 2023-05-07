@@ -9,7 +9,7 @@ from PySide6.QtWidgets import *
 
 from modules import UiMainWindow
 from modules.backend import Backend
-from utils.ControlWindowPyQt import AnotherWindow
+from utils.ControlWindowPyQt import VideoWindow
 
 os.environ["QT_FONT_DPI"] = "96" # FIX Problem for High DPI and Scale above 100%
 
@@ -59,8 +59,11 @@ class MainWindow(QMainWindow):
     def __toggleTheme(self):
         if self.isDarkThemeOn:
             UIFunctions.theme(self, "./themes/py_dracula_light.qss")
+            Settings.MENU_SELECTED_STYLESHEET = Settings.MENU_SELECTED_LIGHT_STYLESHEET
         else:
             UIFunctions.theme(self, "./themes/py_dracula_dark.qss")
+            Settings.MENU_SELECTED_STYLESHEET = Settings.MENU_SELECTED_DARK_STYLESHEET
+        UIFunctions.resetStyle(self, "")
         self.isDarkThemeOn = not self.isDarkThemeOn
 
     def btnKafkaPressed(self):
@@ -121,7 +124,7 @@ class MainWindow(QMainWindow):
         address = "localhost:9092" if address is None or address == "" else address
         connectionSet = self.backend.setKafkaConnection(address)
         if connectionSet is not True:
-            self.uiFunctions.setStatusMessage(connectionSet)
+            self.uiFunctions.setStatusMessage(str(connectionSet))
             return
 
         self.uiFunctions.setConnectedToKafkaState(address)
@@ -203,7 +206,7 @@ class MainWindow(QMainWindow):
             self.uiFunctions.setStatusMessage(str(topic))
             return
 
-        self.w = AnotherWindow(topic, self.backend.kafkaContainer.address)
+        self.w = VideoWindow(topic, self.backend.kafkaContainer.address)
         self.w.show()
 
     def downloadVideo(self, videoId: int):

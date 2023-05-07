@@ -34,7 +34,7 @@ class DisplayContentThread(QThread):
         try:
             while not self.master.stopEvent:
                 try:
-                    self.master.currentImage = self.master.videoFramesQueue.get(block=True, timeout=1)  # wait for the stream to init
+                    img = self.master.videoFramesQueue.get(block=True, timeout=1)  # wait for the stream to init
                     if self.master.audioStream:
                         self.master.audioStream.start()
                 except queue.Empty:
@@ -106,7 +106,7 @@ class StreamReceiverThread(QThread):
 class SendInputsThread(QThread):
     def __init__(self, master):
         super().__init__()
-        self.master: AnotherWindow = master
+        self.master: VideoWindow = master
 
     def run(self):
         try:
@@ -121,26 +121,23 @@ class SendInputsThread(QThread):
             print(ex)
 
 
-class AnotherWindow(QWidget):
-    def __init__(self, topic: str, kafkaAddress: str = "localhost:9092", *args, **kwargs):
+class VideoWindow(QWidget):
+    def __init__(self, topic: str, kafkaAddress: str = "localhost:9092"):
         super().__init__()
         self.label = QLabel(self)
 
         self.kafkaAddress = kafkaAddress
         self.topic = topic
         self.kafkaProducer = KafkaProducerWrapper({'bootstrap.servers': self.kafkaAddress})
-        self.streamConsumer: Optional[KafkaConsumerWrapper] = None
 
         self.videoFramesQueue: Queue = Queue(60)
         self.audioBlocksQueue: Queue = Queue(60)
-        self.currentImage = None
         self.audioStream: Optional[sd.OutputStream] = None
         self.videoFramerate = 0
         self.audioSamplerate = 0
         self.audioBlockSize = 0
         self.stopEvent: bool = False
         self.inputsBuffer: InputsBuffer = InputsBuffer()
-        self.currentTkImage = None
         self._resampling_method: int = Image.NEAREST
 
         self.dct = DisplayContentThread(self)
@@ -244,7 +241,6 @@ class AnotherWindow(QWidget):
     def stop(self):
         self.stopEvent = True
         self.kafkaProducer.flush(timeout=5)
-        self.srt.streamConsumer.close()
 
         print("Stopping inputs thread")
         self.srt.quit()

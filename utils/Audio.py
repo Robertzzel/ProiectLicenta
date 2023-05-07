@@ -5,6 +5,7 @@ from PySide6.QtCore import QThread, Signal
 
 class AudioTool(QThread):
     audioClickSignal = Signal(str)
+
     def __init__(self):
         super().__init__()
         self.recognizer = sr.Recognizer()

@@ -224,6 +224,20 @@ class UiMainWindow(object):
         self.buttonMenuLayout.addWidget(self.btnChangeTheme)
         # change theme button end
 
+        # video input toggle
+        self.btnVideoInputToggle = QPushButton(self.buttonMenu)
+        self.btnVideoInputToggle.setObjectName(u"btnVideoInputToggle")
+        sizePolicy.setHeightForWidth(self.btnVideoInputToggle.sizePolicy().hasHeightForWidth())
+        self.btnVideoInputToggle.setSizePolicy(sizePolicy)
+        self.btnVideoInputToggle.setMinimumSize(QSize(0, 45))
+        self.btnVideoInputToggle.setFont(font)
+        self.btnVideoInputToggle.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btnVideoInputToggle.setLayoutDirection(Qt.LeftToRight)
+        self.btnVideoInputToggle.setStyleSheet(
+            f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'icon_settings.png'});")
+        self.buttonMenuLayout.addWidget(self.btnVideoInputToggle)
+        # end video input toggle
+
         self.contentBox = QFrame(self.applicationFrame)
         self.contentBox.setObjectName(u"contentBox")
         self.contentBox.setFrameShape(QFrame.NoFrame)

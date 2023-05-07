@@ -10,6 +10,7 @@ from PySide6.QtWidgets import *
 from modules import UiMainWindow
 from modules.backend import Backend
 from utils.Audio import AudioTool
+from utils.CameraInputsTool import CameraInputTool
 from utils.ControlWindowPyQt import VideoWindow
 
 os.environ["QT_FONT_DPI"] = "96"  # FIX Problem for High DPI and Scale above 100%
@@ -91,6 +92,20 @@ class MainWindow(QMainWindow):
 
         self.widgets.btnChangeTheme.clicked.connect(self.__toggleTheme)
         self.widgets.btnChangeTheme.clicked.connect(lambda x=True: playsound(self.themeSoundFilePath, False))
+
+        self.widgets.btnVideoInputToggle.clicked.connect(lambda x=True: playsound(self.themeSoundFilePath, False))
+        self.widgets.btnVideoInputToggle.clicked.connect(self.startVideoControl)
+
+    def startVideoControl(self):
+        self.widgets.btnVideoInputToggle.clicked.disconnect(self.startVideoControl)
+        self.widgets.btnVideoInputToggle.clicked.connect(self.stopVideoControl)
+        self.cameraInptTool = CameraInputTool()
+        self.cameraInptTool.start()
+
+    def stopVideoControl(self):
+        self.widgets.btnVideoInputToggle.clicked.disconnect(self.stopVideoControl)
+        self.widgets.btnVideoInputToggle.clicked.connect(self.startVideoControl)
+        self.cameraInptTool.stop()
 
     def audioSignaleCallback(self, text):
         text = text.lower()

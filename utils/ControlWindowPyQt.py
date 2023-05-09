@@ -24,7 +24,7 @@ RELEASE = 5
 
 
 class DisplayContentThread(QThread):
-    imageEvent = Signal(PIL.Image.Image)  # )
+    imageEvent = Signal(PIL.Image.Image)
 
     def __init__(self, master):
         super().__init__()
@@ -34,7 +34,7 @@ class DisplayContentThread(QThread):
         try:
             while not self.master.stopEvent:
                 try:
-                    img = self.master.videoFramesQueue.get(block=True, timeout=1)  # wait for the stream to init
+                    self.master.videoFramesQueue.get(block=True, timeout=1)  # wait for the stream to init
                     if self.master.audioStream:
                         self.master.audioStream.start()
                 except queue.Empty:
@@ -116,7 +116,6 @@ class SendInputsThread(QThread):
                 if inputs != "":
                     self.master.kafkaProducer.produce(topic=self.master.topic, value=inputs.encode(),
                                                partition=Partitions.Input.value)
-                    print(f"sent {inputs}")
         except BaseException as ex:
             print(ex)
 

@@ -7,6 +7,7 @@
 
 
 from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6.QtCore import Qt
 
 
 class Login(QtWidgets.QWidget):
@@ -54,6 +55,7 @@ class Login(QtWidgets.QWidget):
         self.label_2.setObjectName("label_2")
         self.horizontalLayout_2.addWidget(self.label_2)
         self.passwordLineEit = QtWidgets.QLineEdit(parent=self)
+        self.passwordLineEit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)

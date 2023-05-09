@@ -39,7 +39,7 @@ class MainWindow(QMainWindow):
         self.isDarkThemeOn = False
         self.__toggleTheme()
         self.ui.topLogo.setStyleSheet(
-            f"background-image: url({Path(__file__).parent / 'images' / 'images' / 'PyDracula.png'});")
+            f"background-image: url({Path(__file__).parent / 'images' / 'images' / 'logo.png'});")
         self.show()
 
     def setCallbacks(self):

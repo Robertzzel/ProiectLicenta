@@ -18,7 +18,7 @@
 from . frontend import UiMainWindow
 
 # APP SETTINGS
-from . app_settings import Settings
+from . Settings import Settings
 
 # IMPORT FUNCTIONS
 from . ui_functions import *

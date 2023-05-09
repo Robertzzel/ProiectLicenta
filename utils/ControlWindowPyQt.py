@@ -3,7 +3,7 @@ import time
 from io import BytesIO
 from queue import Queue
 from typing import Optional
-
+import gc
 import PIL
 import av
 import numpy as np
@@ -24,7 +24,7 @@ RELEASE = 5
 
 
 class DisplayContentThread(QThread):
-    imageEvent = Signal(PIL.Image.Image)
+    imageEvent = Signal(bool)
 
     def __init__(self, master):
         super().__init__()
@@ -46,9 +46,9 @@ class DisplayContentThread(QThread):
             while not self.master.stopEvent:
                 try:
                     start = time.time()
-                    img = self.master.videoFramesQueue.get(timeout=1).to_image()
+                    self.master.currentImage = self.master.videoFramesQueue.get(timeout=1).to_image()
                     if not self.master.stopEvent:
-                        self.imageEvent.emit(img)
+                        self.imageEvent.emit(True)
                         time.sleep(max(rate - (time.time() - start) % rate, 0))
                 except queue.Empty:
                     continue
@@ -91,6 +91,7 @@ class StreamReceiverThread(QThread):
                                 self.master.videoFramesQueue.put(item=frame, block=True)
                             elif isinstance(frame, av.AudioFrame) and not self.master.stopEvent:
                                 self.master.audioBlocksQueue.put(item=frame.to_ndarray(), block=True)
+                    gc.collect()
         except BaseException as ex:
             print(ex)
 
@@ -138,6 +139,7 @@ class VideoWindow(QWidget):
         self.stopEvent: bool = False
         self.inputsBuffer: InputsBuffer = InputsBuffer()
         self._resampling_method: int = Image.NEAREST
+        self.currentImage = None
 
         self.dct = DisplayContentThread(self)
         self.srt = StreamReceiverThread(self)
@@ -228,11 +230,11 @@ class VideoWindow(QWidget):
 
         outdata[:] = data
 
-    def displayFrame(self, image):
+    def displayFrame(self, _):
         self.label.setPixmap(
             QPixmap.fromImage(
                 ImageQt(
-                    image.resize((self.labelSize[0], self.labelSize[1]), self._resampling_method)
+                    self.currentImage.resize((self.width()-1, self.height()-1), self._resampling_method)
                 )
             )
         )

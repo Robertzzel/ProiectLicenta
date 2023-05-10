@@ -81,6 +81,7 @@ class Merger:
             os.remove(filename)
 
         self.consumer.close()
+        self.producer.flush()
         deleteTopic(self.broker, self.topic)
 
     def stop(self):

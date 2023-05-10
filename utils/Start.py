@@ -12,7 +12,7 @@ class VideoMerger:
     def __init__(self, kafkaBroker: str, topic: str, sessionId: int):
         import docker
         client = docker.from_env()
-        client.containers.run("merger-microservice:v6", detach=True,
+        client.containers.run("merger-microservice:v1", detach=True,
                               environment={"BROKER_ADDRESS": kafkaBroker, "TOPIC": topic, "SESSION_ID": str(sessionId)},
                               network_mode="host")
 

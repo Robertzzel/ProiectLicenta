@@ -142,13 +142,13 @@ func CompressAndSendFiles(producer *Kafka.AggregatorMicroserviceProducer, files 
 		_ = files.Delete()
 	}(&files)
 
-	video, err := files.CombineAndCompress("5000k", "pipe:1")
+	video, err := files.CombineAndCompress("2000k", "pipe:1")
 	if err != nil {
-		return err
+		return errors.New("Combine and compress error " + err.Error())
 	}
 
 	if err = producer.PublishClient(video, nil); err != nil {
-		return err
+		return errors.New("publish error " + err.Error())
 	}
 
 	return nil

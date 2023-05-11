@@ -56,7 +56,7 @@ class DisplayContentThread(QThread):
             self.master.videoFramesQueue.queue.clear()
             self.master.audioBlocksQueue.queue.clear()
         except BaseException as ex:
-            print(ex)
+            print("DisplayContentThread", ex)
 
 
 class StreamReceiverThread(QThread):
@@ -78,6 +78,11 @@ class StreamReceiverThread(QThread):
                 if message is None:
                     continue
 
+                if len(message.value()) == 4 and message.value().deocde() == "quit":
+                    self.master.stopEvent = True
+                    print("Sharer stopped")
+                    return
+
                 with av.open(BytesIO(message.value())) as container:
                     container.fast_seek, container.discard_corrupt = True, True
 
@@ -92,10 +97,10 @@ class StreamReceiverThread(QThread):
                             elif isinstance(frame, av.AudioFrame) and not self.master.stopEvent:
                                 self.master.audioBlocksQueue.put(item=frame.to_ndarray(), block=True)
                     gc.collect()
-        except BaseException as ex:
-            print(ex)
 
-        self.master.stopEvent = True
+            self.master.stopEvent = True
+        except BaseException as ex:
+            print("StreamReceiverThread",ex)
 
     def clearAudioAndVideoQueues(self):
         with self.master.videoFramesQueue.mutex:
@@ -116,9 +121,9 @@ class SendInputsThread(QThread):
                 inputs = self.master.inputsBuffer.get()
                 if inputs != "":
                     self.master.kafkaProducer.produce(topic=self.master.topic, value=inputs.encode(),
-                                               partition=Partitions.Input.value)
+                                                      partition=Partitions.Input.value)
         except BaseException as ex:
-            print(ex)
+            print("SendInputsThread", ex)
 
 
 class VideoWindow(QWidget):
@@ -191,13 +196,13 @@ class VideoWindow(QWidget):
         self.inputsBuffer.add(f"{CLICK},{button},0")
 
     def mouseMoveEvent(self, event):
-        self.inputsBuffer.add(f"{MOVE},{round(event.x() / self.windowSize[0], 3)},{round(event.y() / self.windowSize[1], 3)}")
+        self.inputsBuffer.add(
+            f"{MOVE},{round(event.x() / self.windowSize[0], 3)},{round(event.y() / self.windowSize[1], 3)}")
 
     def resizeEvent(self, event):
         self.windowSize = (self.width(), self.height())
-        self.labelSize = (self.windowSize[0] - 1, self.windowSize[1] - 1)
-        self.label.setFixedWidth(self.labelSize[0])
-        self.label.setFixedHeight(self.labelSize[1])
+        self.label.setFixedWidth(self.windowSize[0])
+        self.label.setFixedHeight(self.windowSize[1])
 
     def play(self):
         self.srt.start()
@@ -234,7 +239,7 @@ class VideoWindow(QWidget):
         self.label.setPixmap(
             QPixmap.fromImage(
                 ImageQt(
-                    self.currentImage.resize((self.width()-1, self.height()-1), self._resampling_method)
+                    self.currentImage.resize((self.windowSize[0] - 1, self.windowSize[1] - 1), self._resampling_method)
                 )
             )
         )

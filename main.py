@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
         file = QFileDialog()
         file.setDefaultSuffix("mp4")
         f = file.getSaveFileName(self, 'Save File')
-        if file is None:
+        if file is None or f[0] == "":
             self.uiFunctions.setStatusMessage("No file selected")
             return
 

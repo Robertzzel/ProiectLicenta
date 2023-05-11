@@ -24,7 +24,7 @@ RELEASE = 5
 
 
 class DisplayContentThread(QThread):
-    imageEvent = Signal(bool)
+    imageEvent = Signal(PIL.Image.Image)
 
     def __init__(self, master):
         super().__init__()
@@ -46,9 +46,9 @@ class DisplayContentThread(QThread):
             while not self.master.stopEvent:
                 try:
                     start = time.time()
-                    self.master.currentImage = self.master.videoFramesQueue.get(timeout=1).to_image()
+                    img = self.master.videoFramesQueue.get(timeout=1).to_image()
                     if not self.master.stopEvent:
-                        self.imageEvent.emit(True)
+                        self.imageEvent.emit(img)
                         time.sleep(max(rate - (time.time() - start) % rate, 0))
                 except queue.Empty:
                     continue
@@ -78,7 +78,7 @@ class StreamReceiverThread(QThread):
                 if message is None:
                     continue
 
-                if len(message.value()) == 4 and message.value().deocde() == "quit":
+                if len(message.value()) == 4 and message.value().decode() == "quit":
                     self.master.stopEvent = True
                     print("Sharer stopped")
                     return
@@ -143,8 +143,7 @@ class VideoWindow(QWidget):
         self.audioBlockSize = 0
         self.stopEvent: bool = False
         self.inputsBuffer: InputsBuffer = InputsBuffer()
-        self._resampling_method: int = Image.NEAREST
-        self.currentImage = None
+        self._resampling_method: int = Image.BOX
 
         self.dct = DisplayContentThread(self)
         self.srt = StreamReceiverThread(self)
@@ -201,8 +200,7 @@ class VideoWindow(QWidget):
 
     def resizeEvent(self, event):
         self.windowSize = (self.width(), self.height())
-        self.label.setFixedWidth(self.windowSize[0])
-        self.label.setFixedHeight(self.windowSize[1])
+        self.label.resize(self.windowSize[0], self.windowSize[1])
 
     def play(self):
         self.srt.start()
@@ -235,14 +233,9 @@ class VideoWindow(QWidget):
 
         outdata[:] = data
 
-    def displayFrame(self, _):
-        self.label.setPixmap(
-            QPixmap.fromImage(
-                ImageQt(
-                    self.currentImage.resize((self.windowSize[0] - 1, self.windowSize[1] - 1), self._resampling_method)
-                )
-            )
-        )
+    def displayFrame(self, img):
+        qtImage = ImageQt(img.resize((self.windowSize[0], self.windowSize[1]), self._resampling_method))
+        self.label.setPixmap(QPixmap.fromImage(qtImage).copy())
 
     def stop(self):
         self.stopEvent = True

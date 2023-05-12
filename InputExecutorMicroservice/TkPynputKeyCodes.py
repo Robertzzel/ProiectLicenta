@@ -1,7 +1,4 @@
 from __future__ import annotations
-import inspect
-import pynput.keyboard
-from PySide6.QtCore import Qt
 from pynput.keyboard import Key
 from typing import Optional
 

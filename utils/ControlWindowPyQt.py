@@ -159,10 +159,10 @@ class VideoWindow(QWidget):
         self.windowSize = ()
 
     def keyPressEvent(self, event):
-        self.inputsBuffer.add(f"{PRESS},{event.key() if len(event.text()) == 0 else event.text()}")
+        self.inputsBuffer.add(f"{PRESS},{event.key() if not event.text().isalpha() else event.text()}")
 
     def keyReleaseEvent(self, event):
-        self.inputsBuffer.add(f"{RELEASE},{event.key() if len(event.text()) == 0 else event.text()}")
+        self.inputsBuffer.add(f"{RELEASE},{event.key() if not event.text().isalpha() else event.text()}")
 
     def wheelEvent(self, event):
         self.inputsBuffer.add(f"{SCROLL},{int(event.angleDelta().y() > 0)}")

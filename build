@@ -5,6 +5,3 @@ go build -o AggregatorMicroservice.exe AggregatorMicroservice/AggregatorMicroser
 
 chmod +x VideoMicroservice.exe
 chmod +x AggregatorMicroservice.exe
-
-#cd PingMicroservice
-#go build PingMicroservice.go

@@ -24,13 +24,12 @@ class MainWindow(QMainWindow):
 
         self.videoWindow = None
         self.ui = UiMainWindow(self)
+        self.ui.uiDefinitions()
         self.setWindowTitle("RMI")
         self.backend = Backend()
 
         self.widgets = self.ui
         self.widgets.titleRightInfo.setText("Remote Desktop Application")
-        self.uiFunctions = UIFunctions(self)
-        self.uiFunctions.uiDefinitions()
 
         self.setCallbacks()
 
@@ -39,11 +38,11 @@ class MainWindow(QMainWindow):
         self.isDarkThemeOn = False
         self.__toggleTheme()
         self.ui.topLogo.setStyleSheet(
-            f"background-image: url({Path(__file__).parent / 'images' / 'images' / 'logo.png'});")
+            f"background-image: url({Path(__file__).parent / 'images' / 'icons' / 'logo.png'});")
         self.show()
 
     def setCallbacks(self):
-        self.widgets.toggleButton.clicked.connect(lambda: UIFunctions.toggleMenu(self))
+        self.widgets.toggleButton.clicked.connect(lambda: self.ui.toggleMenu())
         self.widgets.btnKafka.clicked.connect(self.btnKafkaPressed)
         self.widgets.btnLogin.clicked.connect(self.btnLoginPressed)
         self.widgets.btnRegister.clicked.connect(self.btnRegisterPressed)
@@ -58,41 +57,41 @@ class MainWindow(QMainWindow):
 
     def __toggleTheme(self):
         if self.isDarkThemeOn:
-            UIFunctions.theme(self, "./themes/py_dracula_light.qss")
+            self.ui.theme("./themes/py_dracula_light.qss")
             Settings.MENU_SELECTED_STYLESHEET = Settings.MENU_SELECTED_LIGHT_STYLESHEET
         else:
-            UIFunctions.theme(self, "./themes/py_dracula_dark.qss")
+            self.ui.theme("./themes/py_dracula_dark.qss")
             Settings.MENU_SELECTED_STYLESHEET = Settings.MENU_SELECTED_DARK_STYLESHEET
-        UIFunctions.resetStyle(self, "")
+        self.ui.resetStyle("")
         self.isDarkThemeOn = not self.isDarkThemeOn
 
     def btnKafkaPressed(self):
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.kafkaWindow)
-        UIFunctions.resetStyle(self, "btnKafka")
-        btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
+        self.ui.resetStyle("btnKafka")
+        btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def btnLoginPressed(self):
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.loginWindow)
-        UIFunctions.resetStyle(self, "btnLogin")
-        btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
+        self.ui.resetStyle("btnLogin")
+        btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def btnRegisterPressed(self):
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.registerWindow)
-        UIFunctions.resetStyle(self, "btnRegister")
-        btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
+        self.ui.resetStyle("btnRegister")
+        btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def btnMyVideosPresses(self):
         if self.backend.user is None:
-            self.uiFunctions.setStatusMessage("No user connected")
+            self.ui.setStatusMessage("No user connected")
             return
 
         self.widgets.myVideosWindow.clear()
         videos = self.backend.getUserVideos()
         if type(videos) is Exception:
-            self.uiFunctions.setStatusMessage(str(videos))
+            self.ui.setStatusMessage(str(videos))
 
         for video in videos:
             self.widgets.myVideosWindow.addVideoRow(f"DURATION: {video[0]} secs", f"SIZE: {video[1]} bytes",
@@ -101,8 +100,8 @@ class MainWindow(QMainWindow):
 
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.myVideosWindow)
-        UIFunctions.resetStyle(self, "btnMyVideos")
-        btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
+        self.ui.resetStyle("btnMyVideos")
+        btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def btnCallWindowPressed(self):
         if self.backend.user is None:
@@ -113,8 +112,8 @@ class MainWindow(QMainWindow):
         self.ui.callWindow.yourCallPasswordEdit.setText(self.backend.user.callPassword)
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.callWindow)
-        UIFunctions.resetStyle(self, "btnCall")
-        btn.setStyleSheet(UIFunctions.selectMenu(btn.styleSheet()))
+        self.ui.resetStyle("btnCall")
+        btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def mousePressEvent(self, event):
         self.dragPos = event.globalPos()
@@ -124,57 +123,57 @@ class MainWindow(QMainWindow):
         address = "localhost:9092" if address is None or address == "" else address
         connectionSet = self.backend.setKafkaConnection(address)
         if connectionSet is not True:
-            self.uiFunctions.setStatusMessage(str(connectionSet))
+            self.ui.setStatusMessage(str(connectionSet))
             return
 
-        self.uiFunctions.setConnectedToKafkaState(address)
-        self.uiFunctions.setStatusMessage("Connected to kafka")
+        self.ui.setConnectedToKafkaState(address)
+        self.ui.setStatusMessage("Connected to kafka")
 
     def disconnectFromKafka(self):
         self.backend.disconnectFromKafka()
-        self.uiFunctions.setIsNotConnectedToKafkaState()
-        self.uiFunctions.setStatusMessage("Disconnected from kafka")
+        self.ui.setIsNotConnectedToKafkaState()
+        self.ui.setStatusMessage("Disconnected from kafka")
 
     def loginAccount(self):
         username = self.ui.loginWindow.usernameLineEdit.text()
         password = self.ui.loginWindow.passwordLineEit.text()
         if username == "" or password == "":
-            self.uiFunctions.setStatusMessage("Must give username and password")
+            self.ui.setStatusMessage("Must give username and password")
             return
 
         loginResult = self.backend.login(username, password)
         if loginResult is not None:
-            self.uiFunctions.setStatusMessage(str(loginResult))
+            self.ui.setStatusMessage(str(loginResult))
             return
 
-        self.uiFunctions.setUserLoggedIn(username)
-        self.uiFunctions.setStatusMessage(f"Successfully connected as {username}")
+        self.ui.setUserLoggedIn(username)
+        self.ui.setStatusMessage(f"Successfully connected as {username}")
 
     def disconnectAccount(self):
         self.backend.disconnect()
-        self.uiFunctions.setUserNotLoggedIn()
-        self.uiFunctions.setStatusMessage(f"Successfully disconnected")
+        self.ui.setUserNotLoggedIn()
+        self.ui.setStatusMessage(f"Successfully disconnected")
 
     def registerAccount(self):
         username = self.ui.registerWindow.usernameEdit.text()
         password = self.ui.registerWindow.passwordEdit.text()
         confirmPassword = self.ui.registerWindow.confirmPasswordEdit.text()
         if username == "" or password == "" or confirmPassword == "":
-            self.uiFunctions.setStatusMessage("Must give username, password and confirm password")
+            self.ui.setStatusMessage("Must give username, password and confirm password")
             return
         if password != confirmPassword:
-            self.uiFunctions.setStatusMessage("The Password and the confirmation are not the same")
+            self.ui.setStatusMessage("The Password and the confirmation are not the same")
             return
 
         registerResult = self.backend.registerNewAccount(username, password)
         if type(registerResult) is Exception:
-            self.uiFunctions.setStatusMessage(str(registerResult))
+            self.ui.setStatusMessage(str(registerResult))
             return
 
         self.ui.registerWindow.usernameEdit.setText("")
         self.ui.registerWindow.passwordEdit.setText("")
         self.ui.registerWindow.confirmPasswordEdit.setText("")
-        self.uiFunctions.setStatusMessage("Successfully registered")
+        self.ui.setStatusMessage("Successfully registered")
 
     def startCall(self):
         self.backend.createSession()
@@ -183,7 +182,7 @@ class MainWindow(QMainWindow):
         self.ui.callWindow.startSessionBtn.clicked.disconnect()
         self.ui.callWindow.startSessionBtn.clicked.connect(self.stopCall)
         self.ui.callWindow.startSessionBtn.setText("STOP SHARING")
-        self.uiFunctions.setStatusMessage("Call started")
+        self.ui.setStatusMessage("Call started")
 
     def stopCall(self):
         self.backend.stopRecorder()
@@ -192,18 +191,18 @@ class MainWindow(QMainWindow):
         self.ui.callWindow.startSessionBtn.clicked.disconnect()
         self.ui.callWindow.startSessionBtn.clicked.connect(self.startCall)
         self.ui.callWindow.startSessionBtn.setText("START SHARING")
-        self.uiFunctions.setStatusMessage("Call stopped")
+        self.ui.setStatusMessage("Call stopped")
 
     def joinCall(self):
         callKey = self.ui.callWindow.partnerCallKeyEdit.text()
         callPassword = self.ui.callWindow.partnerCallPasswordEdit.text()
         if callKey == "" or callPassword == "":
-            self.uiFunctions.setStatusMessage("provide both key and password")
+            self.ui.setStatusMessage("provide both key and password")
             return
 
         topic = self.backend.getPartnerTopic(callKey, callPassword)
         if type(topic) is Exception:
-            self.uiFunctions.setStatusMessage(str(topic))
+            self.ui.setStatusMessage(str(topic))
             return
 
         self.w = VideoWindow(topic, self.backend.kafkaContainer.address)
@@ -214,17 +213,17 @@ class MainWindow(QMainWindow):
         file.setDefaultSuffix("mp4")
         f = file.getSaveFileName(self, 'Save File')
         if file is None or f[0] == "":
-            self.uiFunctions.setStatusMessage("No file selected")
+            self.ui.setStatusMessage("No file selected")
             return
 
         video = self.backend.downloadVideo(videoId)
         if type(video) is Exception:
-            self.uiFunctions.setStatusMessage(str(video))
+            self.ui.setStatusMessage(str(video))
             return
 
         with open(f[0], "wb") as file:
             file.write(video)
-        self.uiFunctions.setStatusMessage("Video downloaded")
+        self.ui.setStatusMessage("Video downloaded")
 
 
 if __name__ == "__main__":

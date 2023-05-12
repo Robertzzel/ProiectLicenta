@@ -2,44 +2,50 @@ from pathlib import Path
 from PySide6.QtCore import *
 from PySide6.QtGui import *
 from PySide6.QtWidgets import *
+
+from .Settings import Settings
 from .CallWindow import CallWindow
 from .KafkaWindow import KafkaWindow
 from .Login import Login
 from .MyVideosWindow import MyVideosWindow
 from .Register import Register
 
+font = QFont()
+font.setFamily(u"Segoe UI")
+font.setPointSize(10)
+font.setBold(False)
+font.setItalic(False)
+
+font1 = QFont()
+font1.setFamily(u"Segoe UI Semibold")
+font1.setPointSize(12)
+font1.setBold(False)
+font1.setItalic(False)
+
+font2 = QFont()
+font2.setFamily(u"Segoe UI")
+font2.setPointSize(8)
+font2.setBold(False)
+font2.setItalic(False)
+
+font3 = QFont()
+font3.setFamily(u"Segoe UI")
+font3.setPointSize(10)
+font3.setBold(False)
+font3.setItalic(False)
+font3.setStyleStrategy(QFont.PreferDefault)
+
+font5 = QFont()
+font5.setFamily(u"Segoe UI")
+font5.setBold(False)
+font5.setItalic(False)
+
 
 class UiMainWindow(object):
     def __init__(self, MainWindow):
-        font = QFont()
-        font.setFamily(u"Segoe UI")
-        font.setPointSize(10)
-        font.setBold(False)
-        font.setItalic(False)
-
-        font1 = QFont()
-        font1.setFamily(u"Segoe UI Semibold")
-        font1.setPointSize(12)
-        font1.setBold(False)
-        font1.setItalic(False)
-
-        font2 = QFont()
-        font2.setFamily(u"Segoe UI")
-        font2.setPointSize(8)
-        font2.setBold(False)
-        font2.setItalic(False)
-
-        font3 = QFont()
-        font3.setFamily(u"Segoe UI")
-        font3.setPointSize(10)
-        font3.setBold(False)
-        font3.setItalic(False)
-        font3.setStyleStrategy(QFont.PreferDefault)
-
-        font5 = QFont()
-        font5.setFamily(u"Segoe UI")
-        font5.setBold(False)
-        font5.setItalic(False)
+        self.state = False
+        self.titleBar = True
+        self.master = MainWindow
 
         self.mainWindowWidget = QWidget(MainWindow)
         self.mainWindowWidget.setFont(font)
@@ -417,12 +423,6 @@ class UiMainWindow(object):
 
         # My Videos Window
         self.myVideosWindow = MyVideosWindow()
-        # self.myVideosWindowLayout = QVBoxLayout(self.myVideosWindow)
-        # self.myVideosScroll = QScrollArea()
-        # self.myVideosScroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        # self.myVideosScroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        # self.myVideosScroll.setWidgetResizable(True)
-        # self.myVideosScroll.setWidget(self.myVideosWindow)
         self.pagesStack.addWidget(self.myVideosWindow)
         # End My Videos Window
 
@@ -441,3 +441,128 @@ class UiMainWindow(object):
         self.closeAppBtn.setToolTip("Close")
         self.closeAppBtn.setText("")
 
+    def maximize_restore(self):
+        if not self.state:
+            self.master.showMaximized()
+        else:
+            self.master.showNormal()
+            self.master.resize(1280, 720)
+        self.state = not self.state
+
+    def returStatus(self):
+        return self.state
+
+    def setStatus(self, status):
+        self.state = status
+
+    def toggleMenu(self):
+        width = Settings.MENU_WIDTH if self.leftMenuWithLogoFrame.width() == 60 else 60
+        # ANIMATION
+        self.animation = QPropertyAnimation(self.leftMenuWithLogoFrame, b"minimumWidth")
+        self.animation.setDuration(Settings.TIME_ANIMATION)
+        self.animation.setStartValue(60 if self.leftMenuWithLogoFrame.width() == 60 else Settings.MENU_WIDTH)
+        self.animation.setEndValue(width)
+        self.animation.setEasingCurve(QEasingCurve.InOutQuart)
+        self.animation.start()
+
+    @staticmethod
+    def selectMenu(getStyle):
+        select = getStyle + Settings.MENU_SELECTED_STYLESHEET
+        return select
+
+    @staticmethod
+    def deselectMenu(getStyle):
+        deselect = getStyle.replace(Settings.MENU_SELECTED_STYLESHEET, "")
+        return deselect
+
+    def resetStyle(self, widget):
+        for w in self.buttonMenu.findChildren(QPushButton):
+            if w.objectName() != widget:
+                try:
+                    mainWindowWidget = w.styleSheet()
+                    style = self.deselectMenu(mainWindowWidget)
+                    w.setStyleSheet(style)
+                except Exception as ex:
+                    print(ex)
+
+    def theme(self, file):
+        str = open(file, 'r').read()
+        self.mainWindowWidget.setStyleSheet(str)
+
+    def uiDefinitions(self):
+        def dobleClickMaximizeRestore(event):
+            if event.type() == QEvent.MouseButtonDblClick:
+                QTimer.singleShot(250, lambda: self.maximize_restore())
+        self.titleRightInfo.mouseDoubleClickEvent = dobleClickMaximizeRestore
+
+        self.master.setWindowFlags(Qt.FramelessWindowHint)
+        self.master.setAttribute(Qt.WA_TranslucentBackground)
+
+        def moveWindow(event):
+            # IF MAXIMIZED CHANGE TO NORMAL
+            if self.returStatus():
+                self.maximize_restore()
+            # MOVE WINDOW
+            if event.buttons() == Qt.LeftButton:
+                self.master.move(self.master.pos() + event.globalPos() - self.master.dragPos)
+                self.master.dragPos = event.globalPos()
+                event.accept()
+        self.titleRightInfo.mouseMoveEvent = moveWindow
+
+        # DROP SHADOW
+        self.shadow = QGraphicsDropShadowEffect(self.master)
+        self.shadow.setBlurRadius(17)
+        self.shadow.setXOffset(0)
+        self.shadow.setYOffset(0)
+        self.shadow.setColor(QColor(0, 0, 0, 150))
+        self.applicationFrame.setGraphicsEffect(self.shadow)
+
+        # RESIZE WINDOW
+        self.sizegrip = QSizeGrip(self.resizeGrip)
+        self.sizegrip.setStyleSheet("width: 20px; height: 20px; margin 0px; padding: 0px;")
+
+        # MINIMIZE
+        self.minimizeAppBtn.clicked.connect(lambda: self.master.showMinimized())
+
+        # MAXIMIZE/RESTORE
+        self.maximizeRestoreAppBtn.clicked.connect(lambda: self.maximize_restore())
+
+        # CLOSE APPLICATION
+        self.closeAppBtn.clicked.connect(lambda: self.master.close())
+
+    def setConnectedToKafkaState(self, address):
+        self.kafkaWindow.pushButton.setText("Disconnect")
+        self.kafkaWindow.lineEdit.setText(address)
+        self.kafkaWindow.lineEdit.setDisabled(True)
+
+        self.kafkaWindow.pushButton.clicked.disconnect()
+        self.kafkaWindow.pushButton.clicked.connect(self.master.disconnectFromKafka)
+
+    def setIsNotConnectedToKafkaState(self):
+        self.kafkaWindow.pushButton.setText("Connect")
+        self.kafkaWindow.lineEdit.setText("")
+        self.kafkaWindow.lineEdit.setDisabled(False)
+
+        self.kafkaWindow.pushButton.clicked.disconnect()
+        self.kafkaWindow.pushButton.clicked.connect(self.master.connectToKafka)
+
+    def setUserLoggedIn(self, username: str):
+        self.loginWindow.usernameLineEdit.setText(username)
+        self.loginWindow.passwordLineEit.setText("")
+        self.loginWindow.passwordLineEit.setDisabled(True)
+        self.loginWindow.usernameLineEdit.setDisabled(True)
+        self.loginWindow.pushButton.setText("Disconnect")
+        self.loginWindow.pushButton.clicked.disconnect()
+        self.loginWindow.pushButton.clicked.connect(self.master.disconnectAccount)
+
+    def setUserNotLoggedIn(self):
+        self.loginWindow.usernameLineEdit.setText("")
+        self.loginWindow.passwordLineEit.setText("")
+        self.loginWindow.passwordLineEit.setDisabled(False)
+        self.loginWindow.usernameLineEdit.setDisabled(False)
+        self.loginWindow.pushButton.setText("Connect")
+        self.loginWindow.pushButton.clicked.disconnect()
+        self.loginWindow.pushButton.clicked.connect(self.master.loginAccount)
+
+    def setStatusMessage(self, message):
+        self.titleRightInfo.setText(message)

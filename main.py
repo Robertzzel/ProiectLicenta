@@ -72,12 +72,20 @@ class MainWindow(QMainWindow):
         btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def btnLoginPressed(self):
+        if self.backend.kafkaContainer is None:
+            self.ui.setStatusMessage("Not connected to Kafka", True)
+            return
+
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.loginWindow)
         self.ui.resetStyle("btnLogin")
         btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def btnRegisterPressed(self):
+        if self.backend.kafkaContainer is None:
+            self.ui.setStatusMessage("Not connected to Kafka", True)
+            return
+
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.registerWindow)
         self.ui.resetStyle("btnRegister")
@@ -85,13 +93,13 @@ class MainWindow(QMainWindow):
 
     def btnMyVideosPresses(self):
         if self.backend.user is None:
-            self.ui.setStatusMessage("No user connected")
+            self.ui.setStatusMessage("No user connected", True)
             return
 
         self.widgets.myVideosWindow.clear()
         videos = self.backend.getUserVideos()
         if type(videos) is Exception:
-            self.ui.setStatusMessage(str(videos))
+            self.ui.setStatusMessage(str(videos), True)
 
         for video in videos:
             self.widgets.myVideosWindow.addVideoRow(f"DURATION: {video[0]} secs", f"SIZE: {video[1]} bytes",
@@ -105,7 +113,7 @@ class MainWindow(QMainWindow):
 
     def btnCallWindowPressed(self):
         if self.backend.user is None:
-            self.uiFunctions.setStatusMessage("No user connected")
+            self.ui.setStatusMessage("No user connected", True)
             return
 
         self.ui.callWindow.yourCallKeyEdit.setText(self.backend.user.callKey)
@@ -123,7 +131,7 @@ class MainWindow(QMainWindow):
         address = "localhost:9092" if address is None or address == "" else address
         connectionSet = self.backend.setKafkaConnection(address)
         if connectionSet is not True:
-            self.ui.setStatusMessage(str(connectionSet))
+            self.ui.setStatusMessage(str(connectionSet), True)
             return
 
         self.ui.setConnectedToKafkaState(address)
@@ -138,12 +146,12 @@ class MainWindow(QMainWindow):
         username = self.ui.loginWindow.usernameLineEdit.text()
         password = self.ui.loginWindow.passwordLineEit.text()
         if username == "" or password == "":
-            self.ui.setStatusMessage("Must give username and password")
+            self.ui.setStatusMessage("Must give username and password", True)
             return
 
         loginResult = self.backend.login(username, password)
         if loginResult is not None:
-            self.ui.setStatusMessage(str(loginResult))
+            self.ui.setStatusMessage(str(loginResult), True)
             return
 
         self.ui.setUserLoggedIn(username)
@@ -159,15 +167,15 @@ class MainWindow(QMainWindow):
         password = self.ui.registerWindow.passwordEdit.text()
         confirmPassword = self.ui.registerWindow.confirmPasswordEdit.text()
         if username == "" or password == "" or confirmPassword == "":
-            self.ui.setStatusMessage("Must give username, password and confirm password")
+            self.ui.setStatusMessage("Must give username, password and confirm password", True)
             return
         if password != confirmPassword:
-            self.ui.setStatusMessage("The Password and the confirmation are not the same")
+            self.ui.setStatusMessage("The Password and the confirmation are not the same", True)
             return
 
         registerResult = self.backend.registerNewAccount(username, password)
         if type(registerResult) is Exception:
-            self.ui.setStatusMessage(str(registerResult))
+            self.ui.setStatusMessage(str(registerResult), True)
             return
 
         self.ui.registerWindow.usernameEdit.setText("")
@@ -197,12 +205,12 @@ class MainWindow(QMainWindow):
         callKey = self.ui.callWindow.partnerCallKeyEdit.text()
         callPassword = self.ui.callWindow.partnerCallPasswordEdit.text()
         if callKey == "" or callPassword == "":
-            self.ui.setStatusMessage("provide both key and password")
+            self.ui.setStatusMessage("provide both key and password", True)
             return
 
         topic = self.backend.getPartnerTopic(callKey, callPassword)
         if type(topic) is Exception:
-            self.ui.setStatusMessage(str(topic))
+            self.ui.setStatusMessage(str(topic), True)
             return
 
         self.w = VideoWindow(topic, self.backend.kafkaContainer.address)
@@ -213,12 +221,12 @@ class MainWindow(QMainWindow):
         file.setDefaultSuffix("mp4")
         f = file.getSaveFileName(self, 'Save File')
         if file is None or f[0] == "":
-            self.ui.setStatusMessage("No file selected")
+            self.ui.setStatusMessage("No file selected", True)
             return
 
         video = self.backend.downloadVideo(videoId)
         if type(video) is Exception:
-            self.ui.setStatusMessage(str(video))
+            self.ui.setStatusMessage(str(video), True)
             return
 
         with open(f[0], "wb") as file:

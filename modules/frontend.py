@@ -294,6 +294,21 @@ class UiMainWindow(object):
         self.rightButtonsLayout.setObjectName(u"horizontalLayout_2")
         self.rightButtonsLayout.setContentsMargins(0, 0, 0, 0)
 
+        # User Button
+        self.authenticatedUserBtn = QPushButton(self.rightButtonsFrame)
+        self.authenticatedUserBtn.setObjectName(u"authenticatedUserBtn")
+        self.authenticatedUserBtn.setMinimumSize(QSize(28, 28))
+        self.authenticatedUserBtn.setMaximumSize(QSize(200, 28))
+        self.authenticatedUserBtn.setCursor(QCursor(Qt.PointingHandCursor))
+        icon2 = QIcon()
+        icon2.addFile(str(Path(__file__).parent.parent / 'images' / 'icons' / 'cil-user.png'), QSize(),
+                      QIcon.Normal, QIcon.Off)
+        self.authenticatedUserBtn.setIcon(icon2)
+        self.authenticatedUserBtn.setIconSize(QSize(20, 20))
+        self.authenticatedUserBtn.setText("Guest")
+        self.rightButtonsLayout.addWidget(self.authenticatedUserBtn)
+        # End User Button
+
         # Minimize App Button
         self.minimizeAppBtn = QPushButton(self.rightButtonsFrame)
         self.minimizeAppBtn.setObjectName(u"minimizeAppBtn")
@@ -554,6 +569,7 @@ class UiMainWindow(object):
         self.loginWindow.pushButton.setText("Disconnect")
         self.loginWindow.pushButton.clicked.disconnect()
         self.loginWindow.pushButton.clicked.connect(self.master.disconnectAccount)
+        self.authenticatedUserBtn.setText(username)
 
     def setUserNotLoggedIn(self):
         self.loginWindow.usernameLineEdit.setText("")
@@ -563,6 +579,11 @@ class UiMainWindow(object):
         self.loginWindow.pushButton.setText("Connect")
         self.loginWindow.pushButton.clicked.disconnect()
         self.loginWindow.pushButton.clicked.connect(self.master.loginAccount)
+        self.authenticatedUserBtn.setText("Guest")
 
-    def setStatusMessage(self, message):
+    def setStatusMessage(self, message, isError=False):
+        if isError:
+            self.titleRightInfo.setStyleSheet("color: #ff0000;")
+        else:
+            self.titleRightInfo.setStyleSheet("color: #ffffff;")
         self.titleRightInfo.setText(message)

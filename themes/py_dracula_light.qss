@@ -135,8 +135,6 @@ Left Menu */
 
 #authenticatedUserBtn { color: #f8f8f8}
 
-/* /////////////////////////////////////////////////////////////////////////////////////////////////
-Content App */
 #topBarFrame{
 	background-color: #6272a4;
 }

@@ -170,14 +170,13 @@ class VideoWindow(QWidget):
     def mousePressEvent(self, event):
         button = event.button()
         if button == Qt.LeftButton:
-            button = 1
+            self.inputsBuffer.add(f"{CLICK},1,1")
         elif button == Qt.RightButton:
-            button = 3
+            self.inputsBuffer.add(f"{CLICK},3,1")
         elif button == Qt.MiddleButton:
-            button = 2
+            self.inputsBuffer.add(f"{CLICK},2,1")
         else:
-            button = 1
-        self.inputsBuffer.add(f"{CLICK},{button},1")
+            self.inputsBuffer.add(f"{CLICK},1,1")
 
     def closeEvent(self, event):
         self.stop()
@@ -185,14 +184,13 @@ class VideoWindow(QWidget):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
-            button = 1
+            self.inputsBuffer.add(f"{CLICK},1,0")
         elif event.button() == Qt.RightButton:
-            button = 3
+            self.inputsBuffer.add(f"{CLICK},3,0")
         elif event.button() == Qt.MiddleButton:
-            button = 2
+            self.inputsBuffer.add(f"{CLICK},2,0")
         else:
-            button = 1
-        self.inputsBuffer.add(f"{CLICK},{button},0")
+            self.inputsBuffer.add(f"{CLICK},1,0")
 
     def mouseMoveEvent(self, event):
         self.inputsBuffer.add(

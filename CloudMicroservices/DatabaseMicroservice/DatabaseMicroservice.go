@@ -95,6 +95,7 @@ func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *
 }
 
 func main() {
+	log.Println("Getting environment variables...")
 	brokerAddress := os.Getenv("BROKER_ADDRESS")
 	databaseUser := os.Getenv("DATABASE_USER")
 	databasePassword := os.Getenv("DATABASE_PASSWORD")
@@ -107,6 +108,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	log.Println("Getting database connection...")
 	connectionString := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", databaseUser, databasePassword, databaseHost, databasePort, databaseName)
 
 	db, err := NewDatabaseManager("mysql", connectionString)
@@ -121,14 +123,17 @@ func main() {
 	}(db)
 	db.SetMaxOpenConns(10)
 
+	log.Println("Migrating database ...")
 	if err = db.MigrateDatabase(); err != nil {
 		panic(err)
 	}
 
+	log.Println("Creating topic...")
 	if err = Kafka.CreateTopic(brokerAddress, "DATABASE"); err != nil {
 		panic(err)
 	}
 
+	log.Println("Getting a consumer connection...")
 	consumer, err := Kafka.NewDatabaseConsumer(brokerAddress, topic)
 	if err != nil {
 		panic(err)
@@ -139,6 +144,7 @@ func main() {
 		}
 	}()
 
+	log.Println("Getting a producer connection...")
 	producer, err := Kafka.NewDatabaseProducer(brokerAddress)
 	if err != nil {
 		panic(err)
@@ -146,6 +152,7 @@ func main() {
 	defer producer.Close()
 
 	ctx := NewContextCancelableBySignals()
+	log.Println("Listening for messages...")
 	for ctx.Err() == nil {
 		message, err := consumer.ConsumeFullMessage(ctx)
 		if err != nil {

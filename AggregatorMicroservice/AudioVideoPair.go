@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -32,11 +33,8 @@ func (avp *AudioVideoPair) GetAudioTimestamp() (int, error) {
 	return strconv.Atoi(avp.Audio[len(avp.Audio)-17 : len(avp.Audio)-4])
 }
 
-func (avp *AudioVideoPair) CombineAndCompress(compressFactor int, output string) ([]byte, error) {
-	result, err := exec.Command("./CombineAndCompress", avp.Video, avp.Audio, fmt.Sprint(compressFactor), output).Output()
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
+func (avp *AudioVideoPair) CombineAndCompress(compressFactor int, output string, buffer *bytes.Buffer) error {
+	cmd := exec.Command("./CombineAndCompress", avp.Video, avp.Audio, fmt.Sprint(compressFactor), output)
+	cmd.Stdout = buffer
+	return cmd.Run()
 }

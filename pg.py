@@ -1,133 +1,101 @@
-# from PySide6.QtCore import *
-# from PySide6.QtWidgets import *
-# from PySide6.QtGui import *
-#
-#
-# from tkinter import *
-# from tkinter.ttk import Progressbar
-# from tkinter.ttk import Combobox
-# from tkinter.ttk import Notebook
-# from tkinter.ttk import Treeview
-# from PIL import Image, ImageTk
-# import tkinter.font
-#
-#
-# class Widget2():
-#     def __init__(self, parent):
-#         self.gui(parent)
-#
-#     def gui(self, parent):
-#         if parent == 0:
-#             self.w2 = Tk()
-#             self.w2.geometry('130x60')
-#         else:
-#             self.w2 = Frame(parent)
-#             self.w2.place(x = 0, y = 0, width = 130, height = 60)
-#         self.button1 = Button(self.w2, text = "Button", font = tkinter.font.Font(family = "Calibri", size = 9), cursor = "arrow", state = "normal")
-#         self.button1.place(x = 20, y = 20, width = 90, height = 22)
-#
-#
-# class Widget1(QWidget):
-#     def __init__(self, parent=None):
-#         super(Widget1, self).__init__(parent)
-#         self.gui()
-#
-#     def gui(self):
-#         self.w1 = self
-#         self.w1.setAutoFillBackground(True)
-#         self.w1.setWindowTitle("")
-#         self.w1.resize(500, 450)
-#         self.w1.setCursor(Qt.ArrowCursor)
-#         self.w1.setToolTip("")
-#         self.button1 = QToolButton(self.w1)
-#         self.button1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-#         self.button1.setText("Button")
-#         self.button1.move(9, 214)
-#         self.button1.resize(482, 22)
-#         self.button1.setCursor(Qt.ArrowCursor)
-#         self.button1.setToolTip("")
-#         self.button1.clicked.connect(event)
-#         #return self.w1
-#
-#
-# def event():
-#     b = Widget2(0)
-#     b.w2.mainloop()
-#
-# if __name__ == '__main__':
-#     import sys
-#     app = QApplication(sys.argv)
-#     a = Widget1()
-#     a.show()
-#     sys.exit(app.exec_())
-import PySide6
-import pynput
-from PySide6 import QtCore
-from PySide6.QtCore import *
-from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QWidget
-
 import sys
+import threading
+import time
+from typing import Dict
 
-from InputExecutorMicroservice.TkPynputKeyCodes import KeyTranslator
+import psutil
 
-
-class AnotherWindow(QWidget):
-    sig = Signal(int)
-
-    def __init__(self, master):
-        super().__init__()
-        layout = QVBoxLayout()
-        self.label = QLabel("Another Window")
-        self.label2 = QLabel("Another Window2")
-        layout.addWidget(self.label)
-        layout.addWidget(self.label2)
-        self.setLayout(layout)
-        self.label.mouseMoveEvent = self.mouseMoveEvent
-        self.label.keyPressEvent = self.keyPressEvent
-        self.label.keyReleaseEvent = self.keyReleaseEvent
-        self.label.mousePressEvent = self.mousePressEvent
-        self.label.mouseReleaseEvent = self.mouseReleaseEvent
-        self.label.setMouseTracking(True)
-        self.keyboard_controller: pynput.keyboard.Controller = pynput.keyboard.Controller()
-
-    # def em(self):
-    #     self.sig.emit(1)
-    #     self.sig.emit(1)
-
-    def keyPressEvent(self, event):
-        print(f"{1},{event.key() if not event.text().isalpha() else event.text()}")
-
-    def keyReleaseEvent(self, event):
-        trans = KeyTranslator.translate(event.key())
-        #print(f"{0},#{event.text()}#{trans}#")
-
-    def mousePressEvent(self, event):
-        print("Mouse p:", event.button())
-
-    def wheelEvent(self, event) -> None:
-        print("Wheel:", event.angleDelta().y())
-
-    def mouseReleaseEvent(self, event):
-        print("Mouse r:", event.button())
-
-    def mouseMoveEvent(self, event):
-        print("Move:", event.globalPos().x(), event.globalPos().y())
+from Kafka import Kafka
 
 
-class MainWindow(QMainWindow):
+class Monitor:
     def __init__(self):
-        super().__init__()
-        self.button = QPushButton("Push for Window")
-        self.button.clicked.connect(self.show_new_window)
-        self.setCentralWidget(self.button)
+        self.processes: Dict = {}
+        self.threads = []
 
-    def show_new_window(self, checked):
-        self.w = AnotherWindow(self)
-        self.w.show()
-        self.w.sig.connect(lambda x: print(x))
+    def monitorProcess(self, pid, alias):
+        self.processes[pid] = {
+            "alias": alias,
+            "obj": psutil.Process(pid),
+            "start": time.time(),
+            "CPU": [],  # process.cpu_percent()
+            "RAM": [],  # process.memory_info().rss
+            "VIRTUAL": [],  # process.memory_info().vms
+            "FILE_HANDLES": [],  # p.num_fds()
+            "SUBPROCESSES": [],  # len(process.children())
+            "THREADS": []  # process.num_threads()
+        }
+        self.threads.append(threading.Thread(target=self.monitor, args=(pid, )))
+        self.threads[-1].start()
+
+    def monitor(self, pid):
+        process = self.processes.get(pid, None)
+        while process is not None:
+            try:
+                obj: psutil.Process = process["obj"]
+                process["CPU"].append(obj.cpu_percent())
+                memory = obj.memory_info()
+                process["RAM"].append(memory.rss)
+                process["VIRTUAL"].append(memory.vms)
+                process["FILE_HANDLES"].append(obj.num_fds())
+                process["SUBPROCESSES"].append(len(obj.children(recursive=True)))
+                process["THREADS"].append(obj.num_threads())
+                time.sleep(0.1)
+                process = self.processes.get(pid, None)
+            except BaseException as ex:
+                self.stopMonitorProcess(pid)
+
+    def stopMonitorProcess(self, pid):
+        process = self.processes.get(pid, None)
+        if process is None:
+            return
+
+        with open(f"monitor_{process['alias']}", "w") as f:
+            f.write(f"""{process["start"]}
+{time.time()}
+{process["CPU"]}
+{process["RAM"]}
+{process["VIRTUAL"]}
+{process["FILE_HANDLES"]}
+{process["SUBPROCESSES"]}
+{process["THREADS"]}""")
+
+        del self.processes[pid]
 
 
-app = QApplication(sys.argv)
-w = MainWindow()
-w.show()
-sys.exit(app.exec_())
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("No arguments")
+        sys.exit(1)
+
+    address, topic = sys.argv[1], sys.argv[2]
+    m = Monitor()
+
+    consumer = Kafka.KafkaConsumerWrapper({
+                'auto.offset.reset': 'latest',
+                'allow.auto.create.topics': "true",
+                'bootstrap.servers': address,
+                'group.id': "-",
+            }, [(topic, 7)])
+    pids = []
+    print("Dtarting")
+    while True:
+        msg = consumer.receiveBigMessage(partition=7, timeoutSeconds=1)
+        if msg is None:
+            continue
+
+        print(msg.value().decode())
+        if msg.value().decode().lower() == "exit":
+            break
+
+        data = msg.value().decode().split(",")
+        pid, alias = int(data[0]), data[1]
+        pids.append(pid)
+
+        print(f"started process {pid} with alias {alias}")
+        m.monitorProcess(pid, alias)
+
+    for pid in pids:
+        m.stopMonitorProcess(pid)
+
+    print("closed")

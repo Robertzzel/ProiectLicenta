@@ -1,4 +1,6 @@
 from __future__ import annotations
+import enum
+import os.path
 from typing import *
 import confluent_kafka as kafka
 from math import ceil
@@ -6,6 +8,16 @@ from typing import List
 import time
 
 from confluent_kafka.admin import AdminClient
+
+
+class Partitions(enum.Enum):
+    VideoMicroservice = 0
+    AggregatorMicroservice = 1
+    AggregatorMicroserviceStart = 5
+    AudioMicroservice = 2
+    Client = 3
+    MergerMicroservice = 4
+    Input = 6
 
 
 class CustomKafkaMessage:
@@ -37,8 +49,37 @@ class KafkaProducerWrapper(kafka.Producer):
         for i in range(numberOfMessages):
             start = i * self.maxSingleMessageSize
             end = min((i + 1) * self.maxSingleMessageSize, len(value))
-            self.produce(topic=topic, value=value[start: end],
-                         headers=headers + [("message-number", str(i).zfill(5).encode())], key=key, partition=partition)
+            try:
+                self.produce(topic=topic, value=value[start: end],
+                             headers=headers + [("message-number", str(i).zfill(5).encode())], key=key,
+                             partition=partition)
+            except BufferError:
+                self.flush()
+                self.produce(topic=topic, value=value[start: end],
+                             headers=headers + [("message-number", str(i).zfill(5).encode())], key=key,
+                             partition=partition)
+
+    def sendFile(self, topic: str, fileName: str, headers=None, key=None, partition=0):
+        fileSize = os.path.getsize(fileName)
+        numberOfMessages = ceil(fileSize / self.maxSingleMessageSize)
+        numberOfMessagesHeader = ("number-of-messages", str(numberOfMessages).zfill(5).encode())
+        if headers is None:
+            headers = [numberOfMessagesHeader]
+        else:
+            headers.append(numberOfMessagesHeader)
+
+        with open(fileName, "rb") as f:
+            for i in range(numberOfMessages):
+                buff = f.read(self.maxSingleMessageSize)
+                try:
+                    self.produce(topic=topic, value=buff,
+                                 headers=headers + [("message-number", str(i).zfill(5).encode())], key=key,
+                                 partition=partition)
+                except BufferError:
+                    self.flush()
+                    self.produce(topic=topic, value=buff,
+                                 headers=headers + [("message-number", str(i).zfill(5).encode())], key=key,
+                                 partition=partition)
 
 
 class KafkaConsumerWrapper(kafka.Consumer):
@@ -62,7 +103,8 @@ class KafkaConsumerWrapper(kafka.Consumer):
         _, high = self.get_watermark_offsets(tp)
         self.seek(kafka.TopicPartition(topic, partition, high))
 
-    def receiveBigMessage(self, timeoutSeconds: float = None, partition = 0) -> Optional[kafka.Message | CustomKafkaMessage]:
+    def receiveBigMessage(self, timeoutSeconds: float = None, partition=0) -> Optional[
+        kafka.Message | CustomKafkaMessage]:
         endTime = None if timeoutSeconds is None else time.time() + timeoutSeconds
 
         message = self.consumeMessage(None if endTime is None else endTime - time.time(), partition=partition)
@@ -73,7 +115,8 @@ class KafkaConsumerWrapper(kafka.Consumer):
             if header == ("status", b"FAILED"):
                 return None
 
-        headersToBeReturned: List[str, bytes] = list(filter(lambda h: h[0] not in ("number-of-messages", "message-number"), message.headers()))
+        headersToBeReturned: List[str, bytes] = list(
+            filter(lambda h: h[0] not in ("number-of-messages", "message-number"), message.headers()))
         numberOfMessages: int = 0
         currentMessageNumber: int = 0
 

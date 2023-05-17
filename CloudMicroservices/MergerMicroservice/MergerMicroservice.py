@@ -1,8 +1,10 @@
 import os
 import sys
 import signal
+from Kafka.Kafka import KafkaConsumerWrapper, KafkaProducerWrapper, deleteTopic
 from TempFile import TempFile
 from VideoAggregator import VideoAggregator
+from Kafka.Kafka import Partitions
 
 
 DATABASE_TOPIC = "DATABASE"
@@ -17,7 +19,7 @@ class Merger:
             'bootstrap.servers': self.broker,
             'group.id': "-",
             'auto.offset.reset': 'latest',
-        }, [(self.topic, CloudMicroservices.MergerMicroservice.Kafka.partitions.ClientPartition)])
+        }, [(self.topic, Partitions.Client.value)])
         self.producer = KafkaProducerWrapper({'bootstrap.servers': self.broker})
         self.running = True
 
@@ -25,7 +27,7 @@ class Merger:
         makefile = TempFile(delete=False)
 
         while self.running:
-            message = self.consumer.receiveBigMessage(timeoutSeconds=1, partition=CloudMicroservices.MergerMicroservice.Kafka.partitions.ClientPartition)
+            message = self.consumer.receiveBigMessage(timeoutSeconds=1, partition=Partitions.Client.value)
             if message is None:
                 continue
 
@@ -46,32 +48,30 @@ class Merger:
         VideoAggregator.aggregateVideos(makefile.name, videoFile.name)
         print(f"generated file {videoFile.name}")
 
-        text = videoFile.readBytes()
         try:
-            self.consumer.seekToEnd(self.topic, CloudMicroservices.MergerMicroservice.Kafka.partitions.MergerMicroservicePartition)
+            self.consumer.seekToEnd(self.topic, Partitions.MergerMicroservice.value)
         except:
             pass
 
-        self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=text, headers=[
+        self.producer.sendFile(topic=DATABASE_TOPIC, fileName=videoFile.name, headers=[
             ("topic", self.topic.encode()),
             ("operation", b"ADD_VIDEO"),
             ("partition", str(
-                CloudMicroservices.MergerMicroservice.Kafka.partitions.MergerMicroservicePartition).encode()),
+                Partitions.MergerMicroservice.value).encode()),
             ("sessionId", str(self.sessionId).encode()),
         ])
 
-        self.consumer.receiveBigMessage(partition=CloudMicroservices.MergerMicroservice.Kafka.partitions.MergerMicroservicePartition, timeoutSeconds=10)
+        self.consumer.receiveBigMessage(partition=Partitions.MergerMicroservice.value)
         print("Video saved")
 
         self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=b"msg", headers=[
             ("topic", self.topic.encode()),
             ("operation", b"DELETE_SESSION"),
-            ("partition", str(
-                CloudMicroservices.MergerMicroservice.Kafka.partitions.MergerMicroservicePartition).encode()),
+            ("partition", str(Partitions.MergerMicroservice.value).encode()),
             ("sessionId", str(self.sessionId).encode()),
         ])
 
-        self.consumer.receiveBigMessage(partition=CloudMicroservices.MergerMicroservice.Kafka.partitions.MergerMicroservicePartition, timeoutSeconds=10)
+        self.consumer.receiveBigMessage(partition=Partitions.MergerMicroservice.value)
         print("Session deleted")
 
         print("cleaning...")

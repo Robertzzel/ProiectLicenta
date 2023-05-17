@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -137,17 +138,13 @@ func CollectAudioAndVideoFiles(ctx context.Context, consumer *Kafka.AggregatorMi
 	return nil
 }
 
-func CompressAndSendFiles(producer *Kafka.AggregatorMicroserviceProducer, files AudioVideoPair) error {
-	defer func(files *AudioVideoPair) {
-		_ = files.Delete()
-	}(&files)
-
-	video, err := files.CombineAndCompress(34, "pipe:1")
+func CompressAndSendFiles(producer *Kafka.AggregatorMicroserviceProducer, files AudioVideoPair, buffer *bytes.Buffer) error {
+	err := files.CombineAndCompress(34, "pipe:1", buffer)
 	if err != nil {
 		return errors.New("Combine and compress error " + err.Error())
 	}
 
-	if err = producer.PublishClient(video, nil); err != nil {
+	if err := producer.PublishClient(buffer.Bytes(), nil); err != nil {
 		return errors.New("publish error " + err.Error())
 	}
 
@@ -183,17 +180,20 @@ func main() {
 	}
 	producer.Flush(500)
 
-	filesChannel := make(chan AudioVideoPair, 5)
+	var combineOutput bytes.Buffer
+	filesChannel := make(chan AudioVideoPair, 3)
 	errorGroup.Go(func() error { return CollectAudioAndVideoFiles(ctx, consumer, filesChannel) })
 	errorGroup.Go(func() error {
 		for {
 			select {
 			case filesPair := <-filesChannel:
-				err := CompressAndSendFiles(producer, filesPair)
+				err := CompressAndSendFiles(producer, filesPair, &combineOutput)
 				if err != nil {
 					fmt.Println("Aggregaot sending file error", err)
 					return err
 				}
+				combineOutput.Reset()
+				_ = filesPair.Delete()
 			case <-ctx.Done():
 				return nil
 			}

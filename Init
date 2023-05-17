@@ -1,0 +1,4 @@
+# Serviciu de kafka la port 9092
+# Serviciu de database la port 3306 cu user si parola "robert"
+# Apelare stat microserviciu db din Docker/Kafka
+# porneste aplicatia

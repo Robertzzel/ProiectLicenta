@@ -184,7 +184,7 @@ class MainWindow(QMainWindow):
             self.ui.setStatusMessage("No user connected", True)
             return
 
-        if self.platform != "Linux":
+        if Settings.PLATFORM != "linux":
             self.ui.setStatusMessage("This feature is ony for linux OS", True)
             return
 
@@ -210,7 +210,7 @@ class MainWindow(QMainWindow):
             self.ui.setStatusMessage("No user connected", True)
             return
 
-        if self.platform != "Linux":
+        if Settings.PLATFORM != "linux":
             self.ui.setStatusMessage("This feature is ony for linux OS", True)
             return
 

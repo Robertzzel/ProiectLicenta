@@ -49,7 +49,7 @@ func getStartTime(ctx context.Context, brokerAddress, topic string) (string, err
 	}
 
 	for ctx.Err() == nil {
-		tsMessage, _, err := consumer.Consume(time.Second / 5)
+		tsMessage, _, err := consumer.Consume(ctx)
 		if errors.Is(err, context.DeadlineExceeded) {
 			continue
 		} else if err != nil {

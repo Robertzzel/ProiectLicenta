@@ -1,16 +1,16 @@
 package Kafka
 
 import (
+	"context"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
-	"time"
 )
 
 type VideoMicroserviceConsumer struct {
 	*ConsumerWrapper
 }
 
-func (consumer *VideoMicroserviceConsumer) Consume(timeout ...time.Duration) ([]byte, []kafka.Header, error) {
-	return consumer.Consume(timeout...)
+func (consumer *VideoMicroserviceConsumer) Consume(ctx context.Context) ([]byte, []kafka.Header, error) {
+	return consumer.ConsumerWrapper.Consume(ctx)
 }
 
 func NewVideoMicroserviceConsumer(brokerAddress, topic string) (*VideoMicroserviceConsumer, error) {

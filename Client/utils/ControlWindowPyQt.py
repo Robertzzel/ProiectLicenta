@@ -8,13 +8,13 @@ import PIL
 import av
 import numpy as np
 import sounddevice as sd
-from PIL import ImageTk, Image
+from PIL import Image
 from PIL.ImageQt import ImageQt
-from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QWidget
-from PySide6.QtCore import QThread, Qt, Signal, Slot
-from utils.InputsBuffer import InputsBuffer
-from utils.Kafka import Partitions, KafkaProducerWrapper, KafkaConsumerWrapper
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtCore import QThread, Qt, Signal
+from Client.utils.InputsBuffer import InputsBuffer
+from Client.utils.Kafka import Partitions, KafkaProducerWrapper, KafkaConsumerWrapper
 
 MOVE = 1
 CLICK = 2

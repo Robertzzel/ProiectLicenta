@@ -18,19 +18,16 @@ type AggregatorMicroserviceConsumer struct {
 }
 
 func (this *AggregatorMicroserviceConsumer) Consume(ctx context.Context, partition int32) (*kafka.Message, error) {
-	for ctx.Err() == nil { // context activ
-		ev := this.Poll(200)
-		switch e := ev.(type) {
-		case *kafka.Message:
-			if e.TopicPartition.Partition == partition {
-				return e, nil
-			}
-		case kafka.Error:
-			return nil, e
-		default:
+	for {
+		msg, err := this.ConsumerWrapper.ConsumerSingleMessage(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		if msg.TopicPartition.Partition == partition {
+			return msg, nil
 		}
 	}
-	return nil, ctx.Err()
 }
 
 func (this *AggregatorMicroserviceConsumer) ConsumeFullMessage(ctx context.Context, partition int32) ([]byte, []kafka.Header, error) {

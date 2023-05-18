@@ -138,7 +138,7 @@ class UiMainWindow(object):
         self.toggleButton.setFont(font)
         self.toggleButton.setCursor(QCursor(Qt.PointingHandCursor))
         self.toggleButton.setLayoutDirection(Qt.LeftToRight)
-        self.toggleButton.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-menu.png'});")
+        self.toggleButton.setStyleSheet(Settings.TOGGLE_BUTTON_UL)
         self.toggleMenuSizeLayout.addWidget(self.toggleButton)
 
         self.buttonMenu = QFrame(self.leftMenuFrame)
@@ -174,7 +174,7 @@ class UiMainWindow(object):
         self.btnLogin.setFont(font)
         self.btnLogin.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnLogin.setLayoutDirection(Qt.LeftToRight)
-        self.btnLogin.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-user.png'});")
+        self.btnLogin.setStyleSheet(Settings.BUTTON_LOGIN_URL)
         self.buttonMenuLayout.addWidget(self.btnLogin)
         # End Login Window Button
 
@@ -187,7 +187,7 @@ class UiMainWindow(object):
         self.btnRegister.setFont(font)
         self.btnRegister.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnRegister.setLayoutDirection(Qt.LeftToRight)
-        self.btnRegister.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-user-follow.png'});")
+        self.btnRegister.setStyleSheet(Settings.BUTTON_REGISTER_URL)
         self.buttonMenuLayout.addWidget(self.btnRegister)
         # End register Window Button
 
@@ -200,7 +200,7 @@ class UiMainWindow(object):
         self.btnCall.setFont(font)
         self.btnCall.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnCall.setLayoutDirection(Qt.LeftToRight)
-        self.btnCall.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-laptop.png'});")
+        self.btnCall.setStyleSheet(Settings.BUTTON_CALL_URL)
         self.buttonMenuLayout.addWidget(self.btnCall)
         # End Call Window Button
 
@@ -213,7 +213,7 @@ class UiMainWindow(object):
         self.btnMyVideos.setFont(font)
         self.btnMyVideos.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnMyVideos.setLayoutDirection(Qt.LeftToRight)
-        self.btnMyVideos.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-media-play.png'});")
+        self.btnMyVideos.setStyleSheet(Settings.BUTTON_MY_VIDEOS_URL)
         self.buttonMenuLayout.addWidget(self.btnMyVideos)
         # End My Videos Button
 
@@ -226,7 +226,7 @@ class UiMainWindow(object):
         self.btnChangeTheme.setFont(font)
         self.btnChangeTheme.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnChangeTheme.setLayoutDirection(Qt.LeftToRight)
-        self.btnChangeTheme.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-star.png'});")
+        self.btnChangeTheme.setStyleSheet(Settings.BUTTON_CHANGE_THEME_URL)
         self.buttonMenuLayout.addWidget(self.btnChangeTheme)
         # change theme button end
 

@@ -10,7 +10,7 @@ type VideoMicroserviceConsumer struct {
 }
 
 func (consumer *VideoMicroserviceConsumer) Consume(timeout ...time.Duration) ([]byte, []kafka.Header, error) {
-	return consumer.ConsumeFullMessage(timeout...)
+	return consumer.Consume(timeout...)
 }
 
 func NewVideoMicroserviceConsumer(brokerAddress, topic string) (*VideoMicroserviceConsumer, error) {

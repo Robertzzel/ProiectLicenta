@@ -1,12 +1,8 @@
 import os
 import sys
-from pathlib import Path
-
 from PySide6.QtCore import QSize
-
 from modules import *
 from PySide6.QtWidgets import *
-
 from modules import UiMainWindow
 from modules.backend import Backend
 from utils.ControlWindowPyQt import VideoWindow
@@ -37,8 +33,8 @@ class MainWindow(QMainWindow):
 
         self.isDarkThemeOn = False
         self.toggleTheme()
-        self.ui.topLogo.setStyleSheet(
-            f"background-image: url({Path(__file__).parent / 'images' / 'icons' / 'logo.png'});")
+
+        self.ui.topLogo.setStyleSheet(Settings.TOP_LOGO_URL)
         self.show()
 
     def setCallbacks(self):
@@ -184,6 +180,14 @@ class MainWindow(QMainWindow):
         self.ui.setStatusMessage("Successfully registered")
 
     def startCall(self):
+        if self.backend.user is None:
+            self.ui.setStatusMessage("No user connected", True)
+            return
+
+        if self.platform != "Linux":
+            self.ui.setStatusMessage("This feature is ony for linux OS", True)
+            return
+
         self.backend.createSession()
         self.backend.startRecorder()
         self.backend.startMerger()
@@ -202,6 +206,14 @@ class MainWindow(QMainWindow):
         self.ui.setStatusMessage("Call stopped")
 
     def joinCall(self):
+        if self.backend.user is None:
+            self.ui.setStatusMessage("No user connected", True)
+            return
+
+        if self.platform != "Linux":
+            self.ui.setStatusMessage("This feature is ony for linux OS", True)
+            return
+
         callKey = self.ui.callWindow.partnerCallKeyEdit.text()
         callPassword = self.ui.callWindow.partnerCallPasswordEdit.text()
         if callKey == "" or callPassword == "":
@@ -217,6 +229,10 @@ class MainWindow(QMainWindow):
         self.w.show()
 
     def downloadVideo(self, videoId: int):
+        if self.backend.user is None:
+            self.ui.setStatusMessage("No user connected", True)
+            return
+
         file = QFileDialog()
         file.setDefaultSuffix("mp4")
         f = file.getSaveFileName(self, 'Save File')

@@ -2,8 +2,8 @@ import pynput
 from TkPynputKeyCodes import KeyTranslator
 from pyautogui import size
 import sys
-from Kafka.Kafka import *
-from Kafka.partitions import InputPartition
+from Client.Kafka.Kafka import *
+from Client.Kafka.partitions import InputPartition
 
 MOVE = 1
 CLICK = 2

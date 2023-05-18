@@ -5,7 +5,7 @@ from typing import Dict
 
 import psutil
 
-from Kafka import Kafka
+from Client.Kafka import Kafka
 
 
 class Monitor:

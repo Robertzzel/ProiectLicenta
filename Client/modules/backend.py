@@ -1,7 +1,7 @@
 import json
-from utils.KafkaContainer import KafkaContainer
-from utils.Start import Recorder, VideoMerger
-from utils.User import User
+from Client.utils.KafkaContainer import KafkaContainer
+from Client.utils.Start import Recorder, VideoMerger
+from Client.utils.User import User
 
 
 class Backend:

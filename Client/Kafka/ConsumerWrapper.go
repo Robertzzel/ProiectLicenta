@@ -4,14 +4,13 @@ import (
 	"context"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"strconv"
-	"time"
 )
 
 type ConsumerWrapper struct {
 	*kafka.Consumer
 }
 
-func (consumer *ConsumerWrapper) Consume(ctx context.Context) (*kafka.Message, error) {
+func (consumer *ConsumerWrapper) ConsumerSingleMessage(ctx context.Context) (*kafka.Message, error) {
 	for ctx.Err() == nil { // context activ
 		ev := consumer.Poll(100)
 		switch e := ev.(type) {
@@ -25,16 +24,8 @@ func (consumer *ConsumerWrapper) Consume(ctx context.Context) (*kafka.Message, e
 	return nil, ctx.Err()
 }
 
-func (consumer *ConsumerWrapper) ConsumeFullMessage(timeout ...time.Duration) ([]byte, []kafka.Header, error) {
-	var ctx context.Context
-
-	if len(timeout) > 0 {
-		ctx, _ = context.WithTimeout(context.Background(), timeout[0])
-	} else {
-		ctx = context.Background()
-	}
-
-	message, err := consumer.Consume(ctx)
+func (consumer *ConsumerWrapper) Consume(ctx context.Context) ([]byte, []kafka.Header, error) {
+	message, err := consumer.ConsumerSingleMessage(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -62,7 +53,7 @@ func (consumer *ConsumerWrapper) ConsumeFullMessage(timeout ...time.Duration) ([
 	messages[messageNumber] = message.Value
 
 	for i := 0; i < numberOfMessages-1; i++ {
-		message, err = consumer.Consume(context.Background())
+		message, err = consumer.ConsumerSingleMessage(ctx)
 		if err != nil {
 			return nil, nil, err
 		}

@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
         self.widgets.pagesStack.setCurrentWidget(self.widgets.kafkaWindow)
 
         self.isDarkThemeOn = False
-        self.__toggleTheme()
+        self.toggleTheme()
         self.ui.topLogo.setStyleSheet(
             f"background-image: url({Path(__file__).parent / 'images' / 'icons' / 'logo.png'});")
         self.show()
@@ -53,9 +53,9 @@ class MainWindow(QMainWindow):
         self.widgets.btnCall.clicked.connect(self.btnCallWindowPressed)
         self.widgets.callWindow.startSessionBtn.clicked.connect(self.startCall)
         self.widgets.callWindow.joinSessionBtn.clicked.connect(self.joinCall)
-        self.widgets.btnChangeTheme.clicked.connect(self.__toggleTheme)
+        self.widgets.btnChangeTheme.clicked.connect(self.toggleTheme)
 
-    def __toggleTheme(self):
+    def toggleTheme(self):
         if self.isDarkThemeOn:
             self.ui.theme("./themes/py_dracula_light.qss")
             Settings.MENU_SELECTED_STYLESHEET = Settings.MENU_SELECTED_LIGHT_STYLESHEET

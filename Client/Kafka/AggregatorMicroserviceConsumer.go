@@ -14,7 +14,7 @@ const (
 )
 
 type AggregatorMicroserviceConsumer struct {
-	*ConsumerWrapper
+	ConsumerWrapper
 }
 
 func (this *AggregatorMicroserviceConsumer) Consume(ctx context.Context, partition int32) (*kafka.Message, error) {
@@ -110,11 +110,7 @@ func (this *AggregatorMicroserviceConsumer) ConsumeAggregator(ctx context.Contex
 }
 
 func NewAggregatorMicroserviceConsumer(brokerAddress, topic string) (*AggregatorMicroserviceConsumer, error) {
-	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": brokerAddress,
-		"group.id":          "-",
-		"auto.offset.reset": "latest",
-	})
+	consumer, err := NewConsumer(brokerAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -125,5 +121,5 @@ func NewAggregatorMicroserviceConsumer(brokerAddress, topic string) (*Aggregator
 		panic(err)
 	}
 
-	return &AggregatorMicroserviceConsumer{&ConsumerWrapper{consumer}}, nil
+	return &AggregatorMicroserviceConsumer{consumer}, nil
 }

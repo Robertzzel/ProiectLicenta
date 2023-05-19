@@ -10,6 +10,20 @@ type ConsumerWrapper struct {
 	*kafka.Consumer
 }
 
+func NewConsumer(brokerAddress string) (ConsumerWrapper, error) {
+	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
+		"bootstrap.servers":         brokerAddress,
+		"group.id":                  "-",
+		"auto.offset.reset":         "latest",
+		"max.partition.fetch.bytes": 10485880,
+	})
+	if err != nil {
+		return ConsumerWrapper{}, err
+	}
+
+	return ConsumerWrapper{consumer}, nil
+}
+
 func (consumer *ConsumerWrapper) ConsumerSingleMessage(ctx context.Context) (*kafka.Message, error) {
 	for ctx.Err() == nil { // context activ
 		ev := consumer.Poll(100)

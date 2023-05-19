@@ -22,8 +22,8 @@ class CustomKafkaMessage:
 
 class KafkaProducerWrapper(kafka.Producer):
     def __init__(self, config):
-        super().__init__(config)
-        self.maxSingleMessageSize = 500_000
+        super().__init__(dict(config, **{"max.partition.fetch.bytes": 10085880}))
+        self.maxSingleMessageSize = 10485880
 
     def sendBigMessage(self, topic: str, value=None, headers=None, key=None, partition=0):
         numberOfMessages = ceil(len(value) / self.maxSingleMessageSize)
@@ -42,7 +42,7 @@ class KafkaProducerWrapper(kafka.Producer):
 
 class KafkaConsumerWrapper(kafka.Consumer):
     def __init__(self, config: Dict, topics: List[Tuple[str, int]]):
-        super().__init__(config)
+        super().__init__(dict(config, **{"max.partition.fetch.bytes": 10485880}))
         self.assign([kafka.TopicPartition(topic=pair[0], partition=pair[1]) for pair in topics])
 
     def __next__(self) -> kafka.Message:
@@ -154,3 +154,4 @@ def checkKafkaActive(brokerAddress: str) -> bool:
     except BaseException:
         return False
     return True
+

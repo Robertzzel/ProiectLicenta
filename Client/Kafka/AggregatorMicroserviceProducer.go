@@ -3,7 +3,7 @@ package Kafka
 import "github.com/confluentinc/confluent-kafka-go/kafka"
 
 type AggregatorMicroserviceProducer struct {
-	*ProducerWrapper
+	ProducerWrapper
 	topic          string
 	deliverChannel chan kafka.Event
 }
@@ -21,14 +21,10 @@ func (producer *AggregatorMicroserviceProducer) PublishClient(message []byte, he
 }
 
 func NewAggregatorMicroserviceProducer(brokerAddress, topic string) (*AggregatorMicroserviceProducer, error) {
-	p, err := kafka.NewProducer(&kafka.ConfigMap{
-		"bootstrap.servers": brokerAddress,
-		"client.id":         "-",
-		"acks":              "all",
-	})
+	p, err := NewProducer(brokerAddress)
 	if err != nil {
 		return nil, err
 	}
 
-	return &AggregatorMicroserviceProducer{topic: topic, ProducerWrapper: &ProducerWrapper{p}, deliverChannel: make(chan kafka.Event, 5)}, nil
+	return &AggregatorMicroserviceProducer{topic: topic, ProducerWrapper: p, deliverChannel: make(chan kafka.Event, 5)}, nil
 }

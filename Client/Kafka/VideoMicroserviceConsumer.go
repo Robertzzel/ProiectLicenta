@@ -6,7 +6,7 @@ import (
 )
 
 type VideoMicroserviceConsumer struct {
-	*ConsumerWrapper
+	ConsumerWrapper
 }
 
 func (consumer *VideoMicroserviceConsumer) Consume(ctx context.Context) ([]byte, []kafka.Header, error) {
@@ -14,11 +14,7 @@ func (consumer *VideoMicroserviceConsumer) Consume(ctx context.Context) ([]byte,
 }
 
 func NewVideoMicroserviceConsumer(brokerAddress, topic string) (*VideoMicroserviceConsumer, error) {
-	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": brokerAddress,
-		"group.id":          "-",
-		"auto.offset.reset": "latest",
-	})
+	consumer, err := NewConsumer(brokerAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -27,5 +23,5 @@ func NewVideoMicroserviceConsumer(brokerAddress, topic string) (*VideoMicroservi
 		panic(err)
 	}
 
-	return &VideoMicroserviceConsumer{&ConsumerWrapper{consumer}}, nil
+	return &VideoMicroserviceConsumer{consumer}, nil
 }

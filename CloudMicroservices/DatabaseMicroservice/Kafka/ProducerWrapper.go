@@ -13,7 +13,7 @@ func min(a, b int) int {
 	return a
 }
 
-const MaxMessageBytes = 600_000
+const MaxMessageBytes = 10000000
 
 type ProducerWrapper struct {
 	*kafka.Producer

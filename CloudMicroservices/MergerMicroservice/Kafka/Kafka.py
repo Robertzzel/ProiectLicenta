@@ -35,7 +35,7 @@ class CustomKafkaMessage:
 
 class KafkaProducerWrapper(kafka.Producer):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(dict(config, **{"max.partition.fetch.bytes": 10485880}))
         self.maxSingleMessageSize = 500_000
 
     def sendBigMessage(self, topic: str, value=None, headers=None, key=None, partition=0):

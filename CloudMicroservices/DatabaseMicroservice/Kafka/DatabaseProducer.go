@@ -15,9 +15,10 @@ func (producer *DatabaseProducer) Publish(message []byte, headers []kafka.Header
 
 func NewDatabaseProducer(brokerAddress string) (*DatabaseProducer, error) {
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
-		"bootstrap.servers": brokerAddress,
-		"client.id":         "-",
-		"acks":              "all",
+		"bootstrap.servers":         brokerAddress,
+		"client.id":                 "-",
+		"acks":                      "all",
+		"max.partition.fetch.bytes": 10085880,
 	})
 	if err != nil {
 		return nil, err

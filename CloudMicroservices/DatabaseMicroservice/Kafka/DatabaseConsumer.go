@@ -80,9 +80,10 @@ func (this *DatabaseConsumer) ConsumeFullMessage(ctx context.Context) (*CustomMe
 
 func NewDatabaseConsumer(brokerAddress, topic string) (*DatabaseConsumer, error) {
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": brokerAddress,
-		"group.id":          "-",
-		"auto.offset.reset": "latest",
+		"bootstrap.servers":         brokerAddress,
+		"group.id":                  "-",
+		"auto.offset.reset":         "latest",
+		"max.partition.fetch.bytes": 10085880,
 	})
 	if err != nil {
 		return nil, err

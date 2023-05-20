@@ -1,4 +1,5 @@
-# Serviciu de kafka la port 9092
-# Serviciu de database la port 3306 cu user si parola "robert"
-# Apelare stat microserviciu db din Docker/Kafka
-# porneste aplicatia
+1. Porneste serviciu de kafka la port 9092 (nu uite de advertised.listener pentru a fi vazut de alt deviceuri)
+2. Pornete serviciu de MySql la port 3306 cu user si parola "robert"
+3. creeaza imagini din dockerfileurile din CloudMicroservice cu numele database-microservice:v12 si merger-microservice:v12
+4. Porneste microserviciul de db din Docker/Kafka/StartDatabaseMicroservice
+5. Poti porni aplicatia

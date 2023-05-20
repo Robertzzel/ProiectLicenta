@@ -1,0 +1,20 @@
+#!/bin/sh
+
+EXTERNAL_IP=$(hostname -I | cut -d' ' -f1)
+cat > docker-compose.yml << END
+version: "3"
+
+services:
+  database-microservice:
+    image: database-microservice:v12
+    container_name: 'database-microservice'
+    environment:
+      - BROKER_ADDRESS=localhost:9092
+      - DATABASE_USER=robert
+      - DATABASE_PASSWORD=robert
+      - DATABASE_HOST=localhost
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=licenta
+    network_mode: "host"
+END
+sudo docker-compose up -d

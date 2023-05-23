@@ -43,13 +43,22 @@ class DisplayContentThread(QThread):
                     break
 
             rate = 1 / self.master.videoFramerate
+
+            start = time.time()
+            img = self.getNextImage()
+            if not self.master.stopEvent:
+                self.imageEvent.emit(img)
+                img = self.getNextImage()
+                time.sleep(max(rate - (time.time() - start) % rate, 0))
+
             while not self.master.stopEvent:
                 try:
                     start = time.time()
-                    img = self.master.videoFramesQueue.get(timeout=1).to_image()
                     if not self.master.stopEvent:
                         self.imageEvent.emit(img)
-                        time.sleep(max(rate - (time.time() - start) % rate, 0))
+
+                    img = self.getNextImage()
+                    time.sleep(max(rate - (time.time() - start) % rate, 0))
                 except queue.Empty:
                     continue
 
@@ -57,6 +66,12 @@ class DisplayContentThread(QThread):
             self.master.audioBlocksQueue.queue.clear()
         except BaseException as ex:
             print("DisplayContentThread", ex)
+
+    def getNextImage(self):
+        return ImageQt(
+            self.master.videoFramesQueue.get(timeout=1).to_image().resize((self.master.windowSize[0], self.master.windowSize[1]), self.master._resampling_method)
+        )
+
 
 
 class StreamReceiverThread(QThread):
@@ -232,8 +247,7 @@ class VideoWindow(QWidget):
         outdata[:] = data
 
     def displayFrame(self, img):
-        qtImage = ImageQt(img.resize((self.windowSize[0], self.windowSize[1]), self._resampling_method))
-        self.label.setPixmap(QPixmap.fromImage(qtImage).copy())
+        self.label.setPixmap(QPixmap.fromImage(img).copy())
 
     def stop(self):
         self.stopEvent = True

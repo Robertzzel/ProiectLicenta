@@ -8,6 +8,8 @@ from math import ceil
 from typing import List
 import time
 
+MaxSingleMessageSize = 9 * 1024 * 1024
+
 
 class Partitions(enum.Enum):
     VideoMicroservice: int = 0
@@ -17,6 +19,7 @@ class Partitions(enum.Enum):
     Client: int = 3
     MergerMicroservice: int = 4
     Input: int = 6
+
 
 class CustomKafkaMessage:
     def __init__(self, value: bytes, headers: List, *args, **kwargs):
@@ -33,11 +36,11 @@ class CustomKafkaMessage:
 
 class KafkaProducerWrapper(kafka.Producer):
     def __init__(self, config):
+        config["message.max.bytes"] = MaxSingleMessageSize
         super().__init__(config)
-        self.maxSingleMessageSize = 500_000
 
     def sendBigMessage(self, topic: str, value=None, headers=None, key=None, partition=0):
-        numberOfMessages = ceil(len(value) / self.maxSingleMessageSize)
+        numberOfMessages = ceil(len(value) / MaxSingleMessageSize)
         numberOfMessagesHeader = ("number-of-messages", str(numberOfMessages).zfill(5).encode())
         if headers is None:
             headers = [numberOfMessagesHeader]
@@ -45,14 +48,15 @@ class KafkaProducerWrapper(kafka.Producer):
             headers.append(numberOfMessagesHeader)
 
         for i in range(numberOfMessages):
-            start = i * self.maxSingleMessageSize
-            end = min((i + 1) * self.maxSingleMessageSize, len(value))
+            start = i * MaxSingleMessageSize
+            end = min((i + 1) * MaxSingleMessageSize, len(value))
             self.produce(topic=topic, value=value[start: end],
                          headers=headers + [("message-number", str(i).zfill(5).encode())], key=key, partition=partition)
 
 
 class KafkaConsumerWrapper(kafka.Consumer):
     def __init__(self, config: Dict, topics: List[Tuple[str, int]]):
+        config["fetch.message.max.bytes"] = MaxSingleMessageSize
         super().__init__(config)
         self.assign([kafka.TopicPartition(topic=pair[0], partition=pair[1]) for pair in topics])
 

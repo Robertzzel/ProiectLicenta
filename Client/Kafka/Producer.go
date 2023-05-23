@@ -11,7 +11,7 @@ type Producer struct {
 	deliveryChannel chan kafka.Event
 }
 
-var maxMessageBytes = 600_000
+var MaxMessageBytes = 5 * 1024 * 1024
 
 func min(a, b int) int {
 	if a > b {
@@ -21,7 +21,7 @@ func min(a, b int) int {
 }
 
 func (producer *Producer) Publish(message []byte, headers []kafka.Header, topic string, partition int32) error {
-	numberOfMessages := int(math.Ceil(float64(len(message)) / float64(maxMessageBytes)))
+	numberOfMessages := int(math.Ceil(float64(len(message)) / float64(MaxMessageBytes)))
 	headersT := append(headers, kafka.Header{Key: "number-of-messages", Value: []byte(fmt.Sprintf("%05d", numberOfMessages))})
 	tp := kafka.TopicPartition{Topic: &topic, Partition: partition}
 
@@ -29,7 +29,7 @@ func (producer *Producer) Publish(message []byte, headers []kafka.Header, topic 
 		err := producer.Producer.Produce(
 			&kafka.Message{
 				TopicPartition: tp,
-				Value:          message[i*maxMessageBytes : min(len(message), (i+1)*maxMessageBytes)],
+				Value:          message[i*MaxMessageBytes : min(len(message), (i+1)*MaxMessageBytes)],
 				Headers:        append(headersT, []kafka.Header{{Key: "message-number", Value: []byte(fmt.Sprintf("%05d", i))}}...)},
 			producer.deliveryChannel,
 		)
@@ -44,9 +44,10 @@ func (producer *Producer) Publish(message []byte, headers []kafka.Header, topic 
 
 func NewProducer(brokerAddress string) (Producer, error) {
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
-		"bootstrap.servers": brokerAddress,
-		"group.id":          "-",
-		"acks":              "all",
+		"bootstrap.servers":       brokerAddress,
+		"group.id":                "-",
+		"acks":                    "all",
+		"fetch.message.max.bytes": MaxMessageBytes,
 	})
 	if err != nil {
 		return Producer{}, err

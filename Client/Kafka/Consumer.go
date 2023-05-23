@@ -25,9 +25,10 @@ func (consumer *Consumer) Consume(ctx context.Context) (*kafka.Message, error) {
 
 func NewConsumer(brokerAddress string) (Consumer, error) {
 	p, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": brokerAddress,
-		"group.id":          "-",
-		"acks":              "all",
+		"bootstrap.servers":       brokerAddress,
+		"group.id":                "-",
+		"acks":                    "all",
+		"fetch.message.max.bytes": MaxMessageBytes,
 	})
 	if err != nil {
 		return Consumer{}, err

@@ -38,7 +38,6 @@ func (producer *Producer) Publish(message []byte, headers []kafka.Header, topic 
 		}
 		go func() { <-producer.deliveryChannel }()
 	}
-
 	return nil
 }
 

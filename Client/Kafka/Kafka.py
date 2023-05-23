@@ -94,13 +94,13 @@ class KafkaConsumerWrapper(kafka.Consumer):
             if header[0] == "number-of-messages":
                 numberOfMessages = int(header[1].decode())
 
-        messages = message.value()
+        messages = bytearray(message.value())
         for i in range(numberOfMessages - 1):
             message = self.consumeMessage(endTime)
             if message is None:
                 return None
 
-            messages += message.value()
+            messages.extend(message.value())
 
         return CustomKafkaMessage(value=messages, headers=headersToBeReturned)
 

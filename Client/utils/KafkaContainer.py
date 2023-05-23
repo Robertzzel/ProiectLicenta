@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from .Kafka import *
+from Client.Kafka.Kafka import *
 import uuid
 
 DATABASE_TOPIC = "DATABASE"
@@ -18,7 +18,6 @@ class KafkaContainer:
         self.topic = str(uuid.uuid1())
         createTopic(address, self.topic, partitions=7)
 
-        self.consumerConfigs = consumerConfigs
         self.address = address
         self.partition = Partitions.Client.value
         self.producer = KafkaProducerWrapper({'bootstrap.servers': self.address})
@@ -26,8 +25,9 @@ class KafkaContainer:
         consumerConfigs['bootstrap.servers'] = self.address
         consumerConfigs['group.id'] = "-"
         self.consumer = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.partition)])
+        self.consumerConfigs = consumerConfigs
 
-    def databaseCall(self, operation: str, message: bytes, timeoutSeconds: float = None, username: str = None,
+    def databaseCall(self, operation: str, message: bytes, timeoutSeconds, username: str = None,
                      password: str = None) -> kafka.Message:
         self.seekToEnd()
         headers = [
@@ -43,7 +43,7 @@ class KafkaContainer:
         self.producer.produce(topic=DATABASE_TOPIC, headers=headers, value=message)
         self.producer.flush(timeout=1)
 
-        return self.consumer.receiveBigMessage(timeoutSeconds, partition=self.partition)
+        return self.consumer.receiveBigMessage(timeoutSeconds)
 
     @staticmethod
     def getStatusFromMessage(responseMessage):

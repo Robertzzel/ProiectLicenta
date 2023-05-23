@@ -3,7 +3,7 @@ from TkPynputKeyCodes import KeyTranslator
 from pyautogui import size
 import sys
 from Client.Kafka.Kafka import *
-from Client.Kafka.partitions import InputPartition
+from Client.Kafka.Kafka import Partitions
 
 MOVE = 1
 CLICK = 2
@@ -33,10 +33,12 @@ def main():
         'group.id': "-",
         'auto.offset.reset': 'latest',
         'allow.auto.create.topics': "true",
-    }, [(topic, InputPartition)])
+    }, [(topic, Partitions.Input.value)])
 
     while True:
-        msg = consumer.consumeMessage(timeoutSeconds=None, partition=InputPartition)
+        if (msg := consumer.consumeMessage(time.time() + 100)) is None:
+            continue
+
         for command in msg.value().decode().split(";"):
             components = command.split(",")
             action = int(components[0])

@@ -1,7 +1,7 @@
 import queue
 from recorder import Recorder
 from Client.Kafka.Kafka import KafkaConsumerWrapper, KafkaProducerWrapper
-from Client.Kafka.partitions import *
+from Client.Kafka.Kafka import *
 import sys
 
 VIDEO_LENGTH = 1 / 5
@@ -23,12 +23,22 @@ def main():
     producer = KafkaProducerWrapper({'bootstrap.servers': "localhost:9092"})
     consumer = KafkaConsumerWrapper(
         {'bootstrap.servers': brokerAddress, "group.id": "-"},
-        [(topic, AudioMicroservicePartition)]
+        [(topic, Partitions.AudioMicroservice.value)]
     )
 
     try:
-        ts = int(consumer.consumeMessage(None, AudioMicroservicePartition).value().decode())
+        ts: int
+        while True:
+            print("AUDIO CONSUING")
+            if (ts := consumer.consumeMessage(time.time() + 100)) is None:
+                print("AUDIO None")
+                continue
+            print(f"AUDIO {type(ts)}")
+            ts = int(ts.value().decode())
+            break
         del consumer
+
+        print("AUDIO STARTING")
         audio_recorder.start(ts, VIDEO_LENGTH)
         while True:
             audio_file: str = audio_blocks_recorded.get(block=True)
@@ -36,7 +46,7 @@ def main():
                 topic=topic,
                 value=audio_file.encode(),
                 headers=[("number-of-messages", b'00001'), ("message-number", b'00000'), ("type", b"audio")],
-                partition=AggregatorMicroservicePartition
+                partition=Partitions.AggregatorMicroservice.value
             )
     except KeyboardInterrupt:
         print("Keyboard interrupt")

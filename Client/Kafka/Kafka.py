@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import enum
 from typing import *
 import confluent_kafka as kafka
 from confluent_kafka.admin import AdminClient
@@ -6,6 +8,15 @@ from math import ceil
 from typing import List
 import time
 
+
+class Partitions(enum.Enum):
+    VideoMicroservice: int = 0
+    AggregatorMicroservice: int = 1
+    AggregatorMicroserviceStart: int = 5
+    AudioMicroservice: int = 2
+    Client: int = 3
+    MergerMicroservice: int = 4
+    Input: int = 6
 
 class CustomKafkaMessage:
     def __init__(self, value: bytes, headers: List, *args, **kwargs):
@@ -61,10 +72,10 @@ class KafkaConsumerWrapper(kafka.Consumer):
         _, high = self.get_watermark_offsets(tp)
         self.seek(kafka.TopicPartition(topic, partition, high))
 
-    def receiveBigMessage(self, timeoutSeconds: float = None, partition = 0) -> Optional[kafka.Message | CustomKafkaMessage]:
-        endTime = None if timeoutSeconds is None else time.time() + timeoutSeconds
+    def receiveBigMessage(self, timeoutSeconds: float = 100) -> Optional[kafka.Message | CustomKafkaMessage]:
+        endTime = time.time() + timeoutSeconds
 
-        message = self.consumeMessage(None if endTime is None else endTime - time.time(), partition=partition)
+        message = self.consumeMessage(endTime)
         if message is None:
             return None
 
@@ -74,50 +85,24 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
         headersToBeReturned: List[str, bytes] = list(filter(lambda h: h[0] not in ("number-of-messages", "message-number"), message.headers()))
         numberOfMessages: int = 0
-        currentMessageNumber: int = 0
 
         for header in message.headers():
             if header[0] == "number-of-messages":
                 numberOfMessages = int(header[1].decode())
-            elif header[0] == "message-number":
-                currentMessageNumber = int(header[1].decode())
 
-        messages: List[bytes] = [b""] * numberOfMessages
-        messages[currentMessageNumber] = message.value()
+        messages = message.value()
         for i in range(numberOfMessages - 1):
-            message = self.consumeMessage(None if endTime is None else endTime - time.time(), partition=partition)
+            message = self.consumeMessage(endTime)
             if message is None:
                 return None
 
-            for header in message.headers():
-                if header[0] == "message-number":
-                    currentMessageNumber = int(header[1].decode())
-            messages[currentMessageNumber] = message.value()
+            messages += message.value()
 
-        finalMessage = b""
-        for message in messages:
-            finalMessage += message
+        return CustomKafkaMessage(value=messages, headers=headersToBeReturned)
 
-        return CustomKafkaMessage(value=finalMessage, headers=headersToBeReturned)
-
-    def consumeMessage(self, timeoutSeconds: int = None, partition=0) -> Optional[kafka.Message]:
-        if timeoutSeconds is None:
-            while True:
-                msg = self.poll(0.2)
-
-                if msg is None or msg.partition() != partition:
-                    continue
-                if msg.error():
-                    raise Exception(f"Consumer error: {msg.error()}")
-                if msg.partition() is None:
-                    raise Exception(f"partition does not exist")
-                if msg.partition() != partition:
-                    continue
-                return msg
-
-        s = time.time() + timeoutSeconds
-        while time.time() < s:
-            msg = self.poll(0.2)
+    def consumeMessage(self, timeoutSeconds: float) -> Optional[kafka.Message]:
+        while time.time() < timeoutSeconds:
+            msg = self.poll(0.5)
 
             if msg is None:
                 continue

@@ -69,7 +69,7 @@ class Backend:
     def getPartnerTopic(self, callKey, callPassword):
         responseMessage = self.kafkaContainer.databaseCall("GET_CALL_BY_KEY", json.dumps(
             {"Key": callKey, "Password": callPassword, "CallerId": str(self.user.id)}).encode(),
-                                                           username=self.user.name, password=self.user.password)
+                                                           username=self.user.name, password=self.user.password, timeoutSeconds=2)
         if responseMessage is None:
             return Exception("Cannot start call, database not responding")
 

@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"golang.org/x/sync/errgroup"
-	"licenta/Kafka"
 	"log"
 	"os"
 	"os/signal"
@@ -42,24 +40,15 @@ func stringToTimestamp(s string) (time.Time, error) {
 	return time.Unix(timestamp, 0), nil
 }
 
-func getStartTime(ctx context.Context, brokerAddress, topic string) (string, error) {
-	consumer, err := Kafka.NewVideoMicroserviceConsumer(brokerAddress, topic)
-	if err != nil {
-		panic(err)
-	}
-
+func getStartTime(ctx context.Context, conn KafkaConnection) (string, error) {
 	for ctx.Err() == nil {
-		tsMessage, _, err := consumer.Consume(ctx)
-		if errors.Is(err, context.DeadlineExceeded) {
-			continue
-		} else if err != nil {
+		msg, err := conn.Consume(ctx)
+		if err != nil {
 			return "", err
 		}
 
-		return string(tsMessage), nil
+		return string(msg.Value), nil
 	}
-
-	_ = consumer.Close()
 	return "", ctx.Err()
 }
 
@@ -73,12 +62,12 @@ func main() {
 
 	errGroup, ctx := errgroup.WithContext(NewCtx())
 
-	producer, err := Kafka.NewVideoMicroserviceProducer(brokerAddress, topic)
+	kafkaConnection, err := NewKafkaConnection(brokerAddress, topic)
 	if err != nil {
 		panic(err)
 	}
 
-	startTimestamp, err := getStartTime(ctx, brokerAddress, topic)
+	startTimestamp, err := getStartTime(ctx, kafkaConnection)
 	if err != nil {
 		panic(err)
 	}
@@ -97,8 +86,7 @@ func main() {
 
 	errGroup.Go(func() error {
 		for ctx.Err() == nil {
-			videoBlock := []byte(<-videoRecorder.VideoBuffer)
-			if err = producer.Publish(videoBlock, []kafka.Header{{"type", []byte("video")}}); err != nil {
+			if err = kafkaConnection.Publish([]byte(<-videoRecorder.VideoBuffer), []kafka.Header{{"type", []byte("video")}}); err != nil {
 				fmt.Println("Video block err", err)
 				return err
 			}

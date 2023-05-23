@@ -14,7 +14,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import QThread, Qt, Signal
 from Client.utils.InputsBuffer import InputsBuffer
-from Client.utils.Kafka import Partitions, KafkaProducerWrapper, KafkaConsumerWrapper
+from Client.Kafka.Kafka import Partitions, KafkaProducerWrapper, KafkaConsumerWrapper
 
 MOVE = 1
 CLICK = 2
@@ -74,7 +74,7 @@ class StreamReceiverThread(QThread):
             }, [(self.master.topic, Partitions.Client.value)])
 
             while not self.master.stopEvent:
-                message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1, partition=Partitions.Client.value)
+                message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1)
                 if message is None:
                     continue
 

@@ -119,7 +119,7 @@ def createTopic(brokerAddress: str, topic: str, partitions: int = 1, timeoutSeco
 
     endTime = time.time() + timeoutSeconds
     while not s[topic].done() and endTime > time.time():
-        time.sleep(0.02)
+        time.sleep(0.1)
 
     if not s[topic].done():
         raise Exception(f"Cannot create topic {topic}")

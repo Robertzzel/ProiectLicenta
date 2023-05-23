@@ -161,7 +161,7 @@ class UiMainWindow(object):
         self.btnKafka.setFont(font)
         self.btnKafka.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnKafka.setLayoutDirection(Qt.LeftToRight)
-        self.btnKafka.setStyleSheet(f"background-image: url({Path(__file__).parent.parent / 'images' / 'icons' / 'cil-cloudy.png'});")
+        self.btnKafka.setStyleSheet(Settings.BUTTON_KAFKA_URL)
         self.buttonMenuLayout.addWidget(self.btnKafka)
         # end kafka Button
 

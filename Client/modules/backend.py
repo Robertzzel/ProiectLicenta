@@ -126,7 +126,7 @@ class Backend:
 
     def downloadVideo(self, videoId):
         msg = self.kafkaContainer.databaseCall("DOWNLOAD_VIDEO_BY_ID", str(videoId).encode(), username=self.user.name,
-                                               password=self.user.password, timeoutSeconds=10)
+                                               password=self.user.password, timeoutSeconds=10) # TODO VEZI CUM FACI AICI
         if msg is None:
             return Exception("Cannot download video, database not responding")
 

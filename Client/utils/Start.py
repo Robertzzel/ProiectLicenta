@@ -26,40 +26,40 @@ class Recorder:
         self.aggregatorProcess = None
         self.inputExecutorProcess = None
         self.buildProcess = None
-        self.path = str(pathlib.Path(os.getcwd()))
+        self.path = pathlib.Path(os.getcwd())
         self.running = False
 
     def build(self):
-        self.buildProcess = subprocess.Popen(["/bin/sh", "./build"], cwd=self.path, stdout=sys.stdout, stderr=subprocess.PIPE)
+        self.buildProcess = subprocess.Popen([str(self.path.parent / "venv" / "bin" / "python3") , str(self.path / "build.py")], cwd=str(self.path), stdout=sys.stdout, stderr=subprocess.PIPE)
         stdout, stderr = self.buildProcess.communicate()
 
         try:
             self.buildProcess.wait(timeout=20)
         except:
-            print("Build cannot be finished")
             self.buildProcess.kill()
-            return False
+            return "build process blocked"
 
         if stderr != b"":
-            print("Cannot build,", stderr.decode())
-            return False
+            return stderr.decode()
 
-        return True
+        return None
 
     def start(self, topic: str):
-        if platform.system().lower() == "windows":
+        buildResult = self.build()
+        if buildResult is not None:
+            print("Cannot build ", buildResult)
             return
 
         try:
             self.videoProcess = subprocess.Popen(["./VideoMicroservice.exe", self.brokerAddress, topic],
                                                  stdout=sys.stdout, stderr=sys.stderr)
-            self.audioProcess = subprocess.Popen(["venv/bin/python3", "AudioMicroservice/AudioMicroservice.py", self.brokerAddress, topic],
-                                                 cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
+            self.audioProcess = subprocess.Popen([str(self.path.parent / "venv" / "bin" / "python3"), "AudioMicroservice/AudioMicroservice.py", self.brokerAddress, topic],
+                                                 cwd=str(self.path), stdout=sys.stdout, stderr=sys.stderr)
             self.aggregatorProcess = subprocess.Popen(["./AggregatorMicroservice.exe", self.brokerAddress, topic],
                                                       stdout=sys.stdout, stderr=sys.stderr)
 
-            self.inputExecutorProcess = subprocess.Popen(["venv/bin/python3", "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, topic],
-                                                         cwd=self.path, stdout=sys.stdout, stderr=sys.stderr)
+            self.inputExecutorProcess = subprocess.Popen([str(self.path.parent / "venv" / "bin" / "python3"), "InputExecutorMicroservice/InputExecutorMicroservice.py", self.brokerAddress, topic],
+                                                         cwd=str(self.path), stdout=sys.stdout, stderr=sys.stderr)
 
             self.running = True
         except Exception as ex:

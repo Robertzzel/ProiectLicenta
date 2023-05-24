@@ -56,9 +56,8 @@ class DisplayContentThread(QThread):
                     start = time.time()
                     if not self.master.stopEvent:
                         self.imageEvent.emit(img)
-
-                    img = self.getNextImage()
-                    time.sleep(max(rate - (time.time() - start) % rate, 0))
+                        img = self.getNextImage()
+                        time.sleep(max(rate - (time.time() - start) % rate, 0))
                 except queue.Empty:
                     continue
 
@@ -71,7 +70,6 @@ class DisplayContentThread(QThread):
         return ImageQt(
             self.master.videoFramesQueue.get(timeout=1).to_image().resize((self.master.windowSize[0], self.master.windowSize[1]), self.master._resampling_method)
         )
-
 
 
 class StreamReceiverThread(QThread):

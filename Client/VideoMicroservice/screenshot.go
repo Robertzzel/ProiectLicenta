@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"github.com/go-vgo/robotgo"
 )
 
@@ -10,7 +11,7 @@ const (
 
 type Screenshot struct {
 	cursorRadius int
-	screenshot   *Screen
+	screenshot   Screen
 }
 
 func NewScreenshot() (*Screenshot, error) {
@@ -26,16 +27,23 @@ func NewScreenshot() (*Screenshot, error) {
 }
 
 func (igs *Screenshot) Get() (*ByteImage, error) {
-	img, err := igs.screenshot.Get()
-	if err != nil {
+	err := igs.screenshot.Capture()
+	if err == true {
+		return nil, errors.New("Failed to capture img")
+	}
+
+	img := ByteImage{
+		Data:      igs.screenshot.Image,
+		Width:     uint(igs.screenshot.Width),
+		Height:    uint(igs.screenshot.Height),
+		PixelSize: 4,
+		Stride:    uint(igs.screenshot.Width * 4),
+	}
+	if err := igs.appendCursor(&img); err != nil {
 		return nil, err
 	}
 
-	if err := igs.appendCursor(img); err != nil {
-		return nil, err
-	}
-
-	return img, nil
+	return &img, nil
 }
 
 func (igs *Screenshot) appendCursor(screenImage *ByteImage) error {

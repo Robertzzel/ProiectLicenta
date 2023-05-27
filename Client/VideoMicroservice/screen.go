@@ -1,67 +1,62 @@
 package main
 
+import "C"
 import (
-	"github.com/BurntSushi/xgb"
-	"github.com/BurntSushi/xgb/xproto"
-	"sync"
+	"errors"
+	"unsafe"
 )
 
-var screenMutex sync.Mutex
+/*
+#cgo pkg-config: xcb
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <xcb/xcb.h>
+
+int captureScreen(xcb_connection_t* connection, xcb_screen_t* screen, uint8_t* data, int length) {
+	xcb_get_image_reply_t *reply = xcb_get_image_reply(
+		connection,
+		xcb_get_image(connection, XCB_IMAGE_FORMAT_Z_PIXMAP, screen->root, 0, 0, screen->width_in_pixels, screen->height_in_pixels, 0xffffffff),
+		NULL);
+	if (reply == NULL) {
+		return 1;
+	}
+	memcpy(data, xcb_get_image_data(reply), length);
+	free(reply);
+	return 0;
+}
+*/
+import "C"
 
 type Screen struct {
-	connection *xgb.Conn
-	screen     *xproto.ScreenInfo
-	width      uint16
-	height     uint16
-	minWidth   int16
-	minHeight  int16
-	drawable   xproto.Drawable
+	connection *C.xcb_connection_t
+	screen     *C.xcb_screen_t
+	Width      int // Lățimea imaginii capturate
+	Height     int // Înălțimea imaginii capturate
+	Image      []byte
 }
 
-func NewScreen() (*Screen, error) {
-	c, err := xgb.NewConn()
-	if err != nil {
-		return nil, err
+func NewScreen() (Screen, error) {
+	connection := C.xcb_connect(nil, nil)
+	if C.xcb_connection_has_error(connection) != 0 {
+		return Screen{}, errors.New("Eroare la conectarea la serverul X")
 	}
+	screen := C.xcb_setup_roots_iterator(C.xcb_get_setup(connection)).data
+	width := int(screen.width_in_pixels)
+	height := int(screen.height_in_pixels)
 
-	screen := xproto.Setup(c).DefaultScreen(c)
-
-	return &Screen{
-		connection: c,
-		screen:     screen,
-		width:      screen.WidthInPixels,
-		height:     screen.HeightInPixels,
-		minWidth:   0,
-		minHeight:  0,
-		drawable:   xproto.Drawable(screen.Root),
-	}, nil
+	return Screen{
+		connection,
+		screen,
+		width,
+		height,
+		make([]byte, width*height*4)}, nil
 }
 
-func (ig *Screen) Get() (*ByteImage, error) {
-	screenMutex.Lock()
-	xImg, err := xproto.GetImage(
-		ig.connection,
-		xproto.ImageFormatZPixmap,
-		ig.drawable,
-		ig.minWidth,
-		ig.minHeight,
-		ig.width, ig.height,
-		0xffffffff,
-	).Reply()
-	if err != nil {
-		return nil, err
-	}
-	screenMutex.Unlock()
-
-	return &ByteImage{
-		Data:      xImg.Data,
-		Width:     uint(ig.width),
-		Height:    uint(ig.height),
-		PixelSize: 4,
-		Stride:    uint(ig.width * 4),
-	}, nil
+func (sc *Screen) Capture() bool {
+	return C.captureScreen(sc.connection, sc.screen, (*C.uint8_t)(unsafe.Pointer(&sc.Image[0])), (C.int)(cap(sc.Image))) == 1
 }
 
-func (ig *Screen) Close() {
-	ig.connection.Close()
+func (sc *Screen) Close() {
+	C.xcb_disconnect(sc.connection)
 }

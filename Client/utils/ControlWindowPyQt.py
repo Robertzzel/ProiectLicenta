@@ -85,7 +85,7 @@ class StreamReceiverThread(QThread):
                 'bootstrap.servers': self.master.kafkaAddress,
                 'group.id': '-',
             }, [(self.master.topic, Partitions.Client.value)])
-
+            i = 0
             while not self.master.stopEvent:
                 message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1)
                 if message is None:
@@ -96,6 +96,7 @@ class StreamReceiverThread(QThread):
                     print("Sharer stopped")
                     return
 
+                print( i, "RECEIVED", time.time())
                 with av.open(BytesIO(message.value())) as container:
                     container.fast_seek, container.discard_corrupt = True, True
 
@@ -110,6 +111,8 @@ class StreamReceiverThread(QThread):
                             elif isinstance(frame, av.AudioFrame) and not self.master.stopEvent:
                                 self.master.audioBlocksQueue.put(item=frame.to_ndarray(), block=True)
                     gc.collect()
+                print("PROCESSED FINISHED AT", time.time())
+                i += 1
 
             self.master.stopEvent = True
         except BaseException as ex:

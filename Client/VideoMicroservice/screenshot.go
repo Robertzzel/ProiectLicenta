@@ -26,34 +26,26 @@ func NewScreenshot() (*Screenshot, error) {
 	}, nil
 }
 
-func (igs *Screenshot) Get() (*ByteImage, error) {
+func (igs *Screenshot) Get(bi *ByteImage) error {
 	err := igs.screenshot.Capture()
 	if err == true {
-		return nil, errors.New("Failed to capture img")
+		return errors.New("Failed to capture img")
 	}
 
-	img := ByteImage{
-		Data:      igs.screenshot.Image,
-		Width:     uint(igs.screenshot.Width),
-		Height:    uint(igs.screenshot.Height),
-		PixelSize: 4,
-		Stride:    uint(igs.screenshot.Width * 4),
-	}
-	if err := igs.appendCursor(&img); err != nil {
-		return nil, err
-	}
+	bi.Data = igs.screenshot.Image
+	bi.Width = igs.screenshot.Width
+	bi.Height = igs.screenshot.Height
+	bi.Stride = 4 * igs.screenshot.Width
 
-	return &img, nil
+	igs.appendCursor(bi)
+	return nil
 }
 
-func (igs *Screenshot) appendCursor(screenImage *ByteImage) error {
+func (igs *Screenshot) appendCursor(screenImage *ByteImage) {
 	cursorX, cursorY := robotgo.GetMousePos()
 	for i := cursorX - igs.cursorRadius; i < cursorX+igs.cursorRadius; i++ {
 		for j := cursorY - igs.cursorRadius; j < cursorY+igs.cursorRadius; j++ {
-			// Ignoring error because cursor may not be on screen
 			screenImage.SetPixel(i, j, 255, 255, 255)
 		}
 	}
-
-	return nil
 }

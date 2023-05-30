@@ -34,7 +34,13 @@ func (avp *AudioVideoPair) GetAudioTimestamp() (int, error) {
 }
 
 func (avp *AudioVideoPair) CombineAndCompress(compressFactor int, output string, buffer *bytes.Buffer) error {
+	//errBuffer := bytes.Buffer{}
 	cmd := exec.Command("./CombineAndCompress", avp.Video, avp.Audio, fmt.Sprint(compressFactor), output)
 	cmd.Stdout = buffer
 	return cmd.Run()
+	//cmd.Stderr = &errBuffer
+	//if err := cmd.Run(); err != nil {
+	//	return errors.New(errBuffer.String())
+	//}
+	//return nil
 }

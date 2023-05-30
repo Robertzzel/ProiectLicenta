@@ -1,6 +1,6 @@
 #!/bin/sh
 
-go build -o VideoMicroservice.exe ./VideoMicroservice/VideoMicroservice.go ./VideoMicroservice/recorder.go ./VideoMicroservice/resizer.go ./VideoMicroservice/screenshot.go ./VideoMicroservice/screen.go ./VideoMicroservice/byte_image.go ./VideoMicroservice/Messager.go
+go build -o VideoMicroservice.exe ./VideoMicroservice/VideoMicroservice.go ./VideoMicroservice/recorder.go ./VideoMicroservice/screenshot.go ./VideoMicroservice/screen.go ./VideoMicroservice/byte_image.go ./VideoMicroservice/Messager.go
 go build -o AggregatorMicroservice.exe AggregatorMicroservice/AggregatorMicroservice.go AggregatorMicroservice/AudioVideoPair.go AggregatorMicroservice/Messager.go
 
 chmod +x VideoMicroservice.exe

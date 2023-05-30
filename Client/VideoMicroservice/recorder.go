@@ -14,9 +14,9 @@ import (
 type Recorder struct {
 	screenshotTool      *Screenshot
 	fps                 int
-	width               int32
-	height              int32
-	imageBuffer         chan []byte
+	currentImg          ByteImage
+	currentEncodedImage bytes.Buffer
+	imageBuffer         chan bool
 	VideoBuffer         chan string
 	errorGroup          *errgroup.Group
 	outContext          context.Context
@@ -34,22 +34,16 @@ func NewRecorder(outContext context.Context, fps int) (*Recorder, error) {
 		return nil, err
 	}
 
-	img, err := screenshot.Get()
-	if err != nil {
-		return nil, err
-	}
-
 	return &Recorder{
 		screenshotTool:      screenshot,
 		fps:                 fps,
-		width:               int32(img.Width),
-		height:              int32(img.Height),
-		imageBuffer:         make(chan []byte, 256),
-		VideoBuffer:         make(chan string, 10),
+		imageBuffer:         make(chan bool, 144),
+		VideoBuffer:         make(chan string, 3),
 		errorGroup:          nil,
 		outContext:          outContext,
 		ctx:                 nil,
 		contextCancellation: nil,
+		currentImg:          ByteImage{PixelSize: 4},
 	}, nil
 }
 
@@ -77,20 +71,16 @@ func (r *Recorder) Start(startTime time.Time, chunkSize time.Duration) {
 
 func (r *Recorder) startRecording() error {
 	ticker := time.NewTicker(time.Duration(int64(time.Second) / int64(r.fps)))
-	var encodedImageBuffer = bytes.Buffer{}
 
 	for r.outContext.Err() == nil {
-		img, err := r.screenshotTool.Get()
+		s := time.Now()
+		err := r.screenshotTool.Get(&r.currentImg)
 		if err != nil {
 			return err
 		}
 
-		encodedImageBuffer.Reset()
-		if err = img.Compress(&encodedImageBuffer, 100); err != nil {
-			return err
-		}
-
-		r.imageBuffer <- encodedImageBuffer.Bytes()
+		r.imageBuffer <- true
+		fmt.Println("CAPTURE: ", time.Since(s))
 		<-ticker.C
 	}
 
@@ -103,17 +93,24 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 	for r.outContext.Err() == nil {
 		nextChunkEndTime = nextChunkEndTime.Add(chunkSize)
 		videoFileName := fmt.Sprintf("/tmp/%s.mkv", fmt.Sprint(nextChunkEndTime.Add(-chunkSize).UnixMilli()))
-		video, err := mjpeg.New(videoFileName, r.width, r.height, int32(r.fps))
+		video, err := mjpeg.New(videoFileName, int32(r.currentImg.Width), int32(r.currentImg.Height), int32(r.fps))
 		if err != nil {
 			fmt.Println("initing a video err", err.Error())
 			return err
 		}
 
 		for r.outContext.Err() == nil && time.Now().Before(nextChunkEndTime) {
-			if err = video.AddFrame(<-r.imageBuffer); err != nil {
+			<-r.imageBuffer
+			s := time.Now()
+			if err = r.currentImg.Compress(&r.currentEncodedImage, 100); err != nil {
+				return err
+			}
+			fmt.Println("COMPRESS: ", time.Since(s))
+			if err = video.AddFrame(r.currentEncodedImage.Bytes()); err != nil {
 				log.Println("Error adding frame to video file ", err)
 				return err
 			}
+			r.currentEncodedImage.Reset()
 		}
 
 		r.VideoBuffer <- videoFileName

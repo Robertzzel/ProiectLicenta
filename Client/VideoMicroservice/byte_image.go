@@ -22,10 +22,10 @@ import (
 
 type ByteImage struct {
 	Data      []byte
-	Width     uint
-	Height    uint
-	PixelSize uint
-	Stride    uint
+	Width     int
+	Height    int
+	PixelSize int
+	Stride    int
 }
 
 func (bi *ByteImage) getImage() image.Image {
@@ -33,22 +33,20 @@ func (bi *ByteImage) getImage() image.Image {
 
 	return &image.RGBA{
 		Pix:    bi.Data,
-		Stride: int(bi.Stride),
-		Rect:   image.Rect(0, 0, int(bi.Width), int(bi.Height)),
+		Stride: bi.Stride,
+		Rect:   image.Rect(0, 0, bi.Width, bi.Height),
 	}
 }
 
-func (bi *ByteImage) SetPixel(x int, y int, r uint8, g uint8, b uint8) error {
-	offset := y*int(bi.Stride) + x*int(bi.PixelSize)
+func (bi *ByteImage) SetPixel(x int, y int, r uint8, g uint8, b uint8) {
+	offset := y*bi.Stride + x*bi.PixelSize
 	if offset >= len(bi.Data) || offset < 0 {
-		return errors.New("pixel off the screen")
+		return
 	}
 
 	bi.Data[offset] = r
 	bi.Data[offset+1] = g
 	bi.Data[offset+2] = b
-
-	return nil
 }
 
 func (bi *ByteImage) Compress(outputBuffer *bytes.Buffer, quality int) error {

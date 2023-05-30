@@ -31,8 +31,8 @@ import "C"
 type Screen struct {
 	connection *C.xcb_connection_t
 	screen     *C.xcb_screen_t
-	Width      int // Lățimea imaginii capturate
-	Height     int // Înălțimea imaginii capturate
+	Width      int
+	Height     int
 	Image      []byte
 }
 

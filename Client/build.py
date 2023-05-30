@@ -3,7 +3,7 @@ import subprocess
 
 
 def buildForLinux():
-    p = subprocess.Popen("go build -o VideoMicroservice.exe ./VideoMicroservice/VideoMicroservice.go ./VideoMicroservice/recorder.go ./VideoMicroservice/resizer.go ./VideoMicroservice/screenshot.go ./VideoMicroservice/screen.go ./VideoMicroservice/byte_image.go ./VideoMicroservice/Messager.go".split(), stderr=subprocess.PIPE)
+    p = subprocess.Popen("go build -o VideoMicroservice.exe ./VideoMicroservice/VideoMicroservice.go ./VideoMicroservice/recorder.go ./VideoMicroservice/screenshot.go ./VideoMicroservice/screen.go ./VideoMicroservice/byte_image.go ./VideoMicroservice/Messager.go".split(), stderr=subprocess.PIPE)
     p.wait()
     err = p.stderr.read()
     if err != b"":

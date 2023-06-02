@@ -94,11 +94,9 @@ func (r *Recorder) processImagesBuffer(startTime time.Time, chunkSize time.Durat
 
 		for r.outContext.Err() == nil && time.Now().Before(nextChunkEndTime) {
 			<-r.imageBuffer
-			s := time.Now()
 			if err = r.currentImg.Compress(&r.currentEncodedImage, 100); err != nil {
 				return err
 			}
-			fmt.Println("COMPRESS: ", time.Since(s))
 			if err = video.AddFrame(r.currentEncodedImage.Bytes()); err != nil {
 				log.Println("Error adding frame to video file ", err)
 				return err

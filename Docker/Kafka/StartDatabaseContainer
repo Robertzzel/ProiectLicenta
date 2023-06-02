@@ -6,7 +6,7 @@ version: "3"
 
 services:
   database-microservice:
-    image: database-microservice:v12
+    image: database-microservice:v0
     container_name: 'database-microservice'
     environment:
       - BROKER_ADDRESS=localhost:9092

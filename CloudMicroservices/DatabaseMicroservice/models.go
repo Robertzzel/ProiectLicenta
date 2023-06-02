@@ -7,6 +7,7 @@ type User struct {
 	CallKey      string
 	CallPassword string
 	SessionId    *int
+	Topic        string
 }
 
 type Video struct {

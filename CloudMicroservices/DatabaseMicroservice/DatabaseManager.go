@@ -43,15 +43,16 @@ func (db *DatabaseManager) HandleLogin(message []byte) ([]byte, error) {
 
 	name, nameExists := input["Name"]
 	password, passwordExists := input["Password"]
+	topic, topicExists := input["Topic"]
 
-	if !(nameExists && passwordExists) {
+	if !(nameExists && passwordExists && topicExists) {
 		return nil, errors.New("name, password are needed")
 	}
 
 	// cauta in functie de nume si parola
 	var user User
 	err := db.QueryRow(`select * from User where Name = ? and Password = ? LIMIT 1`, name, Hash(password)).Scan(&user.Id, &user.Name, &user.Password,
-		&user.CallKey, &user.CallPassword, &user.SessionId)
+		&user.CallKey, &user.CallPassword, &user.Topic, &user.SessionId)
 	if err != nil {
 		return nil, errors.New("nume sau parola incorecta")
 	}
@@ -59,7 +60,7 @@ func (db *DatabaseManager) HandleLogin(message []byte) ([]byte, error) {
 	user.CallPassword = uuid.NewString()
 	user.SessionId = nil
 	// creeaza parola noua de call
-	_, err = db.Exec(`update User set CallPassword = ?, SessionId = NULL where Id = ?`, user.CallPassword, user.Id)
+	_, err = db.Exec(`update User set CallPassword = ?, Topic = ?, SessionId = NULL where Id = ?`, user.CallPassword, topic, user.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +86,7 @@ func (db *DatabaseManager) HandleRegister(message []byte) ([]byte, error) {
 		return nil, errors.New("password mush have a number, a character and be at least the size of 4")
 	}
 
-	_, err := db.Exec("insert into User (Name, Password, CallKey, CallPassword, SessionId) values (?, ?, ?, ?, ?)", name, Hash(password), uuid.NewString(), uuid.NewString(), nil)
+	_, err := db.Exec("insert into User (Name, Password, CallKey, CallPassword, Topic, SessionId) values (?, ?, ?, ?, ?, ?)", name, Hash(password), uuid.NewString(), uuid.NewString(), "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +172,8 @@ func (db *DatabaseManager) HandleGetCallByKeyAndPassword(message []byte) ([]byte
 
 	// gaseste topicul sesinii si creeaza mesajul
 	var topic string
-	err = db.QueryRow("select Topic from Session where Id = ?", *sessionId).Scan(&topic)
+	var id int
+	err = db.QueryRow("select Topic, Id from Session where Id = ?", *sessionId).Scan(&topic, &id)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +184,7 @@ func (db *DatabaseManager) HandleGetCallByKeyAndPassword(message []byte) ([]byte
 		return nil, err
 	}
 
-	return json.Marshal(map[string]string{"Topic": topic})
+	return json.Marshal(map[string]string{"Topic": topic, "SessionId": fmt.Sprint(id)})
 }
 
 func (db *DatabaseManager) HandleGetVideosByUser(message []byte) ([]byte, error) {
@@ -288,6 +290,22 @@ func (db *DatabaseManager) HandleDeleteSession(sessionId int) ([]byte, error) {
 	return []byte("success"), nil
 }
 
+func (db *DatabaseManager) GetUserTopicsBySession(sessionId int) ([]byte, error) {
+	rows, err := db.Query("select Topic from User where SessionId = ?", sessionId)
+
+	var topic string
+	topics := make([]string, 0)
+	for rows.Next() {
+		err = rows.Scan(&topic)
+		if err != nil {
+			return nil, err
+		}
+		topics = append(topics, topic)
+	}
+
+	return json.Marshal(topics)
+}
+
 func (db *DatabaseManager) MigrateDatabase() error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS Session(
     Id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -302,6 +320,7 @@ func (db *DatabaseManager) MigrateDatabase() error {
 		Password varchar(255),
 		CallKey varchar(255) NOT NULL,
 		CallPassword varchar(255) NOT NULL,
+		Topic varchar(255) NOT NULL,
 		SessionId int,
     	FOREIGN KEY (SessionId) REFERENCES Session(Id),
     	UNIQUE (Name),

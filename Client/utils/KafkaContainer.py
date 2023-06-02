@@ -16,7 +16,7 @@ class KafkaContainer:
             raise Exception("Broker does not exists")
 
         self.topic = str(uuid.uuid1())
-        createTopic(address, self.topic, partitions=7)
+        createTopic(address, self.topic, partitions=9)
 
         self.address = address
         self.partition = Partitions.Client.value
@@ -28,13 +28,15 @@ class KafkaContainer:
         self.consumerConfigs = consumerConfigs
 
     def databaseCall(self, operation: str, message: bytes, timeoutSeconds, username: str = None,
-                     password: str = None) -> kafka.Message:
+                     password: str = None, sessionId: str = None) -> kafka.Message:
         self.seekToEnd()
         headers = [
             ("topic", self.topic.encode()),
             ("partition", str(self.partition).encode()),
             ("operation", operation.encode()),
         ]
+        if sessionId is not None:
+            headers.append(("sessionId", str(sessionId).encode()))
 
         if operation not in ("LOGIN", "REGISTER") and username is not None and password is not None:
             headers.append(("Name", username))

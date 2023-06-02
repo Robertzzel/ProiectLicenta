@@ -77,7 +77,7 @@ func main() {
 		panic(err)
 	}
 
-	videoRecorder, err := NewRecorder(ctx, 60)
+	videoRecorder, err := NewRecorder(ctx, 30)
 	if err != nil {
 		panic(err)
 	}

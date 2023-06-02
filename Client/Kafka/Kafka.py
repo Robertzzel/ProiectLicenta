@@ -19,19 +19,25 @@ class Partitions(enum.Enum):
     Client: int = 3
     MergerMicroservice: int = 4
     Input: int = 6
+    FileTransferReceiveFile: int = 7
+    FileTransferReceiveConfirmation: int = 8
 
 
 class CustomKafkaMessage:
-    def __init__(self, value: bytes, headers: List, *args, **kwargs):
+    def __init__(self, value: bytes, headers: List, topic:str = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.savedValue = value
         self.savedHeaders = headers
+        self.savedTopic = topic
 
     def value(self):
         return self.savedValue
 
     def headers(self):
         return self.savedHeaders
+
+    def topic(self):
+        return self.savedTopic
 
 
 class KafkaProducerWrapper(kafka.Producer):
@@ -102,7 +108,7 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
             messages.extend(message.value())
 
-        return CustomKafkaMessage(value=messages, headers=headersToBeReturned)
+        return CustomKafkaMessage(value=messages, headers=headersToBeReturned, topic=message.topic())
 
     def consumeMessage(self, timeoutSeconds: float) -> Optional[kafka.Message]:
         while time.time() < timeoutSeconds:

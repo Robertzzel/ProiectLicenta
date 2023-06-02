@@ -76,6 +76,8 @@ func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *
 		response, err = db.HandleCreateSession(message.Value)
 	case "DELETE_SESSION":
 		response, err = db.HandleDeleteSession(sessionId)
+	case "TOPICS":
+		response, err = db.GetUserTopicsBySession(sessionId)
 	default:
 		err = errors.New("operation not permitted")
 	}

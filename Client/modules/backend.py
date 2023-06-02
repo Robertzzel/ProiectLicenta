@@ -32,7 +32,7 @@ class Backend:
         if username == "" or password == "":
             return Exception("Need both name and pass")
 
-        loggInDetails = {"Name": username, "Password": password}
+        loggInDetails = {"Name": username, "Password": password, "Topic": self.kafkaContainer.topic}
         message = self.kafkaContainer.databaseCall("LOGIN", json.dumps(loggInDetails).encode(), timeoutSeconds=5)
         if message is None:
             return Exception("Cannot talk to the database")
@@ -78,7 +78,7 @@ class Backend:
             return Exception(f"Cannot start call, {status}")
 
         responseValue = json.loads(responseMessage.value())
-        return responseValue["Topic"]
+        return responseValue
 
     def createSession(self):
         msg = self.kafkaContainer.databaseCall(operation="CREATE_SESSION", message=json.dumps({
@@ -135,3 +135,12 @@ class Backend:
             return Exception(f"Download video, {status}")
 
         return msg.value()
+
+    def getTopicsFromCurrentSession(self):
+        if self.user.sessionId is None:
+            return Exception("no session active")
+        msg = self.kafkaContainer.databaseCall(operation="TOPICS", message=b"msg",
+                                               username=self.user.name, sessionId=self.user.sessionId,
+                                               password=self.user.password, timeoutSeconds=3)
+
+        return json.loads(msg.value())

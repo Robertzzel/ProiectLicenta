@@ -96,7 +96,6 @@ class StreamReceiverThread(QThread):
                     print("Sharer stopped")
                     return
 
-                print( i, "RECEIVED", time.time())
                 with av.open(BytesIO(message.value())) as container:
                     container.fast_seek, container.discard_corrupt = True, True
 
@@ -111,7 +110,6 @@ class StreamReceiverThread(QThread):
                             elif isinstance(frame, av.AudioFrame) and not self.master.stopEvent:
                                 self.master.audioBlocksQueue.put(item=frame.to_ndarray(), block=True)
                     gc.collect()
-                print("PROCESSED FINISHED AT", time.time())
                 i += 1
 
             self.master.stopEvent = True
@@ -143,8 +141,9 @@ class SendInputsThread(QThread):
 
 
 class VideoWindow(QWidget):
-    def __init__(self, topic: str, kafkaAddress: str = "localhost:9092"):
+    def __init__(self, master, topic: str, kafkaAddress: str = "localhost:9092"):
         super().__init__()
+        self.master = master
         self.label = QLabel(self)
 
         self.kafkaAddress = kafkaAddress
@@ -266,3 +265,5 @@ class VideoWindow(QWidget):
         print("Stopping receiver thread")
         self.sit.quit()
         print("Stopped receiver thread")
+
+        self.master.backend.user.sessionId = None

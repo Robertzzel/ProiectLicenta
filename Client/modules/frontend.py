@@ -8,6 +8,7 @@ from .CallWindow import CallWindow
 from .KafkaWindow import KafkaWindow
 from .Login import Login
 from .MyVideosWindow import MyVideosWindow
+from .shareFileWindow import ShareFileWindow
 from .Register import Register
 
 font = QFont()
@@ -216,6 +217,19 @@ class UiMainWindow(object):
         self.btnMyVideos.setStyleSheet(Settings.BUTTON_MY_VIDEOS_URL)
         self.buttonMenuLayout.addWidget(self.btnMyVideos)
         # End My Videos Button
+
+        # Share File Button
+        self.btnShareFile = QPushButton(self.buttonMenu)
+        self.btnShareFile.setObjectName(u"btnShareFile")
+        sizePolicy.setHeightForWidth(self.btnShareFile.sizePolicy().hasHeightForWidth())
+        self.btnShareFile.setSizePolicy(sizePolicy)
+        self.btnShareFile.setMinimumSize(QSize(0, 45))
+        self.btnShareFile.setFont(font)
+        self.btnShareFile.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btnShareFile.setLayoutDirection(Qt.LeftToRight)
+        self.btnShareFile.setStyleSheet(Settings.BUTTON_FILE_SHARING)
+        self.buttonMenuLayout.addWidget(self.btnShareFile)
+        # End Share File Button
 
         # change theme button
         self.btnChangeTheme = QPushButton(self.buttonMenu)
@@ -441,6 +455,11 @@ class UiMainWindow(object):
         self.pagesStack.addWidget(self.myVideosWindow)
         # End My Videos Window
 
+        # My Videos Window
+        self.shareFileWindow = ShareFileWindow(MainWindow)
+        self.pagesStack.addWidget(self.shareFileWindow)
+        # End My Videos Window
+
         MainWindow.setWindowTitle("MainWindow")
         self.toggleButton.setText("Hide")
         self.btnKafka.setText("Kafka")
@@ -448,6 +467,7 @@ class UiMainWindow(object):
         self.btnRegister.setText("Register")
         self.btnCall.setText("Call")
         self.btnMyVideos.setText("MyVideos")
+        self.btnShareFile.setText("Share File")
         self.btnChangeTheme.setText("Change Theme")
         self.minimizeAppBtn.setToolTip("Minimize")
         self.minimizeAppBtn.setText("")

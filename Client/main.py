@@ -1,6 +1,11 @@
 import os
 import sys
-from PySide6.QtCore import QSize
+import threading
+import time
+from queue import Queue
+from typing import List
+from Kafka.Kafka import Partitions, KafkaConsumerWrapper
+from PySide6.QtCore import QSize, Signal
 from modules import *
 from PySide6.QtWidgets import *
 from modules import UiMainWindow
@@ -11,9 +16,10 @@ os.environ["QT_FONT_DPI"] = "96" # FIX Problem for High DPI and Scale above 100%
 
 
 class MainWindow(QMainWindow):
+    receiveFileSignal = Signal(str)
+
     def __init__(self):
         QMainWindow.__init__(self)
-
         self.resize(940, 560)
         self.setMinimumSize(QSize(940, 560))
         self.setObjectName(u"MainWindow")
@@ -32,8 +38,10 @@ class MainWindow(QMainWindow):
         self.widgets.pagesStack.setCurrentWidget(self.widgets.kafkaWindow)
 
         self.isDarkThemeOn = False
+        self.incomingFileQueue = Queue()
         self.toggleTheme()
 
+        self.receiveFileSignal.connect(self.handleQuestionSignal)
         self.ui.topLogo.setStyleSheet(Settings.TOP_LOGO_URL)
         self.show()
 
@@ -50,6 +58,9 @@ class MainWindow(QMainWindow):
         self.widgets.callWindow.startSessionBtn.clicked.connect(self.startCall)
         self.widgets.callWindow.joinSessionBtn.clicked.connect(self.joinCall)
         self.widgets.btnChangeTheme.clicked.connect(self.toggleTheme)
+        self.widgets.btnShareFile.clicked.connect(self.btnShareFilePressed)
+        self.widgets.shareFileWindow.selectFileButton.clicked.connect(self.selectFile)
+        self.widgets.shareFileWindow.uploadButtonn.clicked.connect(self.uploadSelectedFilehandler)
 
     def toggleTheme(self):
         if self.isDarkThemeOn:
@@ -65,6 +76,12 @@ class MainWindow(QMainWindow):
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.kafkaWindow)
         self.ui.resetStyle("btnKafka")
+        btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
+
+    def btnShareFilePressed(self):
+        btn = self.sender()
+        self.widgets.pagesStack.setCurrentWidget(self.widgets.shareFileWindow)
+        self.ui.resetStyle("btnShareFile")
         btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def btnLoginPressed(self):
@@ -196,6 +213,9 @@ class MainWindow(QMainWindow):
         self.ui.callWindow.startSessionBtn.setText("STOP SHARING")
         self.ui.setStatusMessage("Call started")
 
+        self.receiveFileThread = threading.Thread(target=self.startReceiveFiles)
+        self.receiveFileThread.start()
+
     def stopCall(self):
         self.backend.stopRecorder()
         self.backend.user.sessionId = None
@@ -220,12 +240,19 @@ class MainWindow(QMainWindow):
             self.ui.setStatusMessage("provide both key and password", True)
             return
 
-        topic = self.backend.getPartnerTopic(callKey, callPassword)
-        if type(topic) is Exception:
-            self.ui.setStatusMessage(str(topic), True)
+        response = self.backend.getPartnerTopic(callKey, callPassword)
+        if type(response) is Exception:
+            self.ui.setStatusMessage(str(response), True)
             return
 
-        self.w = VideoWindow(topic, self.backend.kafkaContainer.address)
+        topic = response["Topic"]
+        sessionId = int(response["SessionId"])
+        self.backend.user.sessionId = sessionId
+
+        self.receiveFileThread = threading.Thread(target=self.startReceiveFiles)
+        self.receiveFileThread.start()
+
+        self.w = VideoWindow(self, topic, self.backend.kafkaContainer.address)
         self.w.show()
 
     def downloadVideo(self, videoId: int):
@@ -248,6 +275,104 @@ class MainWindow(QMainWindow):
         with open(f[0], "wb") as file:
             file.write(video)
         self.ui.setStatusMessage("Video downloaded")
+
+    def selectFile(self):
+        file = QFileDialog()
+        f = file.getOpenFileName(self)[0]
+        if file is None or f == "":
+            self.ui.setStatusMessage("No file selected", True)
+            return
+
+        self.widgets.shareFileWindow.label.setText(f"Current select file: {f}")
+        self.widgets.shareFileWindow.selectedFileForUpload = f
+
+    def uploadSelectedFilehandler(self):
+        file: str = self.widgets.shareFileWindow.selectedFileForUpload
+        if file is None:
+            self.ui.setStatusMessage("No file selected", True)
+            return
+        if not os.path.isfile(file):
+            self.ui.setStatusMessage("No file selected", True)
+            return
+
+        threading.Thread(target=self.uploadSelectedFile).start()
+
+    def uploadSelectedFile(self):
+        file: str = self.widgets.shareFileWindow.selectedFileForUpload
+
+        topics: List = self.backend.getTopicsFromCurrentSession()
+        if type(topics) is Exception:
+            self.widgets.setStatusMessage(str(topics))
+
+        try:
+            topics.remove(self.backend.kafkaContainer.topic)
+        except ValueError:
+            pass
+
+        for topic in topics:
+            self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=f"file,{self.backend.kafkaContainer.topic}", partition=Partitions.FileTransferReceiveFile.value)
+
+        cnfigs = {}
+        cnfigs['bootstrap.servers'] = self.backend.kafkaContainer.address
+        cnfigs['group.id'] = "-"
+        c = KafkaConsumerWrapper(cnfigs, [(self.backend.kafkaContainer.topic, Partitions.FileTransferReceiveConfirmation.value)])
+        topicsToSend = []
+        end = time.time() + 10
+        while end - time.time() > 0 and len(topicsToSend) < len(topics):
+            msg = c.receiveBigMessage(timeoutSeconds=1)
+            if msg is None:
+                continue
+
+            if msg.value()[:4] == b"true":
+                topicsToSend.append(msg.value()[5:].decode())
+            else:
+                print("raspuns", msg.value())
+
+        with open(file, "rb") as f:
+            content = f.read()
+            for topic in topicsToSend:
+                self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, partition=Partitions.FileTransferReceiveFile.value, value=content)
+                print("Sent for topic ", topic)
+
+    def startReceiveFiles(self):
+        cnfigs = {}
+        cnfigs['bootstrap.servers'] = self.backend.kafkaContainer.address
+        cnfigs['group.id'] = "-"
+        consumer = KafkaConsumerWrapper(cnfigs, [(self.backend.kafkaContainer.topic, Partitions.FileTransferReceiveFile.value)])
+
+        while self.backend.user.sessionId is not None:
+            msg = consumer.receiveBigMessage(timeoutSeconds=1)
+            if msg is None:
+                continue
+
+            if msg.value()[:4] != b"file":
+                continue
+
+            topic = msg.value()[5:].decode()
+            self.receiveFileSignal.emit(topic)
+
+            if not self.incomingFileQueue.get():
+                continue
+
+            file = consumer.receiveBigMessage(timeoutSeconds=10)
+            if file is None:
+                print("FIle not received")
+                continue
+
+            with open("out", "wb") as f:
+                f.write(file.value())
+
+    def handleQuestionSignal(self, topic):
+        reply = QMessageBox.question(self,'Receive file', "You are receiving a file", QMessageBox.Yes, QMessageBox.No)
+        msg = b""
+        if reply == QMessageBox.Yes:
+            msg = b"true"
+        elif reply == QMessageBox.No:
+            msg = b"false"
+
+        self.incomingFileQueue.put(msg)
+        self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=msg + f",{self.backend.kafkaContainer.topic}".encode(), partition=Partitions.FileTransferReceiveConfirmation.value)
+
 
 
 if __name__ == "__main__":

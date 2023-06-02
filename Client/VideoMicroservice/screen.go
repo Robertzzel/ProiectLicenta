@@ -23,6 +23,14 @@ int captureScreen(xcb_connection_t* connection, xcb_screen_t* screen, uint8_t* d
 	}
 	memcpy(data, xcb_get_image_data(reply), length);
 	free(reply);
+
+	int i;
+	for(i = 0; i < length; i += 4){
+		uint8_t aux = data[i];
+		data[i] = data[i+2];
+		data[i+2] = aux;
+		data[i+3] = 255;
+	}
 	return 0;
 }
 */

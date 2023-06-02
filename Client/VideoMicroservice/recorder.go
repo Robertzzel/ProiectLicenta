@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"github.com/icza/mjpeg"
 	"golang.org/x/sync/errgroup"
@@ -25,10 +24,6 @@ type Recorder struct {
 }
 
 func NewRecorder(outContext context.Context, fps int) (*Recorder, error) {
-	if fps > 60 && fps < 1 {
-		return nil, errors.New("fps must be between 1 and 60")
-	}
-
 	screenshot, err := NewScreenshot()
 	if err != nil {
 		return nil, err
@@ -73,14 +68,12 @@ func (r *Recorder) startRecording() error {
 	ticker := time.NewTicker(time.Duration(int64(time.Second) / int64(r.fps)))
 
 	for r.outContext.Err() == nil {
-		s := time.Now()
 		err := r.screenshotTool.Get(&r.currentImg)
 		if err != nil {
 			return err
 		}
 
 		r.imageBuffer <- true
-		fmt.Println("CAPTURE: ", time.Since(s))
 		<-ticker.C
 	}
 

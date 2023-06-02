@@ -35,3 +35,9 @@ func NewConsumer(brokerAddress string) (Consumer, error) {
 	}
 	return Consumer{p}, nil
 }
+
+func (consumer *Consumer) AssignTopicPartition(topic string, partition int32) error {
+	return consumer.Assign([]kafka.TopicPartition{
+		{Topic: &topic, Partition: partition},
+	})
+}

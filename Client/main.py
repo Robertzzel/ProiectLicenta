@@ -79,6 +79,10 @@ class MainWindow(QMainWindow):
         btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def btnShareFilePressed(self):
+        if self.backend.user.sessionId is None:
+            self.ui.setStatusMessage("You are not in a session", True)
+            return
+
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.shareFileWindow)
         self.ui.resetStyle("btnShareFile")
@@ -230,10 +234,6 @@ class MainWindow(QMainWindow):
             self.ui.setStatusMessage("No user connected", True)
             return
 
-        if Settings.PLATFORM != "linux":
-            self.ui.setStatusMessage("This feature is ony for linux OS", True)
-            return
-
         callKey = self.ui.callWindow.partnerCallKeyEdit.text()
         callPassword = self.ui.callWindow.partnerCallPasswordEdit.text()
         if callKey == "" or callPassword == "":
@@ -246,11 +246,9 @@ class MainWindow(QMainWindow):
             return
 
         topic = response["Topic"]
-        sessionId = int(response["SessionId"])
-        self.backend.user.sessionId = sessionId
+        self.backend.user.sessionId = int(response["SessionId"])
 
-        self.receiveFileThread = threading.Thread(target=self.startReceiveFiles)
-        self.receiveFileThread.start()
+        threading.Thread(target=self.startReceiveFiles).start()
 
         self.w = VideoWindow(self, topic, self.backend.kafkaContainer.address)
         self.w.show()
@@ -298,47 +296,36 @@ class MainWindow(QMainWindow):
         threading.Thread(target=self.uploadSelectedFile).start()
 
     def uploadSelectedFile(self):
-        file: str = self.widgets.shareFileWindow.selectedFileForUpload
+        topicsOnCurrentSession: List = self.backend.getTopicsFromCurrentSession()
+        if type(topicsOnCurrentSession) is Exception:
+            self.widgets.setStatusMessage(str(topicsOnCurrentSession))
 
-        topics: List = self.backend.getTopicsFromCurrentSession()
-        if type(topics) is Exception:
-            self.widgets.setStatusMessage(str(topics))
+        topicsOnCurrentSession.remove(self.backend.getMyTopic())
+        if len(topicsOnCurrentSession) == 0:
+            return
 
-        try:
-            topics.remove(self.backend.kafkaContainer.topic)
-        except ValueError:
-            pass
+        c = self.backend.getNewKafkaConsumer(self.backend.getMyTopic(), Partitions.FileTransferReceiveConfirmation.value)
+        for topic in topicsOnCurrentSession:
+            self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=f"file,{self.backend.getMyTopic()}", partition=Partitions.FileTransferReceiveFile.value)
+        self.backend.kafkaContainer.producer.flush(1)
 
-        for topic in topics:
-            self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=f"file,{self.backend.kafkaContainer.topic}", partition=Partitions.FileTransferReceiveFile.value)
-
-        cnfigs = {}
-        cnfigs['bootstrap.servers'] = self.backend.kafkaContainer.address
-        cnfigs['group.id'] = "-"
-        c = KafkaConsumerWrapper(cnfigs, [(self.backend.kafkaContainer.topic, Partitions.FileTransferReceiveConfirmation.value)])
-        topicsToSend = []
-        end = time.time() + 10
-        while end - time.time() > 0 and len(topicsToSend) < len(topics):
+        topicsToSendTheFile = []
+        wait_end = time.time() + 10
+        while wait_end > time.time() and len(topicsToSendTheFile) < len(topicsOnCurrentSession):
             msg = c.receiveBigMessage(timeoutSeconds=1)
             if msg is None:
                 continue
 
             if msg.value()[:4] == b"true":
-                topicsToSend.append(msg.value()[5:].decode())
-            else:
-                print("raspuns", msg.value())
+                topicsToSendTheFile.append(msg.value()[5:].decode())
 
-        with open(file, "rb") as f:
-            content = f.read()
-            for topic in topicsToSend:
-                self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, partition=Partitions.FileTransferReceiveFile.value, value=content)
-                print("Sent for topic ", topic)
+        for topic in topicsToSendTheFile:
+            self.backend.kafkaContainer.producer.sendFile(topic=topic, partition=Partitions.FileTransferReceiveFile.value, fileName=self.widgets.shareFileWindow.selectedFileForUpload)
+        self.backend.kafkaContainer.producer.flush(1)
+        c.close()
 
     def startReceiveFiles(self):
-        cnfigs = {}
-        cnfigs['bootstrap.servers'] = self.backend.kafkaContainer.address
-        cnfigs['group.id'] = "-"
-        consumer = KafkaConsumerWrapper(cnfigs, [(self.backend.kafkaContainer.topic, Partitions.FileTransferReceiveFile.value)])
+        consumer = self.backend.getNewKafkaConsumer(self.backend.getMyTopic(), Partitions.FileTransferReceiveFile.value)
 
         while self.backend.user.sessionId is not None:
             msg = consumer.receiveBigMessage(timeoutSeconds=1)
@@ -356,11 +343,13 @@ class MainWindow(QMainWindow):
 
             file = consumer.receiveBigMessage(timeoutSeconds=10)
             if file is None:
-                print("FIle not received")
+                print("File not received")
                 continue
 
             with open("out", "wb") as f:
                 f.write(file.value())
+
+        consumer.close()
 
     def handleQuestionSignal(self, topic):
         reply = QMessageBox.question(self,'Receive file', "You are receiving a file", QMessageBox.Yes, QMessageBox.No)
@@ -371,7 +360,7 @@ class MainWindow(QMainWindow):
             msg = b"false"
 
         self.incomingFileQueue.put(msg)
-        self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=msg + f",{self.backend.kafkaContainer.topic}".encode(), partition=Partitions.FileTransferReceiveConfirmation.value)
+        self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=msg + f",{self.backend.getMyTopic()}".encode(), partition=Partitions.FileTransferReceiveConfirmation.value)
 
 
 

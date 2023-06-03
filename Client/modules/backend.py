@@ -1,4 +1,6 @@
 import json
+
+from Client.Kafka.Kafka import KafkaConsumerWrapper, Partitions
 from Client.utils.KafkaContainer import KafkaContainer
 from Client.utils.Start import Recorder, VideoMerger
 from Client.utils.User import User
@@ -9,6 +11,9 @@ class Backend:
         self.kafkaContainer: KafkaContainer = None
         self.user: User = None
         self.sender: Recorder = None
+
+    def getMyTopic(self):
+        return self.kafkaContainer.topic
 
     def setKafkaConnection(self, address):
         try:
@@ -144,3 +149,9 @@ class Backend:
                                                password=self.user.password, timeoutSeconds=3)
 
         return json.loads(msg.value())
+
+    def getNewKafkaConsumer(self, topic, partition=0):
+        return KafkaConsumerWrapper(
+            {'bootstrap.servers': self.kafkaContainer.address,
+             'group.id': "-"},
+            [(topic, partition)])

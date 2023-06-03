@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import os
 from typing import *
 import confluent_kafka as kafka
 from confluent_kafka.admin import AdminClient
@@ -58,6 +59,28 @@ class KafkaProducerWrapper(kafka.Producer):
             end = min((i + 1) * MaxSingleMessageSize, len(value))
             self.produce(topic=topic, value=value[start: end],
                          headers=headers + [("message-number", str(i).zfill(5).encode())], key=key, partition=partition)
+
+    def sendFile(self, topic: str, fileName: str, headers=None, key=None, partition=0):
+        fileSize = os.path.getsize(fileName)
+        numberOfMessages = ceil(fileSize / MaxSingleMessageSize)
+        numberOfMessagesHeader = ("number-of-messages", str(numberOfMessages).zfill(5).encode())
+        if headers is None:
+            headers = [numberOfMessagesHeader]
+        else:
+            headers.append(numberOfMessagesHeader)
+
+        with open(fileName, "rb") as f:
+            for i in range(numberOfMessages):
+                buff = f.read(MaxSingleMessageSize)
+                try:
+                    self.produce(topic=topic, value=buff,
+                                 headers=headers + [("message-number", str(i).zfill(5).encode())], key=key,
+                                 partition=partition)
+                except BufferError:
+                    self.flush()
+                    self.produce(topic=topic, value=buff,
+                                 headers=headers + [("message-number", str(i).zfill(5).encode())], key=key,
+                                 partition=partition)
 
 
 class KafkaConsumerWrapper(kafka.Consumer):

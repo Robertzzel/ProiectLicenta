@@ -4,7 +4,7 @@ import threading
 import time
 from queue import Queue
 from typing import List
-from Kafka.Kafka import Partitions, KafkaConsumerWrapper
+from Kafka.Kafka import Partitions
 from PySide6.QtCore import QSize, Signal
 from modules import *
 from PySide6.QtWidgets import *
@@ -305,8 +305,10 @@ class MainWindow(QMainWindow):
             return
 
         c = self.backend.getNewKafkaConsumer(self.backend.getMyTopic(), Partitions.FileTransferReceiveConfirmation.value)
+        fileName = self.widgets.shareFileWindow.selectedFileForUpload
+        fileStats = os.stat(fileName)
         for topic in topicsOnCurrentSession:
-            self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=f"file,{self.backend.getMyTopic()}", partition=Partitions.FileTransferReceiveFile.value)
+            self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=f"file,{self.backend.getMyTopic()},{fileName},{fileStats.st_size}", partition=Partitions.FileTransferReceiveFile.value)
         self.backend.kafkaContainer.producer.flush(1)
 
         topicsToSendTheFile = []
@@ -320,7 +322,8 @@ class MainWindow(QMainWindow):
                 topicsToSendTheFile.append(msg.value()[5:].decode())
 
         for topic in topicsToSendTheFile:
-            self.backend.kafkaContainer.producer.sendFile(topic=topic, partition=Partitions.FileTransferReceiveFile.value, fileName=self.widgets.shareFileWindow.selectedFileForUpload)
+            self.backend.kafkaContainer.producer.sendFile(topic=topic, partition=Partitions.FileTransferReceiveFile.value, fileName=fileName)
+
         self.backend.kafkaContainer.producer.flush(1)
         c.close()
 
@@ -335,8 +338,8 @@ class MainWindow(QMainWindow):
             if msg.value()[:4] != b"file":
                 continue
 
-            topic = msg.value()[5:].decode()
-            self.receiveFileSignal.emit(topic)
+            self.receiveFileSignal.emit(msg.value().decode())
+            _, topic, fileName, fileSize = msg.value().decode().split(",")
 
             if not self.incomingFileQueue.get():
                 continue
@@ -346,13 +349,17 @@ class MainWindow(QMainWindow):
                 print("File not received")
                 continue
 
-            with open("out", "wb") as f:
+            fileName = fileName.split("/")[-1] if Settings.PLATFORM.lower() == "linux" else fileName.split("\\")[-1]
+
+            with open("received_"+fileName, "wb") as f:
                 f.write(file.value())
 
         consumer.close()
 
-    def handleQuestionSignal(self, topic):
-        reply = QMessageBox.question(self,'Receive file', "You are receiving a file", QMessageBox.Yes, QMessageBox.No)
+    def handleQuestionSignal(self, message: str):
+        _, topic, fileName, fileSize = message.split(",")
+
+        reply = QMessageBox.question(self,'Receive file', f"You are receiving a file named {fileName} with size {fileSize} bytes", QMessageBox.Yes, QMessageBox.No)
         msg = b""
         if reply == QMessageBox.Yes:
             msg = b"true"
@@ -361,7 +368,6 @@ class MainWindow(QMainWindow):
 
         self.incomingFileQueue.put(msg)
         self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=msg + f",{self.backend.getMyTopic()}".encode(), partition=Partitions.FileTransferReceiveConfirmation.value)
-
 
 
 if __name__ == "__main__":

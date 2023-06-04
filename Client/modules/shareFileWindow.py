@@ -75,5 +75,5 @@ class ShareFileWindow(QtWidgets.QWidget):
         _translate = QtCore.QCoreApplication.translate
         Form.setWindowTitle(_translate("Form", "Form"))
         self.selectFileButton.setText(_translate("Form", "SELECT FILE"))
-        self.label.setText(_translate("Form", "Currect select file:"))
+        self.label.setText(_translate("Form", "Current selected file: None"))
         self.uploadButtonn.setText(_translate("Form", "UPLOAD"))

@@ -79,7 +79,7 @@ class MainWindow(QMainWindow):
         btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def btnShareFilePressed(self):
-        if self.backend.user.sessionId is None:
+        if self.backend.user is None or self.backend.user.sessionId is None:
             self.ui.setStatusMessage("You are not in a session", True)
             return
 

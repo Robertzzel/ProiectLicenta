@@ -50,6 +50,7 @@ class MainWindow(QMainWindow):
         self.widgets.btnKafka.clicked.connect(self.btnKafkaPressed)
         self.widgets.btnLogin.clicked.connect(self.btnLoginPressed)
         self.widgets.btnRegister.clicked.connect(self.btnRegisterPressed)
+        self.widgets.btnAdministrateAccount.clicked.connect(self.btnAdministrateAccountHandler)
         self.widgets.btnMyVideos.clicked.connect(self.btnMyVideosPresses)
         self.widgets.kafkaWindow.pushButton.clicked.connect(self.connectToKafka)
         self.widgets.loginWindow.pushButton.clicked.connect(self.loginAccount)
@@ -61,6 +62,7 @@ class MainWindow(QMainWindow):
         self.widgets.btnShareFile.clicked.connect(self.btnShareFilePressed)
         self.widgets.shareFileWindow.selectFileButton.clicked.connect(self.selectFile)
         self.widgets.shareFileWindow.uploadButtonn.clicked.connect(self.uploadSelectedFilehandler)
+        self.widgets.administrateAccountWindow.btnChange.clicked.connect(self.btnChangePasswordPressed)
 
     def toggleTheme(self):
         if self.isDarkThemeOn:
@@ -108,6 +110,38 @@ class MainWindow(QMainWindow):
         self.ui.resetStyle("btnRegister")
         btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
+    def btnAdministrateAccountHandler(self):
+        if self.backend.user is None:
+            self.ui.setStatusMessage("No user connected", True)
+            return
+
+        self.widgets.myVideosWindow.clear()
+        btn = self.sender()
+        self.widgets.pagesStack.setCurrentWidget(self.widgets.administrateAccountWindow)
+        self.ui.resetStyle("btnAdministrateAccount")
+        btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
+
+    def btnChangePasswordPressed(self):
+        oldPassword = self.ui.administrateAccountWindow.oldPasswordEdit.text()
+        newPassword = self.ui.administrateAccountWindow.newPasswordEdit.text()
+        confirmNewPassword = self.ui.administrateAccountWindow.confirmNewPasswordEdit.text()
+        if oldPassword == "" or newPassword == "" or confirmNewPassword == "":
+            self.ui.setStatusMessage("Must give username, password and confirm password", True)
+            return
+        if newPassword != confirmNewPassword:
+            self.ui.setStatusMessage("The Password and the confirmation are not the same", True)
+            return
+
+        result = self.backend.changePassword(oldPassword, newPassword)
+        if type(result) is Exception:
+            self.ui.setStatusMessage(str(result), True)
+            return
+
+        self.ui.administrateAccountWindow.oldPasswordEdit.setText("")
+        self.ui.administrateAccountWindow.newPasswordEdit.setText("")
+        self.ui.administrateAccountWindow.confirmNewPasswordEdit.setText("")
+        self.ui.setStatusMessage("Successfully changed")
+
     def btnMyVideosPresses(self):
         if self.backend.user is None:
             self.ui.setStatusMessage("No user connected", True)
@@ -121,12 +155,14 @@ class MainWindow(QMainWindow):
         for video in videos:
             self.widgets.myVideosWindow.addVideoRow(f"DURATION: {video[0]} secs", f"SIZE: {video[1]} bytes",
                                                     f"CREATED: {video[2]}",
-                                                    lambda checked=True, id=video[3]: self.downloadVideo(id))
+                                                    lambda checked=True, id=video[3]: self.downloadVideo(id),
+                                                    lambda checked=True, id=video[3]: self.deleteVideo(id))
 
         btn = self.sender()
-        self.widgets.pagesStack.setCurrentWidget(self.widgets.myVideosWindow)
-        self.ui.resetStyle("btnMyVideos")
-        btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
+        if btn is not None:
+            self.widgets.pagesStack.setCurrentWidget(self.widgets.myVideosWindow)
+            self.ui.resetStyle("btnMyVideos")
+            btn.setStyleSheet(self.ui.selectMenu(btn.styleSheet()))
 
     def btnCallWindowPressed(self):
         if self.backend.user is None:
@@ -203,6 +239,7 @@ class MainWindow(QMainWindow):
     def startCall(self):
         if self.backend.user is None:
             self.ui.setStatusMessage("No user connected", True)
+            self.ui.setStatusMessage("No user connected", True)
             return
 
         if Settings.PLATFORM != "linux":
@@ -274,6 +311,19 @@ class MainWindow(QMainWindow):
             file.write(video)
         self.ui.setStatusMessage("Video downloaded")
 
+    def deleteVideo(self, videoId: int):
+        if self.backend.user is None:
+            self.ui.setStatusMessage("No user connected", True)
+            return
+
+        video = self.backend.deleteVideo(videoId)
+        if type(video) is Exception:
+            self.ui.setStatusMessage(str(video), True)
+            return
+
+        self.ui.setStatusMessage("Video deleted")
+        self.btnMyVideosPresses()
+
     def selectFile(self):
         file = QFileDialog()
         f = file.getOpenFileName(self)[0]
@@ -287,6 +337,7 @@ class MainWindow(QMainWindow):
     def uploadSelectedFilehandler(self):
         file: str = self.widgets.shareFileWindow.selectedFileForUpload
         if file is None:
+            self.ui.setStatusMessage("No file selected", True)
             self.ui.setStatusMessage("No file selected", True)
             return
         if not os.path.isfile(file):

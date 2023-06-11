@@ -66,6 +66,8 @@ func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *
 		response, err = db.HandleRegister(message.Value)
 	case "ADD_VIDEO":
 		response, err = db.HandleAddVideo(message.Value, sessionId)
+	case "DELETE_VIDEO":
+		response, err = db.DeleteVideo(message.Value)
 	case "GET_CALL_BY_KEY":
 		response, err = db.HandleGetCallByKeyAndPassword(message.Value)
 	case "GET_VIDEOS_BY_USER":
@@ -78,6 +80,8 @@ func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *
 		response, err = db.HandleDeleteSession(sessionId)
 	case "TOPICS":
 		response, err = db.GetUserTopicsBySession(sessionId)
+	case "CHANGE_PASSWORD":
+		response, err = db.ChangeUserPassword(message.Value)
 	default:
 		err = errors.New("operation not permitted")
 	}
@@ -98,12 +102,12 @@ func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *
 
 func main() {
 	log.Println("Getting environment variables...")
-	brokerAddress := os.Getenv("BROKER_ADDRESS")
-	databaseUser := os.Getenv("DATABASE_USER")
-	databasePassword := os.Getenv("DATABASE_PASSWORD")
-	databaseHost := os.Getenv("DATABASE_HOST")
-	databasePort := os.Getenv("DATABASE_PORT")
-	databaseName := os.Getenv("DATABASE_NAME")
+	brokerAddress := "localhost:9092" // os.Getenv("BROKER_ADDRESS")
+	databaseUser := "robert"          // os.Getenv("DATABASE_USER")
+	databasePassword := "robert"      // os.Getenv("DATABASE_PASSWORD")
+	databaseHost := "localhost"       //os.Getenv("DATABASE_HOST")
+	databasePort := "3306"            // os.Getenv("DATABASE_PORT")
+	databaseName := "licenta"         // os.Getenv("DATABASE_NAME")
 
 	if brokerAddress == "" || databaseUser == "" || databasePassword == "" || databaseHost == "" || databasePort == "" || databaseName == "" {
 		fmt.Println("Not all environment variables given")

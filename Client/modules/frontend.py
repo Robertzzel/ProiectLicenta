@@ -10,6 +10,7 @@ from .Login import Login
 from .MyVideosWindow import MyVideosWindow
 from .shareFileWindow import ShareFileWindow
 from .Register import Register
+from .ChangePassoword import ChangePassword
 
 font = QFont()
 font.setFamily(u"Segoe UI")
@@ -178,6 +179,19 @@ class UiMainWindow(object):
         self.btnLogin.setStyleSheet(Settings.BUTTON_LOGIN_URL)
         self.buttonMenuLayout.addWidget(self.btnLogin)
         # End Login Window Button
+
+        # Administrate Account Button
+        self.btnAdministrateAccount = QPushButton(self.buttonMenu)
+        self.btnAdministrateAccount.setObjectName(u"btnAdministrateAccount")
+        sizePolicy.setHeightForWidth(self.btnAdministrateAccount.sizePolicy().hasHeightForWidth())
+        self.btnAdministrateAccount.setSizePolicy(sizePolicy)
+        self.btnAdministrateAccount.setMinimumSize(QSize(0, 45))
+        self.btnAdministrateAccount.setFont(font)
+        self.btnAdministrateAccount.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btnAdministrateAccount.setLayoutDirection(Qt.LeftToRight)
+        self.btnAdministrateAccount.setStyleSheet(Settings.BUTTON_LOGIN_URL)
+        self.buttonMenuLayout.addWidget(self.btnAdministrateAccount)
+        # End Administrate Account Window Button
 
         # Register Window Button
         self.btnRegister = QPushButton(self.buttonMenu)
@@ -440,6 +454,11 @@ class UiMainWindow(object):
         self.pagesStack.addWidget(self.loginWindow)
         # End Login Window
 
+        # Administrate account Window
+        self.administrateAccountWindow = ChangePassword(MainWindow)
+        self.pagesStack.addWidget(self.administrateAccountWindow)
+        # End Administrate account Window
+
         # Register Window
         self.registerWindow = Register(MainWindow)
         self.pagesStack.addWidget(self.registerWindow)
@@ -468,6 +487,7 @@ class UiMainWindow(object):
         self.btnCall.setText("Call")
         self.btnMyVideos.setText("MyVideos")
         self.btnShareFile.setText("Share File")
+        self.btnAdministrateAccount.setText("Administrate Account")
         self.btnChangeTheme.setText("Change Theme")
         self.minimizeAppBtn.setToolTip("Minimize")
         self.minimizeAppBtn.setText("")

@@ -306,6 +306,101 @@ func (db *DatabaseManager) GetUserTopicsBySession(sessionId int) ([]byte, error)
 	return json.Marshal(topics)
 }
 
+func (db *DatabaseManager) ChangeUserPassword(message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	username, usernameExists := input["username"]
+	password, passwordExists := input["password"]
+	newPassword, newPasswordExists := input["newPassword"]
+
+	if !(usernameExists && passwordExists && newPasswordExists) {
+		return nil, errors.New("name, old password and new password are needed")
+	}
+
+	res, err := db.Exec("UPDATE User SET Password = ? WHERE Name = ? AND Password = ?", Hash(newPassword), username, Hash(password))
+	if err != nil {
+		return nil, err
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+
+	if rowsAffected == 0 {
+		return nil, errors.New("no user found for given username and password")
+	}
+
+	return []byte("success"), nil
+}
+
+func (db *DatabaseManager) DeleteVideo(message []byte) ([]byte, error) {
+	var input map[string]string
+	if err := json.Unmarshal(message, &input); err != nil {
+		return nil, err
+	}
+
+	userid, userIdExists := input["userId"]
+	videoId, videoIdExists := input["videoId"]
+	if !(videoIdExists && userIdExists) {
+		return nil, errors.New("videoId is needed")
+	}
+
+	res, err := db.Exec("DELETE FROM UserVideo WHERE UserId = ? AND VideoId = ?", userid, videoId)
+	if err != nil {
+		return nil, err
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+
+	if rowsAffected == 0 {
+		return nil, errors.New("no video referenced deleted")
+	}
+
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM UserVideo WHERE VideoId = ?", videoId).Scan(&count)
+	if err != nil {
+		return nil, err
+	}
+
+	if count == 0 {
+		var filepath string
+		err = db.QueryRow("SELECT FilePath FROM Video WHERE Id = ?", videoId).Scan(&filepath)
+		if err != nil {
+			fmt.Println("Error while getting video filepath", videoId)
+			return []byte("success"), nil
+		}
+
+		res, err = db.Exec("DELETE FROM Video WHERE Id = ?", videoId)
+		if err != nil {
+			fmt.Println("Error while deletting video", videoId)
+			return []byte("success"), nil
+		}
+		rowsAffected, err = res.RowsAffected()
+		if err != nil {
+			return nil, err
+		}
+
+		if rowsAffected == 0 {
+			fmt.Println("No video row found for id", videoId)
+			return []byte("success"), nil
+		}
+
+		err = os.Remove(filepath)
+		if err != nil {
+			fmt.Println("Cannot delete video, filepath does not exist", videoId)
+			return []byte("success"), nil
+		}
+	}
+	return []byte("success"), nil
+}
+
 func (db *DatabaseManager) MigrateDatabase() error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS Session(
     Id int NOT NULL AUTO_INCREMENT PRIMARY KEY,

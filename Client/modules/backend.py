@@ -113,6 +113,36 @@ class Backend:
         if self.sender is not None:
             self.sender.stop()
 
+    def changePassword(self, oldPassword, newPassword):
+        msg = self.kafkaContainer.databaseCall("CHANGE_PASSWORD", json.dumps({
+            "username": self.user.name,
+            "password": oldPassword,
+            "newPassword": newPassword,
+        }).encode(),timeoutSeconds=3, username=self.user.name, password=self.user.password)
+
+        if msg is None:
+            return Exception("Cannot talk to the database")
+
+        status = KafkaContainer.getStatusFromMessage(msg)
+        if status is None or status.lower() != "ok":
+            return Exception("Cannot change password")
+
+        return None
+
+    def deleteVideo(self, videoId):
+        msg = self.kafkaContainer.databaseCall("DELETE_VIDEO", json.dumps({
+            "userId": str(self.user.id),
+            "videoId": str(videoId),
+        }).encode(), username=self.user.name, password=self.user.password, timeoutSeconds=10) # TODO VEZI CUM FACI AICI
+        if msg is None:
+            return Exception("Cannot delete video, database not responding")
+
+        status = self.kafkaContainer.getStatusFromMessage(msg)
+        if status.lower() != "ok":
+            return Exception(f"Video deleted")
+
+        return None
+
     def getUserVideos(self):
         msg = self.kafkaContainer.databaseCall("GET_VIDEOS_BY_USER", str(self.user.id).encode(),
                                                       timeoutSeconds=2, username=self.user.name,

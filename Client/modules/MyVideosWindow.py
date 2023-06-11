@@ -26,7 +26,7 @@ class MyVideosWindow(QtWidgets.QWidget):
         self.verticalLayout.addItem(spacerItem)
         self.scrollArea.setWidget(self.scrollAreaWidgetContents)
 
-    def addVideoRow(self, durationLabelText: str, sizeLabelText: str, createdAtLabelText: str, callback: Callable):
+    def addVideoRow(self, durationLabelText: str, sizeLabelText: str, createdAtLabelText: str, callback: Callable, deleteVideo):
         horizontalLayout = QtWidgets.QHBoxLayout()
         horizontalLayout.setObjectName("horizontalLayout")
         durationLabel = QtWidgets.QLabel(parent=self.scrollAreaWidgetContents)
@@ -46,6 +46,12 @@ class MyVideosWindow(QtWidgets.QWidget):
         pushButton.setText("DOWNLOAD")
         pushButton.clicked.connect(callback)
         horizontalLayout.addWidget(pushButton)
+
+        deleteVideoButton = QtWidgets.QPushButton(parent=self.scrollAreaWidgetContents)
+        deleteVideoButton.setObjectName("deleteVideoButton")
+        deleteVideoButton.setText("DELETE")
+        deleteVideoButton.clicked.connect(deleteVideo)
+        horizontalLayout.addWidget(deleteVideoButton)
         self.verticalLayout.addLayout(horizontalLayout)
 
     def clear(self):

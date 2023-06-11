@@ -189,7 +189,7 @@ class UiMainWindow(object):
         self.btnAdministrateAccount.setFont(font)
         self.btnAdministrateAccount.setCursor(QCursor(Qt.PointingHandCursor))
         self.btnAdministrateAccount.setLayoutDirection(Qt.LeftToRight)
-        self.btnAdministrateAccount.setStyleSheet(Settings.BUTTON_LOGIN_URL)
+        self.btnAdministrateAccount.setStyleSheet(Settings.BUTTON_ACCOUNT_SETTINGS)
         self.buttonMenuLayout.addWidget(self.btnAdministrateAccount)
         # End Administrate Account Window Button
 

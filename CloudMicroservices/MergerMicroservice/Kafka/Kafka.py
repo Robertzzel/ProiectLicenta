@@ -34,7 +34,12 @@ class CustomKafkaMessage:
 
 
 class KafkaProducerWrapper(kafka.Producer):
-    def __init__(self, config):
+    def __init__(self, config, certificatePath: str):
+        config.update({
+            'security.protocol': 'SSL',
+            'ssl.ca.location': certificatePath,
+            'ssl.endpoint.identification.algorithm': "none",
+        })
         super().__init__(config)
         self.maxSingleMessageSize = 500_000
 
@@ -83,7 +88,12 @@ class KafkaProducerWrapper(kafka.Producer):
 
 
 class KafkaConsumerWrapper(kafka.Consumer):
-    def __init__(self, config: Dict, topics: List[Tuple[str, int]]):
+    def __init__(self, config: Dict, topics: List[Tuple[str, int]], certificatePath: str):
+        config.update({
+            'security.protocol': 'SSL',
+            'ssl.ca.location': certificatePath,
+            'ssl.endpoint.identification.algorithm': "none",
+        })
         super().__init__(config)
         self.assign([kafka.TopicPartition(topic=pair[0], partition=pair[1]) for pair in topics])
 

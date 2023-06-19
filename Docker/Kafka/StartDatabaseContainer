@@ -9,7 +9,7 @@ services:
     image: database-microservice:v0
     container_name: 'database-microservice'
     environment:
-      - BROKER_ADDRESS=localhost:9092
+      - BROKER_ADDRESS=localhost:9093
       - DATABASE_USER=robert
       - DATABASE_PASSWORD=robert
       - DATABASE_HOST=localhost

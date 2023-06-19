@@ -20,13 +20,13 @@ func (conn *KafkaConnection) Consume(ctx context.Context) (*kafka.Message, error
 	return conn.consumer.Consume(ctx)
 }
 
-func NewKafkaConnection(brokerAddress, topic string) (KafkaConnection, error) {
-	producer, err := Kafka.NewProducer(brokerAddress)
+func NewKafkaConnection(brokerAddress, topic, certificatePath string) (KafkaConnection, error) {
+	producer, err := Kafka.NewProducer(brokerAddress, certificatePath)
 	if err != nil {
 		return KafkaConnection{}, err
 	}
 
-	consumer, err := Kafka.NewConsumer(brokerAddress)
+	consumer, err := Kafka.NewConsumer(brokerAddress, certificatePath)
 	if err != nil {
 		return KafkaConnection{}, err
 	}

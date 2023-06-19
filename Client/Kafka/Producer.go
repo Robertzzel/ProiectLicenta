@@ -41,12 +41,15 @@ func (producer *Producer) Publish(message []byte, headers []kafka.Header, topic 
 	return nil
 }
 
-func NewProducer(brokerAddress string) (Producer, error) {
+func NewProducer(brokerAddress, certificatePath string) (Producer, error) {
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
-		"bootstrap.servers":       brokerAddress,
-		"group.id":                "-",
-		"acks":                    "all",
-		"fetch.message.max.bytes": MaxMessageBytes,
+		"bootstrap.servers":                     brokerAddress,
+		"group.id":                              "-",
+		"acks":                                  "all",
+		"security.protocol":                     "SSL",
+		"ssl.ca.location":                       certificatePath,
+		"ssl.endpoint.identification.algorithm": "none",
+		"fetch.message.max.bytes":               MaxMessageBytes,
 	})
 	if err != nil {
 		return Producer{}, err

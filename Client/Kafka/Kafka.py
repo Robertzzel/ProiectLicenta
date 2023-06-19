@@ -42,8 +42,13 @@ class CustomKafkaMessage:
 
 
 class KafkaProducerWrapper(kafka.Producer):
-    def __init__(self, config):
+    def __init__(self, config, certificatePath: str):
         config["message.max.bytes"] = MaxSingleMessageSize
+        config.update({
+            'security.protocol': 'SSL',
+            'ssl.ca.location': certificatePath,
+            'ssl.endpoint.identification.algorithm': "none",
+        })
         super().__init__(config)
 
     def sendBigMessage(self, topic: str, value=None, headers=None, key=None, partition=0):
@@ -84,8 +89,13 @@ class KafkaProducerWrapper(kafka.Producer):
 
 
 class KafkaConsumerWrapper(kafka.Consumer):
-    def __init__(self, config: Dict, topics: List[Tuple[str, int]]):
+    def __init__(self, config: Dict, topics: List[Tuple[str, int]], certificatePath: str):
         config["fetch.message.max.bytes"] = MaxSingleMessageSize
+        config.update({
+            'security.protocol': 'SSL',
+            'ssl.ca.location': certificatePath,
+            'ssl.endpoint.identification.algorithm': "none",
+        })
         super().__init__(config)
         self.assign([kafka.TopicPartition(topic=pair[0], partition=pair[1]) for pair in topics])
 
@@ -147,7 +157,13 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
 
 def createTopic(brokerAddress: str, topic: str, partitions: int = 1, timeoutSeconds: float = 5):
-    adminClient = AdminClient({"bootstrap.servers": brokerAddress})
+    configs = {
+        "bootstrap.servers": brokerAddress,
+        'security.protocol': 'SSL',
+        'ssl.ca.location': '/home/robert/Workspace/kafka_2.13-3.2.0/keys/Client/truststore.pem',
+        'ssl.endpoint.identification.algorithm': "none",
+    }
+    adminClient = AdminClient(configs)
     s = adminClient.create_topics(new_topics=[kafka.admin.NewTopic(topic, partitions, 1)])
 
     endTime = time.time() + timeoutSeconds
@@ -159,16 +175,29 @@ def createTopic(brokerAddress: str, topic: str, partitions: int = 1, timeoutSeco
 
 
 def deleteTopic(brokerAddress: str, topic: str):
-    adminClient = AdminClient({"bootstrap.servers": brokerAddress})
+    configs = {
+        "bootstrap.servers": brokerAddress,
+        'security.protocol': 'SSL',
+        'ssl.ca.location': '/home/robert/Workspace/kafka_2.13-3.2.0/keys/Client/truststore.pem',
+        'ssl.endpoint.identification.algorithm': "none",
+    }
+    adminClient = AdminClient(configs)
     s = adminClient.delete_topics([topic])
     while not s[topic].done():
         time.sleep(0.01)
 
 
 def checkKafkaActive(brokerAddress: str) -> bool:
-    import kafka as kafka_python
     try:
-        kafka_python.KafkaConsumer(bootstrap_servers=[brokerAddress])
-    except BaseException:
+        kafka_broker = {'bootstrap.servers': brokerAddress}
+        kafka_broker.update({
+            'security.protocol': 'SSL',
+            'ssl.ca.location': '/home/robert/Workspace/kafka_2.13-3.2.0/keys/Client/truststore.pem',
+            'ssl.endpoint.identification.algorithm': "none",
+        })
+        admin_client = AdminClient(kafka_broker)
+        admin_client.list_topics(timeout=2)
+    except BaseException as ex:
         return False
+
     return True

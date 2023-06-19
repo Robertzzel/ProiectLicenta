@@ -13,11 +13,14 @@ func (producer *DatabaseProducer) Publish(message []byte, headers []kafka.Header
 	return producer.ProducerWrapper.Publish(message, headers, topic, partition, producer.deliverChannel)
 }
 
-func NewDatabaseProducer(brokerAddress string) (*DatabaseProducer, error) {
+func NewDatabaseProducer(brokerAddress, certificatePath string) (*DatabaseProducer, error) {
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
-		"bootstrap.servers": brokerAddress,
-		"client.id":         "-",
-		"acks":              "all",
+		"bootstrap.servers":                     brokerAddress,
+		"client.id":                             "-",
+		"acks":                                  "all",
+		"security.protocol":                     "SSL",
+		"ssl.ca.location":                       certificatePath,
+		"ssl.endpoint.identification.algorithm": "none",
 	})
 	if err != nil {
 		return nil, err

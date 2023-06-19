@@ -1,6 +1,7 @@
 import json
+import pathlib
 
-from Client.Kafka.Kafka import KafkaConsumerWrapper, Partitions
+from Client.Kafka.Kafka import KafkaConsumerWrapper
 from Client.utils.KafkaContainer import KafkaContainer
 from Client.utils.Start import Recorder, VideoMerger
 from Client.utils.User import User
@@ -11,6 +12,7 @@ class Backend:
         self.kafkaContainer: KafkaContainer = None
         self.user: User = None
         self.sender: Recorder = None
+        self.truststorePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
 
     def getMyTopic(self):
         return self.kafkaContainer.topic
@@ -184,4 +186,4 @@ class Backend:
         return KafkaConsumerWrapper(
             {'bootstrap.servers': self.kafkaContainer.address,
              'group.id': "-"},
-            [(topic, partition)])
+            [(topic, partition)], certificatePath=self.truststorePath)

@@ -78,11 +78,14 @@ func (this *DatabaseConsumer) ConsumeFullMessage(ctx context.Context) (*CustomMe
 	return &CustomMessage{&kafka.Message{Headers: message.Headers, Value: fullMessage}}, err
 }
 
-func NewDatabaseConsumer(brokerAddress, topic string) (*DatabaseConsumer, error) {
+func NewDatabaseConsumer(brokerAddress, topic, certificatePath string) (*DatabaseConsumer, error) {
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": brokerAddress,
-		"group.id":          "-",
-		"auto.offset.reset": "latest",
+		"bootstrap.servers":                     brokerAddress,
+		"group.id":                              "-",
+		"auto.offset.reset":                     "latest",
+		"security.protocol":                     "SSL",
+		"ssl.ca.location":                       certificatePath,
+		"ssl.endpoint.identification.algorithm": "none",
 	})
 	if err != nil {
 		return nil, err

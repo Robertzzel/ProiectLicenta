@@ -1,3 +1,5 @@
+import pathlib
+
 import pynput
 from TkPynputKeyCodes import KeyTranslator
 from pyautogui import size
@@ -25,6 +27,7 @@ def main():
     brokerAddress = sys.argv[1]
     topic = sys.argv[2]
 
+    truststorePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
     width, height = size()
     keyboard_controller: pynput.keyboard.Controller = pynput.keyboard.Controller()
     mouse_controller: pynput.mouse.Controller = pynput.mouse.Controller()
@@ -33,7 +36,7 @@ def main():
         'group.id': "-",
         'auto.offset.reset': 'latest',
         'allow.auto.create.topics': "true",
-    }, [(topic, Partitions.Input.value)])
+    }, [(topic, Partitions.Input.value)], certificatePath=truststorePath)
 
     while True:
         if (msg := consumer.consumeMessage(time.time() + 100)) is None:

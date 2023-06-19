@@ -127,20 +127,15 @@ func main() {
 			log.Println("Error while closing database object ", err)
 		}
 	}(db)
-	db.SetMaxOpenConns(10)
+	db.SetMaxOpenConns(100)
 
 	log.Println("Migrating database ...")
 	if err = db.MigrateDatabase(); err != nil {
 		panic(err)
 	}
 
-	log.Println("Creating topic...")
-	if err = Kafka.CreateTopic(brokerAddress, "DATABASE"); err != nil {
-		panic(err)
-	}
-
 	log.Println("Getting a consumer connection...")
-	consumer, err := Kafka.NewDatabaseConsumer(brokerAddress, topic)
+	consumer, err := Kafka.NewDatabaseConsumer(brokerAddress, topic, "truststore.pem")
 	if err != nil {
 		panic(err)
 	}
@@ -151,18 +146,24 @@ func main() {
 	}()
 
 	log.Println("Getting a producer connection...")
-	producer, err := Kafka.NewDatabaseProducer(brokerAddress)
+	producer, err := Kafka.NewDatabaseProducer(brokerAddress, "truststore.pem")
 	if err != nil {
 		panic(err)
 	}
 	defer producer.Close()
+
+	err = producer.Publish([]byte("create"), nil, topic, 0)
+	if err != nil {
+		panic(err)
+	}
+	producer.Flush(1)
 
 	ctx := NewContextCancelableBySignals()
 	log.Println("Listening for messages...")
 	for ctx.Err() == nil {
 		message, err := consumer.ConsumeFullMessage(ctx)
 		if err != nil {
-			return
+			panic(err)
 		}
 		go handleRequest(db, message, producer)
 	}

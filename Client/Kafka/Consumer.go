@@ -23,12 +23,15 @@ func (consumer *Consumer) Consume(ctx context.Context) (*kafka.Message, error) {
 	return nil, ctx.Err()
 }
 
-func NewConsumer(brokerAddress string) (Consumer, error) {
+func NewConsumer(brokerAddress, certificatePath string) (Consumer, error) {
 	p, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers":       brokerAddress,
-		"group.id":                "-",
-		"acks":                    "all",
-		"fetch.message.max.bytes": MaxMessageBytes,
+		"bootstrap.servers":                     brokerAddress,
+		"group.id":                              "-",
+		"acks":                                  "all",
+		"fetch.message.max.bytes":               MaxMessageBytes,
+		"security.protocol":                     "SSL",
+		"ssl.ca.location":                       certificatePath, //"/home/robert/Workspace/kafka_2.13-3.2.0/keys/Client/truststore.pem",
+		"ssl.endpoint.identification.algorithm": "none",
 	})
 	if err != nil {
 		return Consumer{}, err

@@ -1,6 +1,6 @@
+import pathlib
 import queue
 from recorder import Recorder
-from Client.Kafka.Kafka import KafkaConsumerWrapper, KafkaProducerWrapper
 from Client.Kafka.Kafka import *
 import sys
 
@@ -16,24 +16,23 @@ def main():
 
     brokerAddress = sys.argv[1]
     topic = sys.argv[2]
+    truststorePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
 
     audio_blocks_recorded: queue.Queue = queue.Queue(10)
     audio_recorder: Recorder = Recorder(audio_blocks_recorded)
 
-    producer = KafkaProducerWrapper({'bootstrap.servers': "localhost:9092"})
+    producer = KafkaProducerWrapper({'bootstrap.servers': brokerAddress}, certificatePath=truststorePath)
     consumer = KafkaConsumerWrapper(
         {'bootstrap.servers': brokerAddress, "group.id": "-"},
-        [(topic, Partitions.AudioMicroservice.value)]
+        [(topic, Partitions.AudioMicroservice.value)],
+        certificatePath=truststorePath
     )
 
     try:
-        ts: int
+        ts = None
         while True:
-            print("AUDIO CONSUING")
             if (ts := consumer.consumeMessage(time.time() + 100)) is None:
-                print("AUDIO None")
                 continue
-            print(f"AUDIO {type(ts)}")
             ts = int(ts.value().decode())
             break
         del consumer

@@ -9,6 +9,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 )
@@ -173,7 +175,12 @@ func main() {
 	brokerAddress := os.Args[1]
 	topic := os.Args[2]
 
-	kafaConnection, err := NewKafkaConnection(brokerAddress, topic)
+	_, currentFilePath, _, _ := runtime.Caller(0)
+	currentDir := filepath.Dir(currentFilePath)
+	currentDir = filepath.Dir(currentDir)
+	currentDir = filepath.Join(currentDir, "truststore.pem")
+
+	kafaConnection, err := NewKafkaConnection(brokerAddress, topic, currentDir)
 	if err != nil {
 		panic(err)
 	}
@@ -218,7 +225,7 @@ func main() {
 		log.Println(err)
 	}
 	kafaConnection.Flush(1000)
-	kafaConnection.Close()
+	_ = kafaConnection.Close()
 
 	defer log.Println("Cleanup Done")
 }

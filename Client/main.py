@@ -17,6 +17,7 @@ os.environ["QT_FONT_DPI"] = "96" # FIX Problem for High DPI and Scale above 100%
 
 class MainWindow(QMainWindow):
     receiveFileSignal = Signal(str)
+    saveReceivedFileSignal = Signal(bytes)
 
     def __init__(self):
         QMainWindow.__init__(self)
@@ -42,6 +43,7 @@ class MainWindow(QMainWindow):
         self.toggleTheme()
 
         self.receiveFileSignal.connect(self.handleQuestionSignal)
+        self.saveReceivedFileSignal.connect(self.handleDownloadFileFromUser)
         self.ui.topLogo.setStyleSheet(Settings.TOP_LOGO_URL)
         self.show()
 
@@ -181,7 +183,7 @@ class MainWindow(QMainWindow):
 
     def connectToKafka(self):
         address = self.widgets.kafkaWindow.lineEdit.text()
-        address = "localhost:9092" if address is None or address == "" else address
+        address = "localhost:9093" if address is None or address == "" else address
         connectionSet = self.backend.setKafkaConnection(address)
         if connectionSet is not True:
             self.ui.setStatusMessage(str(connectionSet), True)
@@ -400,10 +402,7 @@ class MainWindow(QMainWindow):
                 print("File not received")
                 continue
 
-            fileName = fileName.split("/")[-1] if Settings.PLATFORM.lower() == "linux" else fileName.split("\\")[-1]
-
-            with open("received_"+fileName, "wb") as f:
-                f.write(file.value())
+            self.saveReceivedFileSignal.emit(file.value())
 
         consumer.close()
 
@@ -420,6 +419,15 @@ class MainWindow(QMainWindow):
         self.incomingFileQueue.put(msg)
         self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=msg + f",{self.backend.getMyTopic()}".encode(), partition=Partitions.FileTransferReceiveConfirmation.value)
 
+    def handleDownloadFileFromUser(self, message: bytes):
+        dialog = QFileDialog()
+        f = dialog.getOpenFileName(self)[0]
+        if dialog is None or f == "":
+            self.ui.setStatusMessage("No file selected", True)
+            return
+
+        with open(f, "wb") as f:
+            f.write(message)
 
 if __name__ == "__main__":
     app = QApplication()

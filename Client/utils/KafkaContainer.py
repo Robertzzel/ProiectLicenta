@@ -1,3 +1,4 @@
+import pathlib
 from dataclasses import dataclass
 from Client.Kafka.Kafka import *
 import uuid
@@ -17,14 +18,15 @@ class KafkaContainer:
 
         self.topic = str(uuid.uuid1())
         createTopic(address, self.topic, partitions=9)
+        self.truststorePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
 
         self.address = address
         self.partition = Partitions.Client.value
-        self.producer = KafkaProducerWrapper({'bootstrap.servers': self.address})
+        self.producer = KafkaProducerWrapper({'bootstrap.servers': self.address}, certificatePath=self.truststorePath)
 
         consumerConfigs['bootstrap.servers'] = self.address
         consumerConfigs['group.id'] = "-"
-        self.consumer = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.partition)])
+        self.consumer = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.partition)], certificatePath=self.truststorePath)
         self.consumerConfigs = consumerConfigs
 
     def databaseCall(self, operation: str, message: bytes, timeoutSeconds, username: str = None,
@@ -57,7 +59,7 @@ class KafkaContainer:
     def resetTopic(self):
         self.topic = str(uuid.uuid1())
         createTopic(self.address, self.topic, partitions=7)
-        self.consumer = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.partition)])
+        self.consumer = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.partition)], certificatePath=self.truststorePath)
 
     @staticmethod
     def checkBrokerExists(address) -> bool:

@@ -1,3 +1,4 @@
+import pathlib
 import queue
 import time
 from io import BytesIO
@@ -84,7 +85,7 @@ class StreamReceiverThread(QThread):
             self.streamConsumer = KafkaConsumerWrapper({
                 'bootstrap.servers': self.master.kafkaAddress,
                 'group.id': '-',
-            }, [(self.master.topic, Partitions.Client.value)])
+            }, [(self.master.topic, Partitions.Client.value)], certificatePath=self.master.truststorePath)
             i = 0
             while not self.master.stopEvent:
                 message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1)
@@ -141,21 +142,22 @@ class SendInputsThread(QThread):
 
 
 class VideoWindow(QWidget):
-    def __init__(self, master, topic: str, kafkaAddress: str = "localhost:9092"):
+    def __init__(self, master, topic: str, kafkaAddress: str):
         super().__init__()
         self.master = master
         self.label = QLabel(self)
 
         self.kafkaAddress = kafkaAddress
         self.topic = topic
-        self.kafkaProducer = KafkaProducerWrapper({'bootstrap.servers': self.kafkaAddress})
+        self.truststorePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
+        self.kafkaProducer = KafkaProducerWrapper({'bootstrap.servers': self.kafkaAddress}, certificatePath=self.truststorePath)
 
         self.videoFramesQueue: Queue = Queue(60)
         self.audioBlocksQueue: Queue = Queue(60)
         self.audioStream: Optional[sd.OutputStream] = None
         self.videoFramerate = 0
         self.audioSamplerate = 0
-        self.audioBlockSize = 0
+        self.audioBlockSize = 1024
         self.stopEvent: bool = False
         self.inputsBuffer: InputsBuffer = InputsBuffer()
         self._resampling_method: int = Image.BOX

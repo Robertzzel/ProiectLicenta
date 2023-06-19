@@ -1,6 +1,8 @@
 import os
 import sys
 import signal
+import time
+
 from Kafka.Kafka import KafkaConsumerWrapper, KafkaProducerWrapper, deleteTopic
 from TempFile import TempFile
 from VideoAggregator import VideoAggregator
@@ -19,8 +21,8 @@ class Merger:
             'bootstrap.servers': self.broker,
             'group.id': "-",
             'auto.offset.reset': 'latest',
-        }, [(self.topic, Partitions.Client.value)])
-        self.producer = KafkaProducerWrapper({'bootstrap.servers': self.broker})
+        }, [(self.topic, Partitions.Client.value)], "truststore.pem")
+        self.producer = KafkaProducerWrapper({'bootstrap.servers': self.broker}, certificatePath="truststore.pem")
         self.running = True
 
     def start(self):
@@ -53,6 +55,7 @@ class Merger:
         except:
             pass
 
+        print("Saving session...")
         self.producer.sendFile(topic=DATABASE_TOPIC, fileName=videoFile.name, headers=[
             ("topic", self.topic.encode()),
             ("operation", b"ADD_VIDEO"),
@@ -61,9 +64,10 @@ class Merger:
             ("sessionId", str(self.sessionId).encode()),
         ])
 
-        self.consumer.receiveBigMessage(partition=Partitions.MergerMicroservice.value)
+        time.sleep(2)
         print("Video saved")
 
+        print("Deleting session...")
         self.producer.sendBigMessage(topic=DATABASE_TOPIC, value=b"msg", headers=[
             ("topic", self.topic.encode()),
             ("operation", b"DELETE_SESSION"),
@@ -71,7 +75,7 @@ class Merger:
             ("sessionId", str(self.sessionId).encode()),
         ])
 
-        self.consumer.receiveBigMessage(partition=Partitions.MergerMicroservice.value)
+        time.sleep(2)
         print("Session deleted")
 
         print("cleaning...")

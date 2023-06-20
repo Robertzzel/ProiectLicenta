@@ -42,16 +42,20 @@ func stringToTimestamp(s string) (time.Time, error) {
 	return time.Unix(timestamp, 0), nil
 }
 
-func getStartTime(ctx context.Context, conn KafkaConnection) (string, error) {
+func getStartTime(ctx context.Context, conn KafkaConnection) (time.Time, error) {
 	for ctx.Err() == nil {
 		msg, err := conn.Consume(ctx)
 		if err != nil {
-			return "", err
+			return time.Time{}, err
 		}
 
-		return string(msg.Value), nil
+		timestamp, err := stringToTimestamp(string(msg.Value))
+		if err != nil {
+			panic(err)
+		}
+		return timestamp, nil
 	}
-	return "", ctx.Err()
+	return time.Time{}, ctx.Err()
 }
 
 func main() {
@@ -73,12 +77,7 @@ func main() {
 		panic(err)
 	}
 
-	startTimestamp, err := getStartTime(ctx, kafkaConnection)
-	if err != nil {
-		panic(err)
-	}
-
-	timestamp, err := stringToTimestamp(startTimestamp)
+	timestamp, err := getStartTime(ctx, kafkaConnection)
 	if err != nil {
 		panic(err)
 	}

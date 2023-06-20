@@ -11,13 +11,15 @@ from confluent_kafka.admin import AdminClient
 
 
 class Partitions(enum.Enum):
-    VideoMicroservice = 0
-    AggregatorMicroservice = 1
-    AggregatorMicroserviceStart = 5
-    AudioMicroservice = 2
-    Client = 3
-    MergerMicroservice = 4
-    Input = 6
+    VideoMicroservice: int = 0
+    AggregatorMicroservice: int = 1
+    AudioMicroservice: int = 2
+    Client: int = 3
+    Input: int = 4
+    FileTransferReceiveFile: int = 5
+    FileTransferReceiveConfirmation: int = 6
+    ClientDatabase: int = 7
+    MergerMicroservice: int = 8
 
 
 class CustomKafkaMessage:
@@ -108,11 +110,6 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
             return msg
 
-    def seekToEnd(self, topic: str, partition: int):
-        tp = kafka.TopicPartition(topic, partition)
-        _, high = self.get_watermark_offsets(tp)
-        self.seek(kafka.TopicPartition(topic, partition, high))
-
     def receiveBigMessage(self, timeoutSeconds: float = None, partition=0) -> Optional[
         kafka.Message | CustomKafkaMessage]:
         endTime = None if timeoutSeconds is None else time.time() + timeoutSeconds
@@ -182,8 +179,14 @@ class KafkaConsumerWrapper(kafka.Consumer):
         return None
 
 
-def deleteTopic(brokerAddress: str, topic: str):
-    adminClient = AdminClient({"bootstrap.servers": brokerAddress})
+def deleteTopic(brokerAddress: str, topic: str, certificatePath: str):
+    configs = {
+        "bootstrap.servers": brokerAddress,
+        'security.protocol': 'SSL',
+        'ssl.ca.location': certificatePath,
+        'ssl.endpoint.identification.algorithm': "none",
+    }
+    adminClient = AdminClient(configs)
     s = adminClient.delete_topics([topic])
     while not s[topic].done():
         time.sleep(0.01)

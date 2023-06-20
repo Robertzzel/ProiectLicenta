@@ -15,13 +15,13 @@ MaxSingleMessageSize = 9 * 1024 * 1024
 class Partitions(enum.Enum):
     VideoMicroservice: int = 0
     AggregatorMicroservice: int = 1
-    AggregatorMicroserviceStart: int = 5
     AudioMicroservice: int = 2
     Client: int = 3
-    MergerMicroservice: int = 4
-    Input: int = 6
-    FileTransferReceiveFile: int = 7
-    FileTransferReceiveConfirmation: int = 8
+    Input: int = 4
+    FileTransferReceiveFile: int = 5
+    FileTransferReceiveConfirmation: int = 6
+    ClientDatabase: int = 7
+    MergerMicroservice: int = 8
 
 
 class CustomKafkaMessage:

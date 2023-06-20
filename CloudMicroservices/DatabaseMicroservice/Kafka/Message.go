@@ -21,7 +21,6 @@ func (message *CustomMessage) ValidateHeaders() bool {
 	headers := message.GetHeaders()
 	_, hasTopic := headers["topic"]
 	_, hasOperation := headers["operation"]
-	partition, hasPartition := headers["partition"]
 	sessionId, hasSessionId := headers["sessionId"]
 
 	if hasSessionId {
@@ -30,9 +29,5 @@ func (message *CustomMessage) ValidateHeaders() bool {
 		}
 	}
 
-	if _, err := strconv.Atoi(string(partition)); err != nil {
-		return false
-	}
-
-	return hasTopic && hasOperation && hasPartition
+	return hasTopic && hasOperation
 }

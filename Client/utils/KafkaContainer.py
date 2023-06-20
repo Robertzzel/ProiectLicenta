@@ -10,23 +10,29 @@ DATABASE_TOPIC = "DATABASE"
 class KafkaContainer:
     address: str
     producer: KafkaProducerWrapper
-    consumer: KafkaConsumerWrapper
+    consumerAggregator: KafkaConsumerWrapper
+    consumerDatabase: KafkaConsumerWrapper
 
     def __init__(self, address: str, consumerConfigs: Dict):
+        consumerConfigs.update({
+            'bootstrap.servers': address,
+            'group.id': "-"
+        })
         if not KafkaContainer.checkBrokerExists(address):
             raise Exception("Broker does not exists")
 
         self.topic = str(uuid.uuid1())
-        createTopic(address, self.topic, partitions=9)
+        self.address = address
         self.truststorePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
 
-        self.address = address
-        self.partition = Partitions.Client.value
+        createTopic(address, self.topic, partitions=9)
+
         self.producer = KafkaProducerWrapper({'bootstrap.servers': self.address}, certificatePath=self.truststorePath)
 
-        consumerConfigs['bootstrap.servers'] = self.address
-        consumerConfigs['group.id'] = "-"
-        self.consumer = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.partition)], certificatePath=self.truststorePath)
+        self.clientPartition = Partitions.Client.value
+        self.clientDatabasePartition = Partitions.ClientDatabase.value
+        self.consumerAggregator = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.clientPartition)], certificatePath=self.truststorePath)
+        self.consumerDatabase = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.clientDatabasePartition)], certificatePath=self.truststorePath)
         self.consumerConfigs = consumerConfigs
 
     def databaseCall(self, operation: str, message: bytes, timeoutSeconds, username: str = None,
@@ -34,12 +40,11 @@ class KafkaContainer:
         self.seekToEnd()
         headers = [
             ("topic", self.topic.encode()),
-            ("partition", str(self.partition).encode()),
+            ("partition", str(self.clientDatabasePartition).encode()),
             ("operation", operation.encode()),
         ]
         if sessionId is not None:
             headers.append(("sessionId", str(sessionId).encode()))
-
         if operation not in ("LOGIN", "REGISTER") and username is not None and password is not None:
             headers.append(("Name", username))
             headers.append(("Password", password))
@@ -47,7 +52,7 @@ class KafkaContainer:
         self.producer.produce(topic=DATABASE_TOPIC, headers=headers, value=message)
         self.producer.flush(timeout=1)
 
-        return self.consumer.receiveBigMessage(timeoutSeconds)
+        return self.consumerDatabase.receiveBigMessage(timeoutSeconds)
 
     @staticmethod
     def getStatusFromMessage(responseMessage):
@@ -58,15 +63,16 @@ class KafkaContainer:
 
     def resetTopic(self):
         self.topic = str(uuid.uuid1())
-        createTopic(self.address, self.topic, partitions=7)
-        self.consumer = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.partition)], certificatePath=self.truststorePath)
+        createTopic(self.address, self.topic, partitions=9)
+        self.consumerAggregator = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.clientPartition)], certificatePath=self.truststorePath)
+        self.consumerDatabase = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.clientDatabasePartition)], certificatePath=self.truststorePath)
 
     @staticmethod
     def checkBrokerExists(address) -> bool:
         return checkKafkaActive(brokerAddress=address)
 
     def seekToEnd(self):
-        self.consumer.seekToEnd(self.topic, self.partition)
+        self.consumerDatabase.seekToEnd(self.topic, self.clientDatabasePartition)
 
     def __del__(self):
         try:

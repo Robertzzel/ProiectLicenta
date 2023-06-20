@@ -353,7 +353,10 @@ class MainWindow(QMainWindow):
         if type(topicsOnCurrentSession) is Exception:
             self.widgets.setStatusMessage(str(topicsOnCurrentSession))
 
-        topicsOnCurrentSession.remove(self.backend.getMyTopic())
+        try:
+            topicsOnCurrentSession.remove(self.backend.getMyTopic())
+        except:
+            pass
         if len(topicsOnCurrentSession) == 0:
             return
 

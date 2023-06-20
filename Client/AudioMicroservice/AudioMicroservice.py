@@ -30,22 +30,20 @@ def main():
 
     try:
         ts = None
-        while True:
-            if (ts := consumer.consumeMessage(time.time() + 100)) is None:
-                continue
-            ts = int(ts.value().decode())
-            break
+        while ts is None:
+            ts = consumer.consumeMessage(time.time() + 100)
+
+        ts = int(ts.value().decode())
+        consumer.close()
         del consumer
 
-        print("AUDIO STARTING")
         audio_recorder.start(ts, VIDEO_LENGTH)
         while True:
-            audio_file: str = audio_blocks_recorded.get(block=True)
-            producer.produce(
+            producer.sendBigMessage(
                 topic=topic,
-                value=audio_file.encode(),
-                headers=[("number-of-messages", b'00001'), ("message-number", b'00000'), ("type", b"audio")],
-                partition=Partitions.AggregatorMicroservice.value
+                value=audio_blocks_recorded.get(block=True).encode(),
+                partition=Partitions.AggregatorMicroservice.value,
+                headers=[("type", b"audio")]
             )
     except KeyboardInterrupt:
         print("Keyboard interrupt")
@@ -53,9 +51,7 @@ def main():
         print("ERROR!: ", ex)
 
     audio_recorder.close()
-
     print("Cleanup done")
-    sys.exit(0)
 
 
 if __name__ == "__main__":

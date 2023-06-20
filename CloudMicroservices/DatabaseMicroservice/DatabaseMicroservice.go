@@ -40,7 +40,16 @@ func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *
 	var sendTopic = string(headers["topic"])
 	var operation = string(headers["operation"])
 	var sessionId, _ = strconv.Atoi(string(headers["sessionId"]))
-	var partition, _ = strconv.Atoi(string(headers["partition"]))
+	var partition int
+	var err error = nil
+
+	partitionString, hasPartition := headers["partition"]
+	if hasPartition {
+		partition, err = strconv.Atoi(string(partitionString))
+	}
+	if err != nil {
+		hasPartition = false
+	}
 
 	if operation != "LOGIN" && operation != "REGISTER" && operation != "ADD_VIDEO" && operation != "DELETE_SESSION" {
 		name, hasUsername := headers["Name"]
@@ -50,7 +59,7 @@ func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *
 			return
 		}
 
-		if userExists := db.UserExists(string(name), string(password)); userExists == false {
+		if userExists := db.UserExists(string(name), string(password)); userExists == false && hasPartition {
 			if err := producer.Publish([]byte("permission denied"), []kafka.Header{{`status`, []byte("FAILED")}}, sendTopic, int32(partition)); err != nil {
 				fmt.Println(err)
 			}
@@ -58,7 +67,6 @@ func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *
 	}
 
 	var response []byte
-	var err error
 	switch operation {
 	case "LOGIN":
 		response, err = db.HandleLogin(message.Value)
@@ -85,17 +93,20 @@ func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *
 	default:
 		err = errors.New("operation not permitted")
 	}
-
 	status := "OK"
 	if err != nil {
 		response = []byte("Error: " + err.Error())
 		status = "FAILED"
 		log.Println("$", string(response), "$")
 	}
+	if !hasPartition {
+		log.Println("Status:", status, "Opeartion:", operation, "Topic:", sendTopic, "Partition:", partition)
+		return
+	}
 	if err = producer.Publish(response, []kafka.Header{{`status`, []byte(status)}}, sendTopic, int32(partition)); err != nil {
 		fmt.Println(err)
 	}
-	producer.Flush(200)
+	producer.Flush(100)
 
 	log.Println("Status:", status, "Opeartion:", operation, "Topic:", sendTopic, "Partition:", partition)
 }

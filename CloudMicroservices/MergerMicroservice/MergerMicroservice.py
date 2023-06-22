@@ -90,7 +90,6 @@ class Merger:
 
         self.consumer.close()
         self.producer.flush()
-        #deleteTopic(self.broker, self.topic, certificatePath="truststore.pem")
 
     def stop(self):
         self.running = False

@@ -18,14 +18,14 @@ class KafkaContainer:
             'bootstrap.servers': address,
             'group.id': "-"
         })
-        if not KafkaContainer.checkBrokerExists(address):
+        self.truststorePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
+        if not self.checkBrokerExists(address, self.truststorePath):
             raise Exception("Broker does not exists")
 
         self.topic = str(uuid.uuid1())
         self.address = address
-        self.truststorePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
 
-        createTopic(address, self.topic, partitions=9)
+        createTopic(address, self.topic, partitions=9, certificate=self.truststorePath)
 
         self.producer = KafkaProducerWrapper({'bootstrap.servers': self.address}, certificatePath=self.truststorePath)
 
@@ -63,19 +63,18 @@ class KafkaContainer:
 
     def resetTopic(self):
         self.topic = str(uuid.uuid1())
-        createTopic(self.address, self.topic, partitions=9)
+        createTopic(self.address, self.topic, partitions=9, certificate=self.truststorePath)
         self.consumerAggregator = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.clientPartition)], certificatePath=self.truststorePath)
         self.consumerDatabase = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.clientDatabasePartition)], certificatePath=self.truststorePath)
 
-    @staticmethod
-    def checkBrokerExists(address) -> bool:
-        return checkKafkaActive(brokerAddress=address)
+    def checkBrokerExists(self, address, certificate: str) -> bool:
+        return checkKafkaActive(brokerAddress=address, certificate=certificate)
 
     def seekToEnd(self):
         self.consumerDatabase.seekToEnd(self.topic, self.clientDatabasePartition)
 
     def __del__(self):
         try:
-            deleteTopic(self.address, self.topic)
+            deleteTopic(self.address, self.topic, certificate=self.truststorePath)
         except:
             pass

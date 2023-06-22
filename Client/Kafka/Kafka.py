@@ -156,11 +156,11 @@ class KafkaConsumerWrapper(kafka.Consumer):
         return None
 
 
-def createTopic(brokerAddress: str, topic: str, partitions: int = 1, timeoutSeconds: float = 5):
+def createTopic(brokerAddress: str, topic: str, certificate: str, partitions: int = 1, timeoutSeconds: float = 5):
     configs = {
         "bootstrap.servers": brokerAddress,
         'security.protocol': 'SSL',
-        'ssl.ca.location': '/home/robert/Workspace/kafka_2.13-3.2.0/keys/Client/truststore.pem',
+        'ssl.ca.location': certificate,
         'ssl.endpoint.identification.algorithm': "none",
     }
     adminClient = AdminClient(configs)
@@ -174,11 +174,11 @@ def createTopic(brokerAddress: str, topic: str, partitions: int = 1, timeoutSeco
         raise Exception(f"Cannot create topic {topic}")
 
 
-def deleteTopic(brokerAddress: str, topic: str):
+def deleteTopic(brokerAddress: str, topic: str, certificate: str):
     configs = {
         "bootstrap.servers": brokerAddress,
         'security.protocol': 'SSL',
-        'ssl.ca.location': '/home/robert/Workspace/kafka_2.13-3.2.0/keys/Client/truststore.pem',
+        'ssl.ca.location': certificate,
         'ssl.endpoint.identification.algorithm': "none",
     }
     adminClient = AdminClient(configs)
@@ -187,12 +187,12 @@ def deleteTopic(brokerAddress: str, topic: str):
         time.sleep(0.01)
 
 
-def checkKafkaActive(brokerAddress: str) -> bool:
+def checkKafkaActive(brokerAddress: str, certificate: str) -> bool:
     try:
         kafka_broker = {'bootstrap.servers': brokerAddress}
         kafka_broker.update({
             'security.protocol': 'SSL',
-            'ssl.ca.location': '/home/robert/Workspace/kafka_2.13-3.2.0/keys/Client/truststore.pem',
+            'ssl.ca.location': certificate,
             'ssl.endpoint.identification.algorithm': "none",
         })
         admin_client = AdminClient(kafka_broker)

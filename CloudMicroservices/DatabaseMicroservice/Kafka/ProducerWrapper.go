@@ -37,6 +37,7 @@ func (producer *ProducerWrapper) Publish(message []byte, headers []kafka.Header,
 		if err != nil {
 			return err
 		}
+		go func() { fmt.Println("Sent result", (<-deliveryChannel).String()) }()
 	}
 
 	return nil

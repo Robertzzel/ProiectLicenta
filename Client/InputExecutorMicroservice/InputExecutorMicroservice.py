@@ -38,10 +38,14 @@ def main():
         'allow.auto.create.topics': "true",
     }, [(topic, Partitions.Input.value)], certificatePath=truststorePath)
 
+    print("Starting inpus")
     while True:
-        if (msg := consumer.consumeMessage(time.time() + 100)) is None:
+        msg = consumer.consumeMessage(time.time() + 1)
+        if msg is None:
+            print("Received None")
             continue
 
+        print("received", msg.value().decode())
         for command in msg.value().decode().split(";"):
             components = command.split(",")
             action = int(components[0])

@@ -238,8 +238,7 @@ class VideoWindow(QWidget):
     def audioCallback(self, outdata: np.ndarray, frames: int, timet, status):
         try:
             data: np.ndarray = self.audioBlocksQueue.get_nowait()
-            data = np.append(data, np.array([0] * (1024 - data.size), dtype=data.dtype))
-            data.shape = (1024, 1)
+            data.shape = (data.shape[-1], 1)
         except queue.Empty:
             data = np.zeros(shape=(1024, 1), dtype=self.audioStream.dtype)
         except Exception as ex:

@@ -17,7 +17,7 @@ def create_audio_file(path, audio_buffer: np.ndarray, samplerate):
 
 class Recorder:
     def __init__(self, audio_queue: queue.Queue):
-        self.buffer: np.ndarray = np.array([], dtype=np.int16)
+        self.buffer: np.ndarray = np.array([], dtype=np.int32)
         self.lock = threading.Lock()
         self.audio_queue = audio_queue
         self.input_stream = sd.InputStream(
@@ -25,7 +25,7 @@ class Recorder:
             channels=CHANNELS,
             device=self.get_device('pulse'),
             callback=self.stream_callback,
-            latency='low', dtype='int16',
+            latency='low', dtype='int32',
         )
         self.process_thread: Optional[threading.Thread] = None
         self.running = True
@@ -60,7 +60,7 @@ class Recorder:
             self.lock.acquire()
             audio_chunk = np.empty_like(self.buffer)
             audio_chunk[:] = self.buffer
-            self.buffer = np.array([], dtype=np.int16)
+            self.buffer = np.array([], dtype=np.int32)
             self.lock.release()
 
             bytes_difference = len(audio_chunk) - number_of_bytes_needed

@@ -4,7 +4,7 @@ from recorder import Recorder
 from Client.Kafka.Kafka import *
 import sys
 
-VIDEO_LENGTH = 1 / 5
+VIDEO_LENGTH = 1 / 2
 SAMPLERATE = 44100
 MESSAGE_SIZE_LENGTH = 10
 

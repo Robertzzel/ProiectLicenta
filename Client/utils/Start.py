@@ -46,8 +46,7 @@ class Recorder:
     def start(self, topic: str):
         buildResult = self.build()
         if buildResult is not None:
-            print("Cannot build ", buildResult)
-            return
+            return buildResult
 
         try:
             self.videoProcess = subprocess.Popen(["./VideoMicroservice.exe", self.brokerAddress, topic],

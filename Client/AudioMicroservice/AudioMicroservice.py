@@ -21,10 +21,10 @@ def main():
     audio_blocks_recorded: queue.Queue = queue.Queue(10)
     audio_recorder: Recorder = Recorder(audio_blocks_recorded)
 
-    producer = KafkaProducerWrapper({'bootstrap.servers': brokerAddress}, certificatePath=truststorePath)
+    producer = KafkaProducerWrapper(brokerAddress=brokerAddress, certificatePath=truststorePath)
     consumer = KafkaConsumerWrapper(
-        {'bootstrap.servers': brokerAddress, "group.id": "-"},
-        [(topic, Partitions.AudioMicroservice.value)],
+        brokerAddress=brokerAddress,
+        topics=[(topic, Partitions.AudioMicroservice.value)],
         certificatePath=truststorePath
     )
 

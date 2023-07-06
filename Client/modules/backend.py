@@ -184,6 +184,5 @@ class Backend:
 
     def getNewKafkaConsumer(self, topic, partition=0):
         return KafkaConsumerWrapper(
-            {'bootstrap.servers': self.kafkaContainer.address,
-             'group.id': "-"},
-            [(topic, partition)], certificatePath=self.truststorePath)
+            brokerAddress=self.kafkaContainer.address,
+            topics=[(topic, partition)], certificatePath=self.truststorePath)

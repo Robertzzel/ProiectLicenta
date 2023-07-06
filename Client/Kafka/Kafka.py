@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import enum
 import os
+import pathlib
 from typing import *
 import confluent_kafka as kafka
 from confluent_kafka.admin import AdminClient
@@ -25,11 +26,12 @@ class Partitions(enum.Enum):
 
 
 class CustomKafkaMessage:
-    def __init__(self, value: bytes, headers: List, topic:str = None, *args, **kwargs):
+    def __init__(self, value: bytes, headers: List, key: str, topic:str = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.savedValue = value
         self.savedHeaders = headers
         self.savedTopic = topic
+        self.savedKey = key
 
     def value(self):
         return self.savedValue
@@ -40,16 +42,21 @@ class CustomKafkaMessage:
     def topic(self):
         return self.savedTopic
 
+    def key(self):
+        return self.savedKey
+
 
 class KafkaProducerWrapper(kafka.Producer):
-    def __init__(self, config, certificatePath: str):
-        config["message.max.bytes"] = MaxSingleMessageSize
-        config.update({
+    def __init__(self, brokerAddress: str, certificatePath: str=None):
+        if certificatePath is None:
+            certificatePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
+        super().__init__({
+            "bootstrap.servers": brokerAddress,
             'security.protocol': 'SSL',
             'ssl.ca.location': certificatePath,
             'ssl.endpoint.identification.algorithm': "none",
+            "message.max.bytes": MaxSingleMessageSize,
         })
-        super().__init__(config)
 
     def sendBigMessage(self, topic: str, value=None, headers=None, key=None, partition=0):
         numberOfMessages = ceil(len(value) / MaxSingleMessageSize)
@@ -89,14 +96,18 @@ class KafkaProducerWrapper(kafka.Producer):
 
 
 class KafkaConsumerWrapper(kafka.Consumer):
-    def __init__(self, config: Dict, topics: List[Tuple[str, int]], certificatePath: str):
-        config["fetch.message.max.bytes"] = MaxSingleMessageSize
-        config.update({
+    def __init__(self, brokerAddress: str, topics: List[Tuple[str, int]], certificatePath: str=None):
+        if certificatePath is None:
+            certificatePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
+        super().__init__({
             'security.protocol': 'SSL',
             'ssl.ca.location': certificatePath,
             'ssl.endpoint.identification.algorithm': "none",
+            "fetch.message.max.bytes": MaxSingleMessageSize,
+            'allow.auto.create.topics': "true",
+            'bootstrap.servers': brokerAddress,
+            'group.id': "-",
         })
-        super().__init__(config)
         self.assign([kafka.TopicPartition(topic=pair[0], partition=pair[1]) for pair in topics])
 
     def __next__(self) -> kafka.Message:
@@ -141,7 +152,7 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
             messages.extend(message.value())
 
-        return CustomKafkaMessage(value=messages, headers=headersToBeReturned, topic=message.topic())
+        return CustomKafkaMessage(value=messages, headers=headersToBeReturned, topic=message.topic(), key=message.key())
 
     def consumeMessage(self, timeoutSeconds: float) -> Optional[kafka.Message]:
         while time.time() < timeoutSeconds:
@@ -156,7 +167,7 @@ class KafkaConsumerWrapper(kafka.Consumer):
         return None
 
 
-def createTopic(brokerAddress: str, topic: str, certificate: str, partitions: int = 1, timeoutSeconds: float = 5):
+def createTopic(brokerAddress: str, topic: str, certificate: str = None, partitions: int = 1, timeoutSeconds: float = 5):
     configs = {
         "bootstrap.servers": brokerAddress,
         'security.protocol': 'SSL',

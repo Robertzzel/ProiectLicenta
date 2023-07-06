@@ -1,8 +1,9 @@
 import platform
 import subprocess
+import sys
 
 
-def buildForLinux():
+def buildForLinux() -> bytes:
     p = subprocess.Popen("go build -o VideoMicroservice.exe ./VideoMicroservice/VideoMicroservice.go ./VideoMicroservice/recorder.go ./VideoMicroservice/screenshot.go ./VideoMicroservice/screen.go ./VideoMicroservice/byte_image.go ./VideoMicroservice/Messager.go".split(), stderr=subprocess.PIPE)
     p.wait()
     err = p.stderr.read()
@@ -44,6 +45,8 @@ def buildForWindows():
 if __name__ == "__main__":
     PLATFORM = platform.system().lower()
     if PLATFORM == "linux":
-        buildForLinux()
+        res = buildForLinux()
     elif PLATFORM == "windows":
-        buildForWindows()
+        res = buildForWindows()
+    if res != b"" and res is not None:
+        sys.stderr.write(res.decode())

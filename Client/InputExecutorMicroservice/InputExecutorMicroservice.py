@@ -31,12 +31,11 @@ def main():
     width, height = size()
     keyboard_controller: pynput.keyboard.Controller = pynput.keyboard.Controller()
     mouse_controller: pynput.mouse.Controller = pynput.mouse.Controller()
-    consumer = KafkaConsumerWrapper({
-        'bootstrap.servers': brokerAddress,
-        'group.id': "-",
-        'auto.offset.reset': 'latest',
-        'allow.auto.create.topics': "true",
-    }, [(topic, Partitions.Input.value)], certificatePath=truststorePath)
+    consumer = KafkaConsumerWrapper(
+        brokerAddress=brokerAddress,
+        topics=[(topic, Partitions.Input.value)],
+        certificatePath=truststorePath
+    )
 
     print("Starting inpus")
     while True:

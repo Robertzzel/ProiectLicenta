@@ -27,13 +27,12 @@ class KafkaContainer:
 
         createTopic(address, self.topic, partitions=9, certificate=self.truststorePath)
 
-        self.producer = KafkaProducerWrapper({'bootstrap.servers': self.address}, certificatePath=self.truststorePath)
+        self.producer = KafkaProducerWrapper(brokerAddress=self.address, certificatePath=self.truststorePath)
 
         self.clientPartition = Partitions.Client.value
         self.clientDatabasePartition = Partitions.ClientDatabase.value
-        self.consumerAggregator = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.clientPartition)], certificatePath=self.truststorePath)
-        self.consumerDatabase = KafkaConsumerWrapper(consumerConfigs, [(self.topic, self.clientDatabasePartition)], certificatePath=self.truststorePath)
-        self.consumerConfigs = consumerConfigs
+        self.consumerAggregator = KafkaConsumerWrapper(brokerAddress=address, topics=[(self.topic, self.clientPartition)], certificatePath=self.truststorePath)
+        self.consumerDatabase = KafkaConsumerWrapper(brokerAddress=address, topics=[(self.topic, self.clientDatabasePartition)], certificatePath=self.truststorePath)
 
     def databaseCall(self, operation: str, message: bytes, timeoutSeconds, username: str = None,
                      password: str = None, sessionId: str = None) -> kafka.Message:
@@ -64,8 +63,8 @@ class KafkaContainer:
     def resetTopic(self):
         self.topic = str(uuid.uuid1())
         createTopic(self.address, self.topic, partitions=9, certificate=self.truststorePath)
-        self.consumerAggregator = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.clientPartition)], certificatePath=self.truststorePath)
-        self.consumerDatabase = KafkaConsumerWrapper(self.consumerConfigs, [(self.topic, self.clientDatabasePartition)], certificatePath=self.truststorePath)
+        self.consumerAggregator = KafkaConsumerWrapper(brokerAddress=self.address, topics=[(self.topic, self.clientPartition)], certificatePath=self.truststorePath)
+        self.consumerDatabase = KafkaConsumerWrapper(brokerAddress=self.address, topics=[(self.topic, self.clientDatabasePartition)], certificatePath=self.truststorePath)
 
     def checkBrokerExists(self, address, certificate: str) -> bool:
         return checkKafkaActive(brokerAddress=address, certificate=certificate)

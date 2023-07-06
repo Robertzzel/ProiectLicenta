@@ -82,10 +82,11 @@ class StreamReceiverThread(QThread):
 
     def run(self):
         try:
-            self.streamConsumer = KafkaConsumerWrapper({
-                'bootstrap.servers': self.master.kafkaAddress,
-                'group.id': '-',
-            }, [(self.master.topic, Partitions.Client.value)], certificatePath=self.master.truststorePath)
+            self.streamConsumer = KafkaConsumerWrapper(
+                brokerAddress=self.master.kafkaAddress,
+                topics=[(self.master.topic, Partitions.Client.value)],
+                certificatePath=self.master.truststorePath
+            )
             i = 0
             while not self.master.stopEvent:
                 message = self.streamConsumer.receiveBigMessage(timeoutSeconds=1)
@@ -150,7 +151,7 @@ class VideoWindow(QWidget):
         self.kafkaAddress = kafkaAddress
         self.topic = topic
         self.truststorePath = str(pathlib.Path(__file__).parent.parent / "truststore.pem")
-        self.kafkaProducer = KafkaProducerWrapper({'bootstrap.servers': self.kafkaAddress}, certificatePath=self.truststorePath)
+        self.kafkaProducer = KafkaProducerWrapper(brokerAddress=self.kafkaAddress, certificatePath=self.truststorePath)
 
         self.videoFramesQueue: Queue = Queue(60)
         self.audioBlocksQueue: Queue = Queue(60)

@@ -62,10 +62,14 @@ def main():
                     mouse_controller.release(pynput.mouse.Button(button))
             elif action == PRESS:
                 time.sleep(float(components[-1]))
-                keyboard_controller.press(KeyTranslator.translate(int(components[1])))
+                key = KeyTranslator.translate(int(components[1]))
+                if key is not None:
+                    keyboard_controller.press(key)
             elif action == RELEASE:
                 time.sleep(float(components[-1]))
-                keyboard_controller.release(KeyTranslator.translate(int(components[1])))
+                key = KeyTranslator.translate(int(components[1]))
+                if key is not None:
+                    keyboard_controller.release(key)
             elif action == SCROLL:
                 button = int(components[1])
                 time.sleep(float(components[-1]))

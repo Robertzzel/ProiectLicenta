@@ -61,6 +61,9 @@ class KeyTranslator:
             result = KeyTranslator.MAPPED_KEYS.get(keycode, None)
 
         if result is None:
-            return chr(keycode)
+            try:
+                return chr(keycode)
+            except:
+                return None
 
         return result

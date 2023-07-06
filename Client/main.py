@@ -26,6 +26,7 @@ class MainWindow(QMainWindow):
         self.setObjectName(u"MainWindow")
 
         self.videoWindow = None
+        self.w = None
         self.ui = UiMainWindow(self)
         self.ui.uiDefinitions()
         self.setWindowTitle("RMI")
@@ -48,7 +49,7 @@ class MainWindow(QMainWindow):
         self.show()
 
     def setCallbacks(self):
-        self.widgets.toggleButton.clicked.connect(lambda: self.ui.toggleMenu())
+        self.widgets.toggleButton.clicked.connect(self.ui.toggleMenu)
         self.widgets.btnKafka.clicked.connect(self.btnKafkaPressed)
         self.widgets.btnLogin.clicked.connect(self.btnLoginPressed)
         self.widgets.btnRegister.clicked.connect(self.btnRegisterPressed)
@@ -430,6 +431,15 @@ class MainWindow(QMainWindow):
 
         with open(f, "wb") as f:
             f.write(message)
+
+    def closeApplication(self):
+        try:
+            self.stopCall()
+        except Exception as ex:
+            pass
+        if self.w is not None:
+            self.w.stop()
+        self.close()
 
 if __name__ == "__main__":
     app = QApplication()

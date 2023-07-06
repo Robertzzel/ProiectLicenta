@@ -583,7 +583,7 @@ class UiMainWindow(object):
         self.maximizeRestoreAppBtn.clicked.connect(lambda: self.maximize_restore())
 
         # CLOSE APPLICATION
-        self.closeAppBtn.clicked.connect(lambda: self.master.close())
+        self.closeAppBtn.clicked.connect(self.master.closeApplication)
 
     def setConnectedToKafkaState(self, address):
         self.kafkaWindow.pushButton.setText("Disconnect")

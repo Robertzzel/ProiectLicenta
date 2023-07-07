@@ -79,6 +79,10 @@ class MainWindow(QMainWindow):
         self.isDarkThemeOn = not self.isDarkThemeOn
 
     def btnKafkaPressed(self):
+        if self.backend.user is not None and self.backend.user.sessionId is not None:
+            self.ui.setStatusMessage("You are in session")
+            return
+
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.kafkaWindow)
         self.ui.resetStyle("btnKafka")
@@ -98,6 +102,9 @@ class MainWindow(QMainWindow):
         if self.backend.kafkaContainer is None:
             self.ui.setStatusMessage("Not connected to Kafka", True)
             return
+        if self.backend.user is not None and self.backend.user.sessionId is not None:
+            self.ui.setStatusMessage("You are in session")
+            return
 
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.loginWindow)
@@ -108,6 +115,9 @@ class MainWindow(QMainWindow):
         if self.backend.kafkaContainer is None:
             self.ui.setStatusMessage("Not connected to Kafka", True)
             return
+        if self.backend.user is not None and self.backend.user.sessionId is not None:
+            self.ui.setStatusMessage("You are in session")
+            return
 
         btn = self.sender()
         self.widgets.pagesStack.setCurrentWidget(self.widgets.registerWindow)
@@ -117,6 +127,9 @@ class MainWindow(QMainWindow):
     def btnAdministrateAccountHandler(self):
         if self.backend.user is None:
             self.ui.setStatusMessage("No user connected", True)
+            return
+        if self.backend.user is not None and self.backend.user.sessionId is not None:
+            self.ui.setStatusMessage("You are in session")
             return
 
         self.widgets.myVideosWindow.clear()

@@ -10,7 +10,7 @@ from math import ceil
 from typing import List
 import time
 
-MaxSingleMessageSize = 9 * 1024 * 1024
+MaxSingleMessageSize = 500_000
 
 
 class Partitions(enum.Enum):
@@ -54,7 +54,6 @@ class KafkaProducerWrapper(kafka.Producer):
             'security.protocol': 'SSL',
             'ssl.ca.location': certificatePath,
             'ssl.endpoint.identification.algorithm': "none",
-            "message.max.bytes": MaxSingleMessageSize,
         })
 
     def sendBigMessage(self, topic: str, value=None, headers=None, key=None, partition=0):

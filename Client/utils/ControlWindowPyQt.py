@@ -269,4 +269,5 @@ class VideoWindow(QWidget):
         print("Stopped receiver thread")
 
         self.master.backend.user.sessionId = None
+        self.master.ui.callWindow.startSessionBtn.setEnabled(True)
         self.close()

@@ -257,6 +257,7 @@ class MainWindow(QMainWindow):
         self.ui.callWindow.startSessionBtn.clicked.connect(self.stopCall)
         self.ui.callWindow.startSessionBtn.setText("STOP SHARING")
         self.ui.setStatusMessage("Call started")
+        self.widgets.callWindow.joinSessionBtn.setEnabled(False)
 
         self.receiveFileThread = threading.Thread(target=self.startReceiveFiles)
         self.receiveFileThread.start()
@@ -269,6 +270,7 @@ class MainWindow(QMainWindow):
         self.ui.callWindow.startSessionBtn.clicked.connect(self.startCall)
         self.ui.callWindow.startSessionBtn.setText("START SHARING")
         self.ui.setStatusMessage("Call stopped")
+        self.widgets.callWindow.joinSessionBtn.setEnabled(True)
 
     def joinCall(self):
         if self.backend.user is None:
@@ -291,6 +293,7 @@ class MainWindow(QMainWindow):
 
         threading.Thread(target=self.startReceiveFiles).start()
 
+        self.ui.callWindow.startSessionBtn.setEnabled(False)
         self.w = VideoWindow(self, topic, self.backend.kafkaContainer.address)
         self.w.show()
 

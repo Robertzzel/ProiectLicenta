@@ -25,6 +25,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(QSize(940, 560))
         self.setObjectName(u"MainWindow")
 
+        self.topicsToSend = []
         self.videoWindow = None
         self.w = None
         self.ui = UiMainWindow(self)
@@ -360,52 +361,61 @@ class MainWindow(QMainWindow):
         if len(topicsOnCurrentSession) == 0:
             return
 
-        c = self.backend.getNewKafkaConsumer(self.backend.getMyTopic(), Partitions.FileTransferReceiveConfirmation.value)
         fileName = self.widgets.shareFileWindow.selectedFileForUpload
         fileStats = os.stat(fileName)
+
+        self.topicsToSend.clear()
         for topic in topicsOnCurrentSession:
-            self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=f"file,{self.backend.getMyTopic()},{fileName},{fileStats.st_size}", partition=Partitions.FileTransferReceiveFile.value)
+            self.backend.kafkaContainer.producer.sendBigMessage(
+                topic=topic,
+                value=f"request,{self.backend.getMyTopic()},{fileName},{fileStats.st_size}",
+                partition=Partitions.FileTransfer.value
+            )
         self.backend.kafkaContainer.producer.flush(1)
 
-        topicsToSendTheFile = []
-        wait_end = time.time() + 10
-        while wait_end > time.time() and len(topicsToSendTheFile) < len(topicsOnCurrentSession):
-            msg = c.receiveBigMessage(timeoutSeconds=1)
-            if msg is None:
-                continue
-
-            if msg.value()[:4] == b"true":
-                topicsToSendTheFile.append(msg.value()[5:].decode())
-
-        for topic in topicsToSendTheFile:
-            self.backend.kafkaContainer.producer.sendFile(topic=topic, partition=Partitions.FileTransferReceiveFile.value, fileName=fileName)
+        wait_end = time.time() + 15
+        while wait_end > time.time():
+            print("TOPICS:", len(self.topicsToSend))
+            if len(self.topicsToSend) > 0:
+                print("GASIT TOPICURI\n")
+                for topic in self.topicsToSend:
+                    self.backend.kafkaContainer.producer.sendFile(topic=topic, partition=Partitions.FileTransfer.value, fileName=fileName)
+                self.topicsToSend.clear()
+            else:
+                print("NU GASIT TOPICURI\n")
+                time.sleep(0.5)
 
         self.backend.kafkaContainer.producer.flush(1)
-        c.close()
 
     def startReceiveFiles(self):
-        consumer = self.backend.getNewKafkaConsumer(self.backend.getMyTopic(), Partitions.FileTransferReceiveFile.value)
+        consumer = self.backend.getNewKafkaConsumer(self.backend.getMyTopic(), Partitions.FileTransfer.value)
 
         while self.backend.user.sessionId is not None:
             msg = consumer.receiveBigMessage(timeoutSeconds=1)
             if msg is None:
                 continue
 
-            if msg.value()[:4] != b"file":
-                continue
+            if msg.value().decode().startswith("request"):
+                type, topic, fileName, fileSize = msg.value().decode().split(",")
+                self.receiveFileSignal.emit(msg.value().decode())
+                if not self.incomingFileQueue.get():
+                    continue
 
-            self.receiveFileSignal.emit(msg.value().decode())
-            _, topic, fileName, fileSize = msg.value().decode().split(",")
+                self.backend.kafkaContainer.producer.sendBigMessage(
+                    topic=topic,
+                    value=f"true,{self.backend.getMyTopic()}".encode(),
+                    partition=Partitions.FileTransfer.value
+                )
 
-            if not self.incomingFileQueue.get():
-                continue
+                file = consumer.receiveBigMessage(timeoutSeconds=30)
+                if file is None:
+                    print("File not received")
+                    continue
 
-            file = consumer.receiveBigMessage(timeoutSeconds=10)
-            if file is None:
-                print("File not received")
-                continue
-
-            self.saveReceivedFileSignal.emit(file.value())
+                self.saveReceivedFileSignal.emit(file.value())
+            else:
+                print("ADAUGAT TOPIC\n"*3)
+                self.topicsToSend.append(msg.value().decode()[5:])
 
         consumer.close()
 
@@ -413,14 +423,13 @@ class MainWindow(QMainWindow):
         _, topic, fileName, fileSize = message.split(",")
 
         reply = QMessageBox.question(self,'Receive file', f"You are receiving a file named {fileName} with size {fileSize} bytes", QMessageBox.Yes, QMessageBox.No)
-        msg = b""
+        msg = None
         if reply == QMessageBox.Yes:
-            msg = b"true"
+            msg = True
         elif reply == QMessageBox.No:
-            msg = b"false"
+            msg = False
 
         self.incomingFileQueue.put(msg)
-        self.backend.kafkaContainer.producer.sendBigMessage(topic=topic, value=msg + f",{self.backend.getMyTopic()}".encode(), partition=Partitions.FileTransferReceiveConfirmation.value)
 
     def handleDownloadFileFromUser(self, message: bytes):
         dialog = QFileDialog()

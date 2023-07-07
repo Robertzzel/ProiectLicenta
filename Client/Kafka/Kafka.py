@@ -19,10 +19,9 @@ class Partitions(enum.Enum):
     AudioMicroservice: int = 2
     Client: int = 3
     Input: int = 4
-    FileTransferReceiveFile: int = 5
-    FileTransferReceiveConfirmation: int = 6
     ClientDatabase: int = 7
     MergerMicroservice: int = 8
+    FileTransfer: int = 5
 
 
 class CustomKafkaMessage:

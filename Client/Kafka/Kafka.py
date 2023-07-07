@@ -135,7 +135,7 @@ class KafkaConsumerWrapper(kafka.Consumer):
 
         for header in message.headers():
             if header == ("status", b"FAILED"):
-                return None
+                return message
 
         headersToBeReturned: List[str, bytes] = list(filter(lambda h: h[0] not in ("number-of-messages", "message-number"), message.headers()))
         numberOfMessages: int = 0

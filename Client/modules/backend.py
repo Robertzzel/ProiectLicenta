@@ -40,7 +40,7 @@ class Backend:
             return Exception("Need both name and pass")
 
         loggInDetails = {"Name": username, "Password": password, "Topic": self.kafkaContainer.topic}
-        message = self.kafkaContainer.databaseCall("LOGIN", json.dumps(loggInDetails).encode(), timeoutSeconds=5)
+        message = self.kafkaContainer.databaseCall("LOGIN", json.dumps(loggInDetails).encode(), timeoutSeconds=100)
         if message is None:
             return Exception("Cannot talk to the database")
 
@@ -82,7 +82,7 @@ class Backend:
 
         status = self.kafkaContainer.getStatusFromMessage(responseMessage)
         if status.lower() != "ok":
-            return Exception(f"Cannot start call, {status}")
+            return Exception(f"Cannot start call, user did not start a session")
 
         responseValue = json.loads(responseMessage.value())
         return responseValue

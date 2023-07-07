@@ -29,18 +29,7 @@ class MyVideosWindow(QtWidgets.QWidget):
     def addVideoRow(self, durationLabelText: str, sizeLabelText: str, createdAtLabelText: str, callback: Callable, deleteVideo):
         horizontalLayout = QtWidgets.QHBoxLayout()
         horizontalLayout.setObjectName("horizontalLayout")
-        durationLabel = QtWidgets.QLabel(parent=self.scrollAreaWidgetContents)
-        durationLabel.setObjectName("label")
-        durationLabel.setText(durationLabelText)
-        horizontalLayout.addWidget(durationLabel)
-        sizeLabel = QtWidgets.QLabel(parent=self.scrollAreaWidgetContents)
-        sizeLabel.setObjectName("label_2")
-        horizontalLayout.addWidget(sizeLabel)
-        sizeLabel.setText(sizeLabelText)
-        createdAtLabel = QtWidgets.QLabel(parent=self.scrollAreaWidgetContents)
-        createdAtLabel.setObjectName("label_3")
-        createdAtLabel.setText(createdAtLabelText)
-        horizontalLayout.addWidget(createdAtLabel)
+
         pushButton = QtWidgets.QPushButton(parent=self.scrollAreaWidgetContents)
         pushButton.setObjectName("pushButton")
         pushButton.setText("DOWNLOAD")
@@ -53,6 +42,21 @@ class MyVideosWindow(QtWidgets.QWidget):
         deleteVideoButton.clicked.connect(deleteVideo)
         horizontalLayout.addWidget(deleteVideoButton)
         self.verticalLayout.addLayout(horizontalLayout)
+
+        durationLabel = QtWidgets.QLabel(parent=self.scrollAreaWidgetContents)
+        durationLabel.setObjectName("label")
+        durationLabel.setText(durationLabelText)
+        horizontalLayout.addWidget(durationLabel)
+        sizeLabel = QtWidgets.QLabel(parent=self.scrollAreaWidgetContents)
+        sizeLabel.setObjectName("label_2")
+        horizontalLayout.addWidget(sizeLabel)
+        sizeLabel.setText(sizeLabelText)
+        createdAtLabel = QtWidgets.QLabel(parent=self.scrollAreaWidgetContents)
+        createdAtLabel.setObjectName("label_3")
+        createdAtLabel.setText(createdAtLabelText)
+        horizontalLayout.addWidget(createdAtLabel)
+
+
 
     def clear(self):
         self.clearLayout(self.verticalLayout)

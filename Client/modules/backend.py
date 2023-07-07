@@ -3,7 +3,7 @@ import pathlib
 
 from Client.Kafka.Kafka import KafkaConsumerWrapper
 from Client.utils.KafkaContainer import KafkaContainer
-from Client.utils.Start import Recorder, VideoMerger
+from Client.utils.StartRecordingMicroservices import Recorder, VideoMerger
 from Client.utils.User import User
 
 

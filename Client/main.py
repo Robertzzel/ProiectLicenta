@@ -10,9 +10,8 @@ from modules import *
 from PySide6.QtWidgets import *
 from modules import UiMainWindow
 from modules.backend import Backend
-from utils.ControlWindowPyQt import VideoWindow
+from Client.modules.ControlWindowPyQt import VideoWindow
 
-os.environ["QT_FONT_DPI"] = "96" # FIX Problem for High DPI and Scale above 100%
 
 
 class MainWindow(QMainWindow):

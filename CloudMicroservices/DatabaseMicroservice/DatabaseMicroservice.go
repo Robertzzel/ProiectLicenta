@@ -113,12 +113,12 @@ func handleRequest(db *DatabaseManager, message *Kafka.CustomMessage, producer *
 
 func main() {
 	log.Println("Getting environment variables...")
-	brokerAddress := "localhost:9093" //os.Getenv("BROKER_ADDRESS")
-	databaseUser := "robert"          //os.Getenv("DATABASE_USER")
-	databasePassword := "robert"      //os.Getenv("DATABASE_PASSWORD")
-	databaseHost := "localhost"       //os.Getenv("DATABASE_HOST")
-	databasePort := "3306"            ///os.Getenv("DATABASE_PORT")
-	databaseName := "licenta"         //os.Getenv("DATABASE_NAME")
+	brokerAddress := os.Getenv("BROKER_ADDRESS")
+	databaseUser := os.Getenv("DATABASE_USER")
+	databasePassword := os.Getenv("DATABASE_PASSWORD")
+	databaseHost := os.Getenv("DATABASE_HOST")
+	databasePort := os.Getenv("DATABASE_PORT")
+	databaseName := os.Getenv("DATABASE_NAME")
 
 	if brokerAddress == "" || databaseUser == "" || databasePassword == "" || databaseHost == "" || databasePort == "" || databaseName == "" {
 		fmt.Println("Not all environment variables given")

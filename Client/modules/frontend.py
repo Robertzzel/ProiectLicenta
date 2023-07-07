@@ -603,7 +603,6 @@ class UiMainWindow(object):
 
     def setUserLoggedIn(self, username: str):
         self.loginWindow.usernameLineEdit.setText(username)
-        self.loginWindow.passwordLineEit.setText("")
         self.loginWindow.passwordLineEit.setDisabled(True)
         self.loginWindow.usernameLineEdit.setDisabled(True)
         self.loginWindow.pushButton.setText("Disconnect")

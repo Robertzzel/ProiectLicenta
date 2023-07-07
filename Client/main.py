@@ -163,6 +163,9 @@ class MainWindow(QMainWindow):
         if self.backend.user is None:
             self.ui.setStatusMessage("No user connected", True)
             return
+        if self.backend.user is not None and self.backend.user.sessionId is not None:
+            self.ui.setStatusMessage("You are in session")
+            return
 
         self.widgets.myVideosWindow.clear()
         videos = self.backend.getUserVideos()
@@ -209,6 +212,7 @@ class MainWindow(QMainWindow):
 
     def disconnectFromKafka(self):
         self.backend.disconnectFromKafka()
+        self.disconnectAccount()
         self.ui.setIsNotConnectedToKafkaState()
         self.ui.setStatusMessage("Disconnected from kafka")
 

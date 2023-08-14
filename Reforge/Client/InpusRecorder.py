@@ -18,7 +18,7 @@ class InputsRecorder:
         except AttributeError:
             key_str = str(key)[4:]
         encoding = key_str.encode("utf-8")
-        cmd: bytes = struct.pack("BB", 1, len(encoding)) + encoding
+        cmd: bytes = struct.pack("BB", 0, len(encoding)) + encoding
         self.buffer.extend(cmd)
 
     def on_keyboard_release(self, key):

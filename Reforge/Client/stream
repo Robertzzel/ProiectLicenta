@@ -1,0 +1,2 @@
+#!/bin/sh
+ffmpeg -video_size 1920x1080 -f x11grab -i ":0" -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -an -f mpegts udp://"$1":"$2"
